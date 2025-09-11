@@ -1,0 +1,116 @@
+from typing import List, Sequence
+from uuid import UUID
+from fastapi import HTTPException
+from langchain_core.documents import Document
+from src.agents.filename_agent import FilenameAgent
+from src.models.common import PaginationParams
+from src.models.knowledge_base import (
+    KnowledgeBaseCreateRequest,
+    KnowledgeBaseListResponse,
+    KnowledgeBaseResponse,
+)
+from src.db import knowledge_base_repository, document_repository, qa_repository
+from src.models.qa import DocumentQAResponse
+from src.rag.vector import vector_storage, vector_retrieval
+from src.utils.reference import normalize_ref
+from src.utils.logger_conf import logger
+from src.utils.decorators import singleton
+
+
+@singleton
+class KnowledgeBaseService:
+    def __init__(self):
+        self.kb_repository = knowledge_base_repository
+        self.document_repository = document_repository
+        self.qa_repository = qa_repository
+        self.filename_agent = FilenameAgent()
+
+    async def list_knowledge_bases(
+        self, pagination: PaginationParams
+    ) -> KnowledgeBaseListResponse:
+        """Get a list of all knowledge bases."""
+        logger.info("Fetching list of all knowledge bases")
+        return await self.kb_repository.list(pagination=pagination)
+
+    async def create_knowledge_base(self, knowledge_base: KnowledgeBaseCreateRequest):
+        """Create a new knowledge base."""
+        logger.info(f"Creating knowledge base: {knowledge_base.name}")
+        return await self.kb_repository.create(knowledge_base)
+
+    async def get_knowledge_base_by_id(self, kb_id: str) -> KnowledgeBaseResponse:
+        """Get a knowledge base by its ID."""
+        logger.info(f"Fetching knowledge base with ID: {kb_id}")
+        kb = await self.kb_repository.get(UUID(kb_id))
+        if not kb:
+            raise HTTPException(status_code=404, detail="Knowledge base not found")
+        return kb
+
+    async def query_knowledge_base(self, kb_id: str, query: str) -> List[Document]:
+        """Query a knowledge base by its ID."""
+        logger.info(f"Querying knowledge base {kb_id} with query: {query}")
+
+        # requested_filename = await self.filename_agent.extract_filename(query=query)
+        filters = None
+
+        # if requested_filename:
+        #     logger.info(f"Requested filename: {requested_filename}")
+        #     filters = models.Filter(
+        #         must=[
+        #             models.FieldCondition(
+        #                 key="metadata.original_filename",
+        #                 match=models.MatchText(text=requested_filename),
+        #             )
+        #         ]
+        #     )
+
+        documents = await vector_retrieval.retrieve(
+            kb_id=str(kb_id), query=query, filters=filters, top_n=20, top_k=50
+        )
+        if not documents:
+            logger.warning(f"No documents found for query: {query} in KB {kb_id}")
+            return []
+
+        documents = normalize_ref(documents, normalize_images=False)
+
+        return documents
+
+    async def delete_knowledge_base(self, kb_id: str) -> dict:
+        """Delete a knowledge base and all its documents."""
+        kb = await self.kb_repository.get(UUID(kb_id))
+        if not kb:
+            raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+        logger.info(f"Deleting knowledge base {kb_id} and all its documents")
+
+        try:
+            total = await self.document_repository.count_documents_in_kb(kb.id)
+            await self.kb_repository.delete(kb.id)
+            await vector_storage.delete_chunks_by_kb_id(kb_id)
+
+            logger.info(
+                f"Successfully deleted knowledge base {kb_id} with {total} documents files"
+            )
+            return {
+                "detail": f"Knowledge base deleted successfully. Removed {total} documents files."
+            }
+        except Exception as e:
+            logger.exception(
+                f"Unexpected error deleting knowledge base {kb_id}: {str(e)}"
+            )
+            raise HTTPException(
+                status_code=500, detail="Failed to delete knowledge base"
+            )
+
+    async def get_qa_pairs_by_kb_id(
+        self, kb_id: UUID, limit: int = 25
+    ) -> Sequence[DocumentQAResponse]:
+        """Get all question-answer pairs for a knowledge base."""
+        logger.info(f"Fetching QA pairs for knowledge base {kb_id}")
+
+        qas = await self.qa_repository.get_random_qa_by_kb_id(kb_id, limit)
+
+        if not qas:
+            logger.info(f"No QA pairs found for knowledge base {kb_id}")
+            return []
+
+        return qas

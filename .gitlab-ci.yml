@@ -1,0 +1,57 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  IMAGE_NAME: nxkms-ai
+  IMAGE_REPO: registry.ntq.ai
+
+build:
+  stage: build
+  before_script:
+    - export IMAGE_TAG=$(echo ${CI_COMMIT_TIMESTAMP:0:19} | tr -d :)
+    - >-
+      echo -n "${REGISTRY_PASS}" |
+      docker login ${IMAGE_REPO}/${IMAGE_NAME%_/} --username "${REGISTRY_USER}" --password-stdin
+  script:
+    - docker build -t "${IMAGE_REPO}/${IMAGE_NAME}:${IMAGE_TAG}" ${CI_PROJECT_DIR}
+    - docker push ${IMAGE_REPO}/${IMAGE_NAME}:${IMAGE_TAG}
+  only:
+    - dev
+    - prod/internal
+
+.deploy:
+  stage: deploy
+  before_script:
+    - export IMAGE_TAG=$(echo ${CI_COMMIT_TIMESTAMP:0:19} | tr -d :)
+    - git clone --depth 1 https://gitlab-ci-token:${REPO_ACCESS_TOKEN}@git.ntq.solutions/ntq-ai/devops/infras.git
+  script:
+    - cd infras
+    - yq -i ''$MAIN_TAG_PATH' = "'$IMAGE_TAG'"' $FILE_PATH
+    - yq -i ''$MAIN_IMAGE_PATH' = "'$IMAGE_REPO/$IMAGE_NAME'"' $FILE_PATH
+    - git config --global user.email "ci_cd@ntq.ai"
+    - git config --global user.name "CI/CD Bot"
+    - git add $FILE_PATH
+    - git commit -m "update(${ENV}/${IMAGE_NAME}):tag:${IMAGE_TAG}"
+    - git remote set-url origin https://gitlab-ci-token:${REPO_ACCESS_TOKEN}@git.ntq.solutions/ntq-ai/devops/infras.git
+    - git push origin master
+
+dev:deploy:app:
+  extends: .deploy
+  variables:
+    ENV: dev
+    FILE_PATH: apps/${ENV}/${IMAGE_NAME}/values.yaml
+    MAIN_TAG_PATH: .globalImage.tag
+    MAIN_IMAGE_PATH: .globalImage.repository
+  only:
+    - dev
+
+prod:internal:deploy:app:
+  extends: .deploy
+  variables:
+    ENV: prod
+    FILE_PATH: apps/${ENV}/nxkms-internal-ai/values.yaml
+    MAIN_TAG_PATH: .globalImage.tag
+    MAIN_IMAGE_PATH: .globalImage.repository
+  only:
+    - prod/internal

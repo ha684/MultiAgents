@@ -1,0 +1,83 @@
+from pathlib import Path
+from langchain_core.documents import Document
+from langchain_community.document_loaders.base import BaseLoader
+from typing import List, Dict, Any
+
+from src.rag.processor.strategy.base import BaseStrategy
+from src.rag.processor.loader.images_loader import ImageLoader
+from src.db.models.document import Document as DBDocument
+from src.utils.logger_conf import logger
+
+
+class ImageStrategy(BaseStrategy):
+    """
+    Image processing strategy that uses Custom ImageLoader to process image files.
+    """
+
+    _supported_file_types = ["jpg", "jpeg", "png"]
+
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(
+            config,
+        )
+
+    def _get_loader(self, file_path: str, document: DBDocument) -> BaseLoader:
+        """
+        Get the appropriate document loader based on the file type.
+
+        Args:
+            file_path: The path to the file
+
+        Returns:
+            A Langchain document loader
+        """
+        file_extension = Path(file_path).suffix.lower()
+        logger.info(
+            f"Determining loader for file {file_path} with extension {file_extension}"
+        )
+
+        return ImageLoader(image_path=file_path, document=document)
+
+    def chunk(self, file_path: str, document: DBDocument) -> List[Document]:
+        """
+        Process a file using Langchain's document loaders.
+
+        Args:
+            file_path: The path to the file to process
+
+        Returns:
+            A list of Langchain Document objects
+        """
+        logger.info(f"Processing file {file_path} with naive strategy")
+
+        try:
+            # Validate file type
+            valid = self.check_file_type(file_path)
+            if not valid:
+                raise ValueError(f"Unsupported file type: {document.file_type}")
+            # Get the appropriate loader based on file type
+            loader = self._get_loader(file_path, document)
+            if not loader:
+                raise ValueError(f"Unsupported file type: {file_path}")
+
+            # Load documents
+            logger.info(
+                f"Loading documents from {file_path} using {loader.__class__.__name__}"
+            )
+            docs = loader.load()
+
+            # Add file path and strategy metadata to each document
+            for doc in docs:
+                if "source" not in doc.metadata:
+                    doc.metadata["source"] = file_path
+                doc.metadata["strategy"] = "naive"
+
+            logger.info(
+                f"Loaded {len(docs)} documents from {file_path} using {loader.__class__.__name__}"
+            )
+
+            return docs
+
+        except Exception as e:
+            logger.exception(f"Error processing file {file_path}: {str(e)}")
+            raise
