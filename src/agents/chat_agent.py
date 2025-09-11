@@ -314,7 +314,7 @@ class ChatAgent:
         )
         return response
 
-    async def _ask_stream(
+    async def ask_stream(
         self, request: ChatRequest
     ) -> AsyncGenerator[str | BaseMessage, None]:
         """Handles streaming response with robust error handling."""

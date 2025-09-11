@@ -1,5 +1,5 @@
 # src/models/auth.py
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
@@ -25,21 +25,32 @@ class UserRegistrationRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     full_name: Optional[str] = Field(None, max_length=100)
 
-    @field_validator("password")
-    def validate_password(cls, v):
-        """Validate password strength"""
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-        if not any(c.isupper() for c in v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not any(c.islower() for c in v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit")
-        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in v):
-            raise ValueError("Password must contain at least one special character")
-        return v
-
+    @model_validator(mode='after')
+    def validate_password_comprehensive(self):
+        """Validate password with all errors at once"""
+        password = self.password
+        errors = []
+        
+        if len(password) < 8:
+            errors.append("Password must be at least 8 characters long")
+        
+        if not any(c.isupper() for c in password):
+            errors.append("Password must contain at least one uppercase letter")
+        
+        if not any(c.islower() for c in password):
+            errors.append("Password must contain at least one lowercase letter")
+        
+        if not any(c.isdigit() for c in password):
+            errors.append("Password must contain at least one digit")
+        
+        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
+            errors.append("Password must contain at least one special character")
+        
+        if errors:
+            error_message = ". ".join(errors)
+            raise ValueError(error_message)
+        
+        return self
 
 class UserLoginRequest(BaseModel):
     email: EmailStr
@@ -59,20 +70,33 @@ class PasswordResetConfirmRequest(BaseModel):
     token: str
     new_password: str = Field(..., min_length=8, max_length=128)
 
-    @field_validator("new_password")
-    def validate_password(cls, v):
-        """Validate password strength"""
-        if len(v) < 8:
-            raise ValueError("Password must be at least 8 characters long")
-        if not any(c.isupper() for c in v):
-            raise ValueError("Password must contain at least one uppercase letter")
-        if not any(c.islower() for c in v):
-            raise ValueError("Password must contain at least one lowercase letter")
-        if not any(c.isdigit() for c in v):
-            raise ValueError("Password must contain at least one digit")
-        return v
-
-
+    @model_validator(mode='after')
+    def validate_password_comprehensive(self):
+        """Validate password with all errors at once"""
+        password = self.password
+        errors = []
+        
+        if len(password) < 8:
+            errors.append("Password must be at least 8 characters long")
+        
+        if not any(c.isupper() for c in password):
+            errors.append("Password must contain at least one uppercase letter")
+        
+        if not any(c.islower() for c in password):
+            errors.append("Password must contain at least one lowercase letter")
+        
+        if not any(c.isdigit() for c in password):
+            errors.append("Password must contain at least one digit")
+        
+        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
+            errors.append("Password must contain at least one special character")
+        
+        if errors:
+            error_message = ". ".join(errors)
+            raise ValueError(error_message)
+        
+        return self
+    
 class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=8, max_length=128)

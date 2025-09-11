@@ -1,4 +1,4 @@
-# src/api/auth.py
+#src/api/auth.py
 from fastapi import APIRouter, Depends, Request, Body
 
 from src.models.auth import (
@@ -22,13 +22,13 @@ from src.middleware.response_handler import (
 )
 from src.middleware.rate_limit import check_rate_limit, RedisRateLimiter
 from src.services.user_service import UserRepository
-from src.db.models.user import User as UserModel
 from src.utils.logger_conf import logger
 from src.utils.security import token_manager
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 rate_limiter = RedisRateLimiter()
-
+auth_service = AuthenticationService()
+user_repo = UserRepository()
 
 @router.post("/register", response_model=StandardResponse)
 async def register(
@@ -37,7 +37,6 @@ async def register(
 ):
     """Register a new user"""
     try:
-        # Apply rate limiting
         await check_rate_limit(
             request,
             registration_data.email,
@@ -46,7 +45,6 @@ async def register(
             rate_limiter=rate_limiter,
         )
 
-        auth_service = AuthenticationService()
         user = await auth_service.register_user(
             registration_data,
             ip_address=request.client.host,
@@ -71,7 +69,6 @@ async def login(
 ):
     """Authenticate user and return JWT tokens"""
     try:
-        # Apply rate limiting
         await check_rate_limit(
             request,
             login_data.email,
@@ -79,8 +76,6 @@ async def login(
             window_minutes=15,
             rate_limiter=rate_limiter,
         )
-
-        auth_service = AuthenticationService()
         token_response = await auth_service.authenticate_user(
             login_data,
             ip_address=request.client.host,
@@ -103,7 +98,6 @@ async def refresh_token(
 ):
     """Refresh access token using refresh token"""
     try:
-        auth_service = AuthenticationService()
         token_response = await auth_service.refresh_access_token(
             refresh_data.refresh_token
         )
@@ -126,7 +120,6 @@ async def logout(
 ):
     """Logout user by revoking refresh token"""
     try:
-        auth_service = AuthenticationService()
         success = await auth_service.logout_user(refresh_token)
 
         if success:
@@ -150,7 +143,6 @@ async def logout_all_sessions(
 ):
     """Logout user from all sessions"""
     try:
-        auth_service = AuthenticationService()
         revoked_count = await auth_service.logout_all_sessions(str(current_user.id))
 
         return create_success_response(
@@ -171,7 +163,6 @@ async def get_profile(
 ):
     """Get current user profile with permissions"""
     try:
-        auth_service = AuthenticationService()
         profile = await auth_service.get_user_profile(str(current_user.id))
 
         return create_success_response(
@@ -202,7 +193,6 @@ async def update_profile(
                 error_code="INVALID_UPDATE_DATA",
             )
 
-        user_repo = UserRepository()
         updated_user = await user_repo.update_user(str(current_user.id), update_data)
 
         return create_success_response(
@@ -234,7 +224,6 @@ async def change_password(
 ):
     """Change user password"""
     try:
-        auth_service = AuthenticationService()
         success = await auth_service.change_password(
             str(current_user.id), password_data
         )
@@ -271,7 +260,6 @@ async def request_password_reset(
             rate_limiter=rate_limiter,
         )
 
-        auth_service = AuthenticationService()
         await auth_service.request_password_reset(reset_data.email)
 
         # Always return success for security (don't reveal if email exists)
@@ -300,7 +288,6 @@ async def confirm_password_reset(
             rate_limiter=rate_limiter,
         )
 
-        auth_service = AuthenticationService()
         success = await auth_service.reset_password(reset_data)
 
         if success:
@@ -324,7 +311,6 @@ async def verify_email(
 ):
     """Verify user email with token"""
     try:
-        auth_service = AuthenticationService()
         user = await auth_service.verify_email(verification_data.token)
 
         return create_success_response(
@@ -358,7 +344,6 @@ async def resend_verification_email(
         # Generate new verification token
         verification_token, expires_at = token_manager.create_email_verification_token()
 
-        user_repo = UserRepository()
         await user_repo.update_user(
             str(current_user.id),
             {
@@ -387,14 +372,13 @@ async def list_users(
 ):
     """List all users (admin only)"""
     try:
-        user_repo = UserRepository()
         # Get total count
         total = await user_repo.count_users()
 
         # Get paginated users
         offset = (page - 1) * size
         result = await user_repo.get_users(
-            offset=offset, limit=size, order_by=UserModel.created_at.desc()
+            offset=offset, limit=size, order_by=User.created_at.desc()
         )
         users = result
 

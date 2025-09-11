@@ -1,9 +1,13 @@
 # src/main.py
 import time
+from contextlib import asynccontextmanager
+
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import StreamingResponse
+
 from src.api.document import router as document_router
 from src.api.knowledge_base import router as knowledge_base_router
 from src.api.chat import router as chat_router
@@ -14,12 +18,10 @@ from src.api.auth import router as auth_router
 from src.config.settings import settings
 from src.utils.logger_conf import logger
 from src.connector import database_connector
-from contextlib import asynccontextmanager
 from src.rag.vector import vector_storage_migration
 from src.middleware.rate_limit import RateLimitMiddleware
-from src.middleware.response_handler import add_request_id_middleware
-
-from fastapi.openapi.utils import get_openapi
+from src.middleware.response_handler import ResponseHandlerMiddleware
+from src.middleware.exception_handler import exception_handler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -53,8 +55,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(add_request_id_middleware())
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -65,10 +65,12 @@ app.add_middleware(
 )
 
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(ResponseHandlerMiddleware)
 
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
+    """Log requests with response handler support"""
     if (
         request.url.path.startswith("/websocket/")
         or request.url.path.startswith("/ws/")
@@ -80,31 +82,24 @@ async def log_requests(request: Request, call_next):
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
-    logger.info(
-        f"Request: {request.method} {request.url.path} - Completed in {process_time:.4f}s"
-    )
+    
+    response_info = f"{request.method} {request.url.path}"
+    if hasattr(response, 'status_code'):
+        response_info += f" - {response.status_code}"
+    if isinstance(response, StreamingResponse):
+        response_info += " (streaming)"
+    
+    logger.info(f"Request: {response_info} - Completed in {process_time:.4f}s")
     return response
 
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    if (
-        request.url.path.startswith("/websocket/")
-        or request.url.path.startswith("/ws/")
-        or request.headers.get("upgrade", "").lower() == "websocket"
-        or request.headers.get("connection", "").lower() == "upgrade"
-    ):
-        raise exc
-
-    logger.exception(f"Unhandled exception: {str(exc)}")
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal server error. Please try again later."},
-    )
-
+app.exception_handler(Exception)(exception_handler)
+app.exception_handler(HTTPException)(exception_handler)
+app.exception_handler(RequestValidationError)(exception_handler)
 
 @app.get("/health")
 async def health_check():
+    """Health check endpoint"""
     return {"status": "healthy"}
 
 

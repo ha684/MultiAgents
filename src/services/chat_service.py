@@ -26,7 +26,7 @@ class ChatService:
         request.messages = request.messages[-5:]
         request.messages = format_history(request.messages)
         try:
-            if request.agent:
+            if request.agentic:
                 response = await self._ask_langgraph(request)
             else:
                 response = await self._ask_original(request)

@@ -30,7 +30,6 @@ async def ask(
         response = await chat_service.ask(request)
 
         if not request.stream:
-            logger.info("not stream")
             return response
         else:
             return StreamingResponse(
