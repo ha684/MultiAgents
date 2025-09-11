@@ -1,47 +1,81 @@
+#src/middleware/response_handler.py
 from typing import Any, Dict
 from fastapi import Request
 from fastapi.responses import JSONResponse
 import json
 from datetime import datetime, timezone
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+from starlette.responses import Response
+from src.utils.logger_conf import logger
 
-class ResponseHandlerMiddleware:
-    def __init__(self, app):
-        self.app = app
+class ResponseHandlerMiddleware(BaseHTTPMiddleware):
     
-    async def __call__(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         if (
             request.url.path.startswith("/websocket/") or
             request.url.path.startswith("/ws/") or
             request.url.path == "/health" or
+            request.url.path == "/openapi.json" or
+            request.url.path == "/docs" or
+            request.url.path == "/redoc" or
+            request.url.path.startswith("/docs/") or
+            request.url.path.startswith("/redoc/") or
             request.headers.get("upgrade", "").lower() == "websocket"
         ):
             return await call_next(request)
         
         response = await call_next(request)
-        if not isinstance(response, JSONResponse):
+        content_type = response.headers.get('content-type')
+        if not content_type or 'application/json' not in content_type:
+            logger.info(f"Skipping non-JSON response for path: {request.url.path} (Content-Type: {content_type})")
             return response
             
-        if hasattr(response, 'body') and response.body:
-            try:
-                original_data = json.loads(response.body.decode())
-                
-                if isinstance(original_data, dict) and 'success' in original_data:
-                    return response
-
-                wrapped_data = self._create_envelope(
-                    data=original_data,
-                    status_code=response.status_code,
-                    request=request
-                )
-                return JSONResponse(
-                    content=wrapped_data,
-                    status_code=response.status_code,
-                    headers=dict(response.headers)
-                )
-            except (json.JSONDecodeError, AttributeError):
-                pass
+        response_body = b""
+        async for chunk in response.body_iterator:
+            response_body += chunk
         
-        return response
+        if not response_body:
+            # Create new response without Content-Length header for empty body
+            headers = {k: v for k, v in response.headers.items() if k.lower() != 'content-length'}
+            return Response(
+                status_code=response.status_code,
+                headers=headers
+            )
+            
+        try:
+            original_data = json.loads(response_body.decode())
+            if isinstance(original_data, dict) and 'success' in original_data:
+                # Response already wrapped, return as-is but with proper headers
+                headers = {k: v for k, v in response.headers.items() if k.lower() != 'content-length'}
+                return JSONResponse(
+                    content=original_data,
+                    status_code=response.status_code,
+                    headers=headers
+                )
+
+            wrapped_data = self._create_envelope(
+                data=original_data,
+                status_code=response.status_code,
+                request=request
+            )
+            
+            # Create new response without the original Content-Length header
+            headers = {k: v for k, v in response.headers.items() if k.lower() != 'content-length'}
+            return JSONResponse(
+                content=wrapped_data,
+                status_code=response.status_code,
+                headers=headers
+            )
+        except (json.JSONDecodeError, AttributeError) as e:
+            logger.warning(f"Could not wrap response body for {request.url.path}: {e}")
+            # Remove Content-Length header for raw response too
+            headers = {k: v for k, v in response.headers.items() if k.lower() != 'content-length'}
+            return Response(
+                content=response_body,
+                status_code=response.status_code,
+                headers=headers,
+                media_type=response.media_type,
+            )
     
     def _create_envelope(self, data: Any, status_code: int, request: Request) -> Dict[str, Any]:
         """Create standard response handler"""

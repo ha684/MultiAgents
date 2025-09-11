@@ -2,7 +2,6 @@ from src.connector.database_conn import Base
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, Index, ForeignKey
 from datetime import datetime
 from sqlalchemy.orm import relationship
-from src.config import settings
 from sqlalchemy.dialects.postgresql import JSONB
 
 
@@ -40,7 +39,7 @@ class ConversationModel(Base):
     __tablename__ = "conversations"
 
     id = Column(String(255), primary_key=True)
-    app_name = Column(String(settings.DEFAULT_MAX_KEY_LENGTH), nullable=False)
+    app_name = Column(String(255), nullable=False)
     user_id = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
     name = Column(String(500), default="")

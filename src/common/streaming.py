@@ -1,7 +1,6 @@
 from typing import Dict, Any, Optional, Union
 import json
 from src.models.streaming import StreamEventType, StreamEvent, StreamPhase
-from typing import Literal
 
 
 class StreamEventBuilder:
@@ -72,20 +71,21 @@ class StreamEventBuilder:
 
     @staticmethod
     def message_stop(
-        stop_reason: Literal[
-            "end_turn", "max_tokens", "stop_sequence", "tool_use"
-        ] = "end_turn",
         final_message: Optional[str | Dict[str, Any]] = None,
         references: Optional[list] = None,
+        metadata: Optional[dict] = None,
     ) -> str:
         """End of message"""
-        data = {"stop_reason": stop_reason, "stop_sequence": None}
+        data = {}
 
         if final_message:
             data["final_message"] = final_message
 
         if references:
             data["references"] = references
+
+        if metadata:
+            data["metadata"] = metadata
 
         return StreamEventBuilder.create_sse_event(StreamEventType.MESSAGE_STOP, data)
 

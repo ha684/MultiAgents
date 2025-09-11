@@ -4,7 +4,6 @@ from .database_conn import DatabaseConnection
 
 database_connector = DatabaseConnection(
     db_url=settings.database_url,
-    auto_create_tables=settings.database_auto_create_tables,
 )
 
 minio_client = MinioClient(

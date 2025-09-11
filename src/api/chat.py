@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Request, Body
-from typing import cast, Generator
+from typing import cast, AsyncGenerator
 from src.models.chat import ChatRequest
 from src.services.chat_service import ChatService
 from src.utils.logger_conf import logger
@@ -22,7 +22,7 @@ async def ask(
         "max_research_iterations": 5,
         "novelty_threshold": 0.3,
     }
-    chat_service = ChatService(kb_id=request.knowledge_base_id, config=config)
+    chat_service = ChatService()
     if not request.messages:
         raise HTTPException(status_code=400, detail="Messages are required")
 
@@ -33,7 +33,7 @@ async def ask(
             return response
         else:
             return StreamingResponse(
-                cast(Generator[str, None, None], response),
+                cast(AsyncGenerator[str, None], response),
                 media_type="text/event-stream",
                 headers={"Content-Type": "text/event-stream"},
             )

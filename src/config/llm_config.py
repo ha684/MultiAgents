@@ -9,7 +9,7 @@ class LLMModelConfigs(BaseModel):
     model: str
     api_key: str | None = None
     base_url: str | None = None
-    temperature: float = settings.temperature
+    temperature: float = 0.5
 
 
 type SupportedLLMProviders = Literal[

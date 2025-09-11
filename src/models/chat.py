@@ -54,7 +54,7 @@ class ChatRequest(BaseModel):
     agentic: Optional[bool] = Field(
         default=False, description="Whether to use agentic capabilities"
     )
-    web_search: Optional[WebSearchConfig]
+    web_search: Optional[bool] = Field(default=False)
 
 
 class ChatResponse(BaseModel):

@@ -1,6 +1,5 @@
 #src/api/auth.py
 from fastapi import APIRouter, Depends, Request, Body
-
 from src.models.auth import (
     UserRegistrationRequest,
     UserLoginRequest,
@@ -15,11 +14,6 @@ from src.models.auth import (
 from src.db.models.user import User
 from src.services.auth_service import AuthenticationService
 from src.auth.dependencies import get_current_user, require_admin
-from src.middleware.response_handler import (
-    create_success_response,
-    create_error_response,
-    create_paginated_response,
-)
 from src.middleware.rate_limit import check_rate_limit, RedisRateLimiter
 from src.services.user_service import UserRepository
 from src.utils.logger_conf import logger
@@ -51,11 +45,10 @@ async def register(
             user_agent=request.headers.get("user-agent"),
         )
 
-        return create_success_response(
-            request,
-            data=user.model_dump(),
-            message="User registered successfully. Please check your email for verification.",
-        )
+        return {
+            "data": user.model_dump(),
+            "message": "User registered successfully. Please check your email for verification.",
+        }
 
     except Exception as e:
         logger.error(f"Registration failed: {str(e)}")
@@ -82,9 +75,10 @@ async def login(
             user_agent=request.headers.get("user-agent"),
         )
 
-        return create_success_response(
-            request, data=token_response.model_dump(), message="Login successful"
-        )
+        return {
+            "data": token_response.model_dump(),
+            "message": "Login successful",
+        }
 
     except Exception as e:
         logger.error(f"Login failed: {str(e)}")
@@ -102,11 +96,10 @@ async def refresh_token(
             refresh_data.refresh_token
         )
 
-        return create_success_response(
-            request,
-            data=token_response.model_dump(),
-            message="Token refreshed successfully",
-        )
+        return {
+            "data": token_response.model_dump(),
+            "message": "Token refreshed successfully",
+        }
 
     except Exception as e:
         logger.error(f"Token refresh failed: {str(e)}")
@@ -123,13 +116,9 @@ async def logout(
         success = await auth_service.logout_user(refresh_token)
 
         if success:
-            return create_success_response(request, message="Logout successful")
+            return "Logout successful"
         else:
-            return create_error_response(
-                request,
-                message="Logout failed - token not found",
-                error_code="TOKEN_NOT_FOUND",
-            )
+            return "Logout failed - token not found"
 
     except Exception as e:
         logger.error(f"Logout failed: {str(e)}")
@@ -145,11 +134,7 @@ async def logout_all_sessions(
     try:
         revoked_count = await auth_service.logout_all_sessions(str(current_user.id))
 
-        return create_success_response(
-            request,
-            data={"revoked_sessions": revoked_count},
-            message=f"Logged out from {revoked_count} sessions",
-        )
+        return f"Logged out from {revoked_count} sessions"
 
     except Exception as e:
         logger.error(f"Logout all sessions failed: {str(e)}")
@@ -165,9 +150,7 @@ async def get_profile(
     try:
         profile = await auth_service.get_user_profile(str(current_user.id))
 
-        return create_success_response(
-            request, data=profile.model_dump(), message="Profile retrieved successfully"
-        )
+        return profile.model_dump()
 
     except Exception as e:
         logger.error(f"Get profile failed: {str(e)}")
@@ -182,34 +165,25 @@ async def update_profile(
 ):
     """Update current user profile"""
     try:
-        # Only allow certain fields to be updated
         allowed_fields = {"full_name", "username"}
         update_data = {k: v for k, v in profile_data.items() if k in allowed_fields}
 
         if not update_data:
-            return create_error_response(
-                request,
-                message="No valid fields provided for update",
-                error_code="INVALID_UPDATE_DATA",
-            )
+            return "No valid fields provided for update"
 
         updated_user = await user_repo.update_user(str(current_user.id), update_data)
 
-        return create_success_response(
-            request,
-            data=UserProfileResponse(
-                id=str(updated_user.id),
-                email=updated_user.email,
-                username=updated_user.username,
-                full_name=updated_user.full_name,
-                role=updated_user.role,
-                status=updated_user.status,
-                email_verified=updated_user.email_verified,
-                created_at=updated_user.created_at,
-                last_login_at=updated_user.last_login_at,
-            ).model_dump(),
-            message="Profile updated successfully",
-        )
+        return UserProfileResponse(
+            id=str(updated_user.id),
+            email=updated_user.email,
+            username=updated_user.username,
+            full_name=updated_user.full_name,
+            role=updated_user.role,
+            status=updated_user.status,
+            email_verified=updated_user.email_verified,
+            created_at=updated_user.created_at,
+            last_login_at=updated_user.last_login_at,
+        ).model_dump()
 
     except Exception as e:
         logger.error(f"Profile update failed: {str(e)}")
@@ -229,15 +203,9 @@ async def change_password(
         )
 
         if success:
-            return create_success_response(
-                request, message="Password changed successfully"
-            )
+            return "Password changed successfully"
         else:
-            return create_error_response(
-                request,
-                message="Password change failed",
-                error_code="PASSWORD_CHANGE_FAILED",
-            )
+            return "Password change failed"
 
     except Exception as e:
         logger.error(f"Password change failed: {str(e)}")
@@ -251,7 +219,6 @@ async def request_password_reset(
 ):
     """Request password reset"""
     try:
-        # Apply rate limiting
         await check_rate_limit(
             request,
             reset_data.email,
@@ -262,10 +229,7 @@ async def request_password_reset(
 
         await auth_service.request_password_reset(reset_data.email)
 
-        # Always return success for security (don't reveal if email exists)
-        return create_success_response(
-            request, message="If the email exists, a password reset link has been sent"
-        )
+        return "If the email exists, a password reset link has been sent"
 
     except Exception as e:
         logger.error(f"Password reset request failed: {str(e)}")
@@ -279,7 +243,6 @@ async def confirm_password_reset(
 ):
     """Confirm password reset with token"""
     try:
-        # Apply rate limiting
         await check_rate_limit(
             request,
             reset_data.token,
@@ -291,13 +254,9 @@ async def confirm_password_reset(
         success = await auth_service.reset_password(reset_data)
 
         if success:
-            return create_success_response(request, message="Password reset successful")
+            return "Password reset successful"
         else:
-            return create_error_response(
-                request,
-                message="Password reset failed",
-                error_code="PASSWORD_RESET_FAILED",
-            )
+            return "Password reset failed"
 
     except Exception as e:
         logger.error(f"Password reset confirmation failed: {str(e)}")
@@ -313,9 +272,7 @@ async def verify_email(
     try:
         user = await auth_service.verify_email(verification_data.token)
 
-        return create_success_response(
-            request, data=user.model_dump(), message="Email verified successfully"
-        )
+        return user.model_dump()
 
     except Exception as e:
         logger.error(f"Email verification failed: {str(e)}")
@@ -329,7 +286,6 @@ async def resend_verification_email(
 ):
     """Resend email verification"""
     try:
-        # Apply rate limiting
         await check_rate_limit(
             request,
             str(current_user.id),
@@ -339,9 +295,8 @@ async def resend_verification_email(
         )
 
         if current_user.email_verified:
-            return create_success_response(request, message="Email is already verified")
+            return "Email is already verified"
 
-        # Generate new verification token
         verification_token, expires_at = token_manager.create_email_verification_token()
 
         await user_repo.update_user(
@@ -355,14 +310,13 @@ async def resend_verification_email(
         # TODO: Send verification email
         # await send_verification_email(current_user.email, verification_token)
 
-        return create_success_response(request, message="Verification email sent")
+        return "Verification email sent"
 
     except Exception as e:
         logger.error(f"Resend verification email failed: {str(e)}")
         raise
 
 
-# Admin endpoints
 @router.get("/users", response_model=StandardResponse)
 async def list_users(
     request: Request,
@@ -372,10 +326,8 @@ async def list_users(
 ):
     """List all users (admin only)"""
     try:
-        # Get total count
         total = await user_repo.count_users()
 
-        # Get paginated users
         offset = (page - 1) * size
         result = await user_repo.get_users(
             offset=offset, limit=size, order_by=User.created_at.desc()
@@ -397,14 +349,7 @@ async def list_users(
             for user in users
         ]
 
-        return create_paginated_response(
-            request,
-            data=users_data,
-            page=page,
-            size=size,
-            total=total,
-            message="Users retrieved successfully",
-        )
+        return users_data
 
     except Exception as e:
         logger.error(f"List users failed: {str(e)}")
@@ -416,13 +361,12 @@ async def validate_token(
     request: Request, current_user: User = Depends(get_current_user)
 ):
     """Validate current token and return user info"""
-    return create_success_response(
-        request,
-        data={
+    return {
+        "data": {
             "user_id": str(current_user.id),
             "email": current_user.email,
             "role": current_user.role.value,
             "status": current_user.status.value,
         },
-        message="Token is valid",
-    )
+        "message": "Token is valid",
+    }

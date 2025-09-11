@@ -72,7 +72,7 @@ class ResponseAgent:
             )
             return response_prompt_template, no_answer_prompt_template, "en"
 
-    async def _format_context_for_response(self, documents: List[Document]) -> str:
+    def _format_context_for_response(self, documents: List[Document]) -> str:
         """Formats documents for the response prompt."""
         if not documents:
             return "<documents>No relevant documents found.</documents>"
@@ -188,7 +188,6 @@ class ResponseAgent:
                 )
 
                 final_response = {
-                    "content": accumulated_content,
                     "response_metadata": response_metadata,
                     "type": "ai",
                     "name": None,
@@ -204,7 +203,6 @@ class ResponseAgent:
         except Exception as e:
             logger.exception(f"Error during streaming response generation: {e}")
             yield "error"
-
 
 def count_tokens(text: str) -> int:
     """Count tokens in text using the same tokenizer as the chat agent."""

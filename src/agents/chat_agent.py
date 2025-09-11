@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, cast, AsyncGenerator, Union
+from typing import List, Dict, Any, cast, AsyncGenerator, Union, Generator
 from qdrant_client.models import Filter, models
 from src.agents.citation_agent import CitationAgent
 from src.agents.filename_agent import FilenameAgent
@@ -18,7 +18,7 @@ from src.utils.reference import normalize_ref
 from src.models.reference import Reference
 import tiktoken
 from src.services.web_search_service import search_service
-
+from src.models.chat import WebSearchConfig
 
 @singleton
 class ChatAgent:
@@ -32,7 +32,9 @@ class ChatAgent:
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
         logger.info("Chat Agent initialized successfully.")
 
-    async def _retrieve(self, request: ChatRequest):
+    async def _retrieve(
+        self, request: ChatRequest, web_search_config: WebSearchConfig
+    ) -> List[Document]:
         """Retrieves relevant documents based on the query and knowledge base ID."""
         embed_top = 50
         rerank_top = 20
@@ -43,6 +45,7 @@ class ChatAgent:
         cited_docs = []
         retrieved_docs = []
         max_tokens = 8192
+
         logger.info(
             f"Retrieving documents for query: {original_query} in knowledgebase: {kb_id}"
         )
@@ -55,46 +58,54 @@ class ChatAgent:
             )
             logger.info(f"Contextualized query: {contextualized_query}")
 
-        # relevant_folder = await self.folder_categorization_agent.get_relevant_folder(
+        # relevant_folder = self.folder_categorization_agent.get_relevant_folder(
         #     query=query, folder_structure=folder_structure
         # )
         # logger.info(f"Relevant folder: {relevant_folder}")
         # NOTE: For now, we are temporarily disabling folder categorization
 
         relevant_folder = request.folder_context or None
-
-        requested_filename = await self.filename_agent.extract_filename(
-            query=original_query
-        )
-
-        filters: Filter = Filter(must=[])
-
-        if requested_filename:
-            logger.info(f"Requested filename: {requested_filename}")
-            cast(List[models.Condition], filters.must).append(
-                models.FieldCondition(
-                    key="metadata.original_filename",
-                    match=models.MatchText(text=requested_filename),
-                )
+        if web_search_config.active:
+            retrieved_docs = await search_service.search(
+                query=contextualized_query,
+                provider=web_search_config.provider,
+                api_key=web_search_config.api_key,
+                max_results=rerank_top,
+            )
+        else:
+            requested_filename = await self.filename_agent.extract_filename(
+                query=original_query
             )
 
-        if relevant_folder:
-            logger.info(f"Relevant folder: {relevant_folder}")
-            cast(List[models.Condition], filters.must).append(
-                models.FieldCondition(
-                    key="metadata.folder_path",
-                    match=models.MatchAny(any=[relevant_folder]),
+            filters: Filter = Filter(must=[])
+
+            if requested_filename:
+                logger.info(f"Requested filename: {requested_filename}")
+                cast(List[models.Condition], filters.must).append(
+                    models.FieldCondition(
+                        key="metadata.original_filename",
+                        match=models.MatchText(text=requested_filename),
+                    )
                 )
+
+            if relevant_folder:
+                logger.info(f"Relevant folder: {relevant_folder}")
+                cast(List[models.Condition], filters.must).append(
+                    models.FieldCondition(
+                        key="metadata.folder_path",
+                        match=models.MatchAny(any=[relevant_folder]),
+                    )
+                )
+
+            logger.info(f"Filter applied: {filters}")
+            retrieved_docs = await vector_retrieval.retrieve(
+                kb_id=str(kb_id),
+                query=contextualized_query,
+                filters=filters,
+                top_k=embed_top,
+                top_n=rerank_top,
             )
 
-        logger.info(f"Filter applied: {filters}")
-        retrieved_docs = await vector_retrieval.retrieve(
-            kb_id=str(kb_id),
-            query=contextualized_query,
-            filters=filters,
-            top_k=embed_top,
-            top_n=rerank_top,
-        )
         logger.info(
             f"Retrieved {len(retrieved_docs)} documents for query: {contextualized_query} in knowledgebase: {kb_id}"
         )
@@ -115,7 +126,7 @@ class ChatAgent:
                 final_docs.append(doc)
                 current_tokens += doc_tokens
 
-                if current_tokens > max_tokens and final_docs:
+                if current_tokens + doc_tokens > max_tokens and final_docs:
                     logger.warning(
                         f"Token limit ({max_tokens}) reached. "
                         f"Truncating context from {len(retrieved_docs)} to {len(final_docs)} documents."
@@ -124,31 +135,30 @@ class ChatAgent:
 
             retrieved_docs = final_docs
 
+        # Stash the original index in the metadata before citation filtering
+        for i, doc in enumerate(retrieved_docs):
+            doc.metadata["original_index"] = i
+
         if retrieved_docs:
             citation_indexes = await self.citation_agent.extract_citations(
                 history=request.messages,
                 reference=retrieved_docs,
             )
-            logger.info(f"Citation indexes: {citation_indexes}")
-
             if citation_indexes.indexes:
                 cited_docs = [
                     retrieved_docs[i - 1]
                     for i in citation_indexes.indexes
-                    if 0 < i < len(retrieved_docs)
+                    if 0 < i <= len(retrieved_docs)
                 ]
+            logger.info(
+                f"Extracted {len(cited_docs)} citations for query: {original_query} in knowledgebase: {kb_id}"
+            )
 
-                logger.info(
-                    f"Extracted {len(cited_docs)} citations for query: {original_query} in knowledgebase: {kb_id}"
-                )
-
-                return cited_docs
-        else:
-            return [Document(page_content="Failed", metadata={"source": "Failed"})]
+        return cited_docs
 
     async def _retrieve_stream(
-        self, request: ChatRequest
-    ) -> AsyncGenerator[Union[str, List[Document]], None]:
+        self, request: ChatRequest, web_search_config: WebSearchConfig
+    ) -> Generator[Union[str, List[Document]], None, None]:
         """Retrieves relevant documents based on the query and knowledge base ID."""
         embed_top = 50
         rerank_top = 20
@@ -184,17 +194,17 @@ class ChatAgent:
         # NOTE: For now, we are temporarily disabling folder categorization
 
         relevant_folder = request.folder_context or None
-        if request.web_search.active:
+        if web_search_config.active:
             yield StreamEventBuilder.status_update(
                 StreamPhase.WEB_SEARCH,
                 "Performing web search...",
                 progress=0.3,
-                metadata={"provider": request.web_search.provider},
+                metadata={"provider": web_search_config.provider.value},
             )
             retrieved_docs = await search_service.search(
                 query=contextualized_query,
-                provider=request.web_search.provider,
-                api_key=request.web_search.api_key,
+                provider=web_search_config.provider,
+                api_key=web_search_config.api_key,
                 max_results=rerank_top,
             )
 
@@ -305,26 +315,35 @@ class ChatAgent:
 
         yield cited_docs
 
-    async def ask_normal(self, request: ChatRequest) -> Dict[str, Any]:
+    async def ask_normal(
+        self, request: ChatRequest, web_search_config: WebSearchConfig
+    ) -> Dict[str, Any]:
         """Handles non-streaming (full text) response."""
-        cited_docs = await self._retrieve(request)
+        citations = await self._retrieve(request, web_search_config)
         response = await self.response_agent.generate_response(
-            contexts=cited_docs,
+            contexts=citations,
             history=request.messages,
         )
-        return response
+        response_dict = response.model_dump()
+        if citations:
+            response_dict["reference"] = create_reference(citations)
+        if web_search_config.active:
+            response_dict["search_method"] = "web_search"
+        else:
+            response_dict["search_method"] = "database_search"
+        return response_dict
 
     async def ask_stream(
-        self, request: ChatRequest
+        self, request: ChatRequest, web_search_config: WebSearchConfig
     ) -> AsyncGenerator[str | BaseMessage, None]:
         """Handles streaming response with robust error handling."""
         try:
             yield StreamEventBuilder.message_start()
 
-            retrieve_generator = self._retrieve_stream(request)
+            retrieve_generator = self._retrieve_stream(request, web_search_config)
             citations = []
 
-            for event in retrieve_generator:
+            async for event in retrieve_generator:
                 if isinstance(event, list):
                     citations = event
                 else:
@@ -339,14 +358,12 @@ class ChatAgent:
                 history=request.messages,
             )
 
-            final_message = None
             i = 0
             async for chunk in response_generator:
                 if isinstance(chunk, str) and chunk != "error":
                     yield StreamEventBuilder.content_delta(chunk, index=i)
                     i += 1
                 elif isinstance(chunk, dict):
-                    final_message = chunk
                     break
                 else:
                     yield StreamEventBuilder.error(
@@ -358,10 +375,14 @@ class ChatAgent:
             )
             references = create_reference(citations) if citations else None
 
+            if web_search_config.active:
+                metadata = {"search_method": "web_search"}
+            else:
+                metadata = {"search_method": "database_search"}
+
             yield StreamEventBuilder.message_stop(
-                stop_reason="end_turn",
-                final_message=final_message,
                 references=references,
+                metadata=metadata,
             )
 
         except Exception as e:
