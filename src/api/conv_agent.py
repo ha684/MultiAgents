@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from src.services.conversation_service import ConversationServer
+from src.services.conversation_service import ConversationService
 from src.utils.logger_conf import logger
 from typing import Optional
 from ..services.types import (
@@ -13,13 +13,13 @@ from ..services.types import (
     RegisterAgentResponse,
 )
 
-router = APIRouter(tags=["Conversation & Agent"])
-server_instance = ConversationServer()
+router = APIRouter(tags=["Conversation"])
+server_instance = ConversationService()
+
 
 @router.get("/conversation/list", response_model=ListConversationResponse)
 async def list_conversations(
-    app_name: Optional[str],
-    user_id: Optional[str]
+    app_name: Optional[str], user_id: Optional[str]
 ) -> ListConversationResponse:
     """List the conversations"""
     try:
@@ -28,11 +28,11 @@ async def list_conversations(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
+
 @router.post("/conversation/create", response_model=CreateConversationResponse)
 async def create_conversation(
-    app_name: str,
-    user_id: str
+    app_name: str, user_id: str
 ) -> CreateConversationResponse:
     """Create a new conversation"""
     try:
@@ -40,6 +40,7 @@ async def create_conversation(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/agent/list", response_model=ListAgentResponse)
 async def list_remote_agents() -> ListAgentResponse:
@@ -62,7 +63,7 @@ async def add_remote_agent(
         if not path.startswith("http"):
             result = await server_instance._register_agent(path, app_name)
         elif path.startswith("http"):
-            path = path.replace("http://", "") 
+            path = path.replace("http://", "")
             result = await server_instance._register_agent(path, app_name)
         elif path.startswith("https"):
             path = path.replace("https://", "")
@@ -73,19 +74,17 @@ async def add_remote_agent(
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+
 @router.get("/events/all", response_model=GetEventResponse)
-async def get_events_all(
-    conversation_id: Optional[str] = None
-) -> GetEventResponse:
+async def get_events_all(conversation_id: Optional[str] = None) -> GetEventResponse:
     """Get all events"""
     try:
-        result = await server_instance._get_events_all(
-            conversation_id=conversation_id
-        )
+        result = await server_instance._get_events_all(conversation_id=conversation_id)
         logger.info(f"Got {len(result.result)} events")
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/message/pending", response_model=PendingMessageResponse)
 async def get_processing_messages() -> PendingMessageResponse:
@@ -114,28 +113,27 @@ async def list_messages(conversation_id: str) -> ListMessageResponse:
     """List the messages for a conversation"""
     try:
         result = await server_instance._list_messages(conversation_id)
-        logger.info(f"Got {len(result.result)} messages for conversation {conversation_id}")
+        logger.info(
+            f"Got {len(result.result)} messages for conversation {conversation_id}"
+        )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.put("/api_key/update", response_model=dict[str, str])
-async def update_api_key(
-    api_key: str, 
-    app_name: str
-) -> dict[str, str]:
+async def update_api_key(api_key: str, app_name: str) -> dict[str, str]:
     """Update the API key"""
     try:
         result = await server_instance.update_api_key(api_key, app_name)
-        logger.info(f"Updated API key")
+        logger.info("Updated API key")
         return {"status": "success", "result": result}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.delete("/conversation/delete", response_model=dict[str, str])
-async def delete_conversation(
-    conversation_id: str
-) -> dict[str, str]:
+async def delete_conversation(conversation_id: str) -> dict[str, str]:
     """Delete a conversation and all its related data including messages, events, tasks, etc."""
     try:
         result = await server_instance._delete_conversation(conversation_id)
@@ -145,6 +143,7 @@ async def delete_conversation(
     except Exception as e:
         logger.error(f"Error deleting conversation {conversation_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/agent/initialize")
 async def initialize_agent(

@@ -5,23 +5,17 @@ from src.services.chat_service import ChatService
 from src.utils.logger_conf import logger
 from fastapi.responses import StreamingResponse
 from ..common.types import Message
-from src.services.conversation_service import ConversationServer
+from src.services.conversation_service import ConversationService
 from src.services.types import SendMessageResponse
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
-server_instance = ConversationServer()
+server_instance = ConversationService()
 
 
 @router.post("/ask")
 async def ask(
     request: ChatRequest,
 ):
-    config = {
-        "max_retries": 3,
-        "max_concurrent_research_units": 5,
-        "max_research_iterations": 5,
-        "novelty_threshold": 0.3,
-    }
     chat_service = ChatService()
     if not request.messages:
         raise HTTPException(status_code=400, detail="Messages are required")
@@ -47,7 +41,7 @@ async def ask(
 async def send_message(
     request: Request,
     message: Message = Body(
-        example={
+        examples={
             "role": "user",
             "parts": [{"type": "text", "text": "string"}],
             "metadata": {
@@ -79,7 +73,7 @@ async def send_message(
 async def send_message_sse(
     request: Request,
     message: Message = Body(
-        example={
+        examples={
             "role": "user",
             "parts": [{"type": "text", "text": "Hello, how are you?"}],
             "metadata": {

@@ -9,6 +9,10 @@ import redis
 from src.config.auth_settings import RATE_LIMIT_CONFIG
 from src.exceptions.auth_exceptions import RateLimitExceededException
 from src.utils.logger_conf import logger
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 
 class RedisRateLimiter:
@@ -25,7 +29,10 @@ class RedisRateLimiter:
             key_prefix: Prefix for Redis keys to avoid collisions
         """
         self.redis = redis_client or redis.Redis(
-            host="redis", port=6379, db=0, decode_responses=True
+            host=os.getenv("REDIS_HOST", "redis"),
+            port=os.getenv("REDIS_PORT", 6379),
+            db=0,
+            decode_responses=True,
         )
         self.key_prefix = key_prefix
 

@@ -35,23 +35,16 @@ class UserRepository:
     async def create_user(self, user_data: UserRegistrationRequest) -> User:
         """Create a new user"""
         try:
-            # Check if user already exists
             existing_user = await self.get_user_by_email(user_data.email)
             if existing_user:
                 raise UserAlreadyExistsException("User with this email already exists")
 
-            existing_username = await self.get_user_by_username(user_data.username)
-            if existing_username:
-                raise UserAlreadyExistsException("Username is already taken")
-
-            # Hash password
             hashed_password = security_manager.hash_password(user_data.password)
 
             verification_token, verification_expires = (
                 token_manager.create_email_verification_token()
             )
 
-            # Create user
             new_user = User(
                 id=uuid.uuid4(),
                 email=user_data.email,
@@ -71,7 +64,6 @@ class UserRepository:
                 await session.flush()
                 await session.refresh(new_user)
 
-            # Assign default permissions
             await self.assign_default_permissions(new_user.id)
 
             return new_user
@@ -92,18 +84,6 @@ class UserRepository:
             return result.scalar_one_or_none()
         except Exception as e:
             logger.error(f"Error getting user by email: {str(e)}")
-            raise DatabaseException("Failed to retrieve user")
-
-    async def get_user_by_username(self, username: str) -> Optional[User]:
-        """Get user by username"""
-        try:
-            async with DatabaseSession() as session:
-                result = await session.execute(
-                    select(User).where(User.username == username)
-                )
-            return result.scalar_one_or_none()
-        except Exception as e:
-            logger.error(f"Error getting user by username: {str(e)}")
             raise DatabaseException("Failed to retrieve user")
 
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
@@ -222,7 +202,6 @@ class UserRepository:
 
             user.failed_login_attempts += 1
 
-            # Lock account if max attempts reached
             if user.failed_login_attempts >= auth_settings.max_login_attempts:
                 user.account_locked_until = datetime.now(timezone.utc) + timedelta(
                     minutes=auth_settings.account_lockout_duration_minutes
@@ -256,7 +235,6 @@ class UserRepository:
             return False
 
         if datetime.now(timezone.utc) > user.account_locked_until:
-            # Lock has expired, reset it
             await self.reset_failed_login_attempts(str(user.id))
             return False
 
@@ -265,12 +243,10 @@ class UserRepository:
     async def assign_default_permissions(self, user_id: uuid.UUID) -> None:
         """Assign default permissions to a new user"""
         try:
-            # Get default permissions for user role
             default_perms = ROLE_PERMISSIONS.get("user", [])
 
             async with DatabaseSession() as session:
                 for perm_name in default_perms:
-                    # Get permission
                     permission_result = await session.execute(
                         select(Permission).where(Permission.name == perm_name)
                     )
@@ -289,7 +265,6 @@ class UserRepository:
 
         except Exception as e:
             logger.error(f"Error assigning default permissions: {str(e)}")
-            # Don't raise exception as this is not critical for user creation
 
     async def count_users(self) -> int:
         """Count all users"""
@@ -322,9 +297,6 @@ class RefreshTokenRepository:
         user_id: str,
         token_hash: str,
         expires_at: datetime,
-        device_info: Optional[str] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
     ) -> RefreshToken:
         """Create a new refresh token"""
         try:
@@ -333,9 +305,6 @@ class RefreshTokenRepository:
                 user_id=uuid.UUID(user_id),
                 token_hash=token_hash,
                 expires_at=expires_at,
-                device_info=device_info,
-                ip_address=ip_address,
-                user_agent=user_agent,
                 created_at=datetime.now(timezone.utc),
             )
 
@@ -419,8 +388,6 @@ class LoginAttemptRepository:
         self,
         email: str,
         success: bool,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
         failure_reason: Optional[str] = None,
     ) -> LoginAttempt:
         """Record a login attempt"""
@@ -428,8 +395,6 @@ class LoginAttemptRepository:
             attempt = LoginAttempt(
                 id=uuid.uuid4(),
                 email=email.lower(),
-                ip_address=ip_address,
-                user_agent=user_agent,
                 success=success,
                 failure_reason=failure_reason,
                 attempted_at=datetime.now(timezone.utc),
@@ -442,4 +407,3 @@ class LoginAttemptRepository:
             return attempt
         except Exception as e:
             logger.error(f"Error recording login attempt: {str(e)}")
-            # Don't raise exception as this is for logging purposes

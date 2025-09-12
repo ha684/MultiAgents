@@ -1,4 +1,4 @@
-#src/api/auth.py
+# src/api/auth.py
 from fastapi import APIRouter, Depends, Request, Body
 from src.models.auth import (
     UserRegistrationRequest,
@@ -9,22 +9,20 @@ from src.models.auth import (
     PasswordChangeRequest,
     EmailVerificationRequest,
     UserProfileResponse,
-    StandardResponse,
 )
 from src.db.models.user import User
 from src.services.auth_service import AuthenticationService
 from src.auth.dependencies import get_current_user, require_admin
 from src.middleware.rate_limit import check_rate_limit, RedisRateLimiter
-from src.services.user_service import UserRepository
 from src.utils.logger_conf import logger
 from src.utils.security import token_manager
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 rate_limiter = RedisRateLimiter()
 auth_service = AuthenticationService()
-user_repo = UserRepository()
 
-@router.post("/register", response_model=StandardResponse)
+
+@router.post("/register")
 async def register(
     request: Request,
     registration_data: UserRegistrationRequest,
@@ -39,11 +37,7 @@ async def register(
             rate_limiter=rate_limiter,
         )
 
-        user = await auth_service.register_user(
-            registration_data,
-            ip_address=request.client.host,
-            user_agent=request.headers.get("user-agent"),
-        )
+        user = await auth_service.register_user(registration_data)
 
         return {
             "data": user.model_dump(),
@@ -52,10 +46,10 @@ async def register(
 
     except Exception as e:
         logger.error(f"Registration failed: {str(e)}")
-        raise
+        raise e
 
 
-@router.post("/login", response_model=StandardResponse)
+@router.post("/login")
 async def login(
     request: Request,
     login_data: UserLoginRequest,
@@ -69,11 +63,7 @@ async def login(
             window_minutes=15,
             rate_limiter=rate_limiter,
         )
-        token_response = await auth_service.authenticate_user(
-            login_data,
-            ip_address=request.client.host,
-            user_agent=request.headers.get("user-agent"),
-        )
+        token_response = await auth_service.authenticate_user(login_data)
 
         return {
             "data": token_response.model_dump(),
@@ -85,7 +75,7 @@ async def login(
         raise
 
 
-@router.post("/refresh", response_model=StandardResponse)
+@router.post("/refresh")
 async def refresh_token(
     request: Request,
     refresh_data: TokenRefreshRequest,
@@ -106,7 +96,7 @@ async def refresh_token(
         raise
 
 
-@router.post("/logout", response_model=StandardResponse)
+@router.post("/logout")
 async def logout(
     request: Request,
     refresh_token: str = Body(..., embed=True),
@@ -125,7 +115,7 @@ async def logout(
         raise
 
 
-@router.post("/logout-all", response_model=StandardResponse)
+@router.post("/logout-all")
 async def logout_all_sessions(
     request: Request,
     current_user: User = Depends(get_current_user),
@@ -141,7 +131,7 @@ async def logout_all_sessions(
         raise
 
 
-@router.get("/profile", response_model=StandardResponse)
+@router.get("/profile")
 async def get_profile(
     request: Request,
     current_user: User = Depends(get_current_user),
@@ -157,7 +147,7 @@ async def get_profile(
         raise
 
 
-@router.put("/profile", response_model=StandardResponse)
+@router.put("/profile")
 async def update_profile(
     request: Request,
     profile_data: dict = Body(...),
@@ -171,7 +161,7 @@ async def update_profile(
         if not update_data:
             return "No valid fields provided for update"
 
-        updated_user = await user_repo.update_user(str(current_user.id), update_data)
+        updated_user = await auth_service.update_user(str(current_user.id), update_data)
 
         return UserProfileResponse(
             id=str(updated_user.id),
@@ -190,7 +180,7 @@ async def update_profile(
         raise
 
 
-@router.post("/password/change", response_model=StandardResponse)
+@router.post("/password/change")
 async def change_password(
     request: Request,
     password_data: PasswordChangeRequest,
@@ -212,7 +202,7 @@ async def change_password(
         raise
 
 
-@router.post("/password/reset", response_model=StandardResponse)
+@router.post("/password/reset")
 async def request_password_reset(
     request: Request,
     reset_data: PasswordResetRequest,
@@ -236,7 +226,7 @@ async def request_password_reset(
         raise
 
 
-@router.post("/password/reset/confirm", response_model=StandardResponse)
+@router.post("/password/reset/confirm")
 async def confirm_password_reset(
     request: Request,
     reset_data: PasswordResetConfirmRequest,
@@ -263,7 +253,7 @@ async def confirm_password_reset(
         raise
 
 
-@router.post("/email/verify", response_model=StandardResponse)
+@router.post("/email/verify")
 async def verify_email(
     request: Request,
     verification_data: EmailVerificationRequest,
@@ -279,7 +269,7 @@ async def verify_email(
         raise
 
 
-@router.post("/email/resend-verification", response_model=StandardResponse)
+@router.post("/email/resend-verification")
 async def resend_verification_email(
     request: Request,
     current_user: User = Depends(get_current_user),
@@ -299,7 +289,7 @@ async def resend_verification_email(
 
         verification_token, expires_at = token_manager.create_email_verification_token()
 
-        await user_repo.update_user(
+        await auth_service.update_user(
             str(current_user.id),
             {
                 "email_verification_token": verification_token,
@@ -317,7 +307,7 @@ async def resend_verification_email(
         raise
 
 
-@router.get("/users", response_model=StandardResponse)
+@router.get("/users")
 async def list_users(
     request: Request,
     page: int = 1,
@@ -326,10 +316,8 @@ async def list_users(
 ):
     """List all users (admin only)"""
     try:
-        total = await user_repo.count_users()
-
         offset = (page - 1) * size
-        result = await user_repo.get_users(
+        result = await auth_service.get_users(
             offset=offset, limit=size, order_by=User.created_at.desc()
         )
         users = result
@@ -356,7 +344,7 @@ async def list_users(
         raise
 
 
-@router.get("/validate", response_model=StandardResponse)
+@router.get("/validate")
 async def validate_token(
     request: Request, current_user: User = Depends(get_current_user)
 ):

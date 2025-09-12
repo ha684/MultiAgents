@@ -37,7 +37,7 @@ class User(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    username = Column(String(50), unique=True, index=True, nullable=False)
+    username = Column(String(50), nullable=False)
     full_name = Column(String(100), nullable=True)
     hashed_password = Column(String(255), nullable=False)
 
@@ -108,11 +108,6 @@ class RefreshToken(Base):
     )
     is_revoked = Column(Boolean, default=False, nullable=False)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
-
-    # Device/session info
-    device_info = Column(Text, nullable=True)
-    ip_address = Column(String(45), nullable=True)  # IPv6 compatible
-    user_agent = Column(Text, nullable=True)
 
     # Relationships
     user = relationship("User", back_populates="refresh_tokens")
@@ -216,8 +211,6 @@ class LoginAttempt(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, index=True)
     email = Column(String(255), nullable=False, index=True)
-    ip_address = Column(String(45), nullable=True)
-    user_agent = Column(Text, nullable=True)
     success = Column(Boolean, nullable=False)
     failure_reason = Column(String(100), nullable=True)
     attempted_at = Column(

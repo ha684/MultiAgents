@@ -96,64 +96,64 @@ services:
       exit 0;
       "
 
-  kms-app:
-    image: hapt
-    restart: unless-stopped
-    ports:
-      - "${PORT:-8000}:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      qdrant:
-        condition: service_started
-      minio:
-        condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
-      # neo4j:
-      #   condition: service_healthy
-    volumes:
-      - ./src:/app/src:cached
-      - ./logs:/app/logs
-      - .:/app:cached
-    environment:
-      - REDIS_URI=redis://redis:6379/0
-      - DATABASE_URL=${DATABASE_URL}
-      - SYNC_DATABASE_URL=${SYNC_DATABASE_URL}
-      - VECTOR_STORAGE_URL=http://qdrant:6333
-      - VECTOR_COLLECTION_NAME=${VECTOR_COLLECTION_NAME}
-      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - MINIO_BUCKET=${MINIO_BUCKET}
-      - MINIO_SECURE=${MINIO_SECURE}
-      - RERANK_URL=${RERANK_URL}
-      - RERANK_API_KEY=${RERANK_API_KEY}
-      - TEXT_EMBEDDING_URL=${TEXT_EMBEDDING_URL}
-      - TEXT_EMBEDDING_API_KEY=${TEXT_EMBEDDING_API_KEY}
-      - TEXT_EMBEDDING_MODEL=${TEXT_EMBEDDING_MODEL}
-      - NTQAI_BASE_URL=${NTQAI_BASE_URL}
-      - NTQAI_API_KEY=${NTQAI_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - GOOGLE_API_MODEL=${GOOGLE_API_MODEL}
-      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS}
-      - GOOGLE_API_TEMPERATURE=${GOOGLE_API_TEMPERATURE}
-      - NTQAI_MODEL=${NTQAI_MODEL}
-      - TEMPERATURE=${TEMPERATURE}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - PYTHONPATH=/app
-      - PYTHONDONTWRITEBYTECODE=1
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 100s
-      retries: 3
-      start_period: 40s
+  # kms-app:
+  #   image: hapt
+  #   restart: unless-stopped
+  #   ports:
+  #     - "${PORT:-8000}:8000"
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
+  #     qdrant:
+  #       condition: service_started
+  #     minio:
+  #       condition: service_healthy
+  #     minio-init:
+  #       condition: service_completed_successfully
+  #     # neo4j:
+  #     #   condition: service_healthy
+  #   volumes:
+  #     - ./src:/app/src:cached
+  #     - ./logs:/app/logs
+  #     - .:/app:cached
+  #   environment:
+  #     - REDIS_URI=redis://redis:6379/0
+  #     - DATABASE_URL=${DATABASE_URL}
+  #     - SYNC_DATABASE_URL=${SYNC_DATABASE_URL}
+  #     - VECTOR_STORAGE_URL=http://qdrant:6333
+  #     - VECTOR_COLLECTION_NAME=${VECTOR_COLLECTION_NAME}
+  #     - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+  #     - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+  #     - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+  #     - MINIO_BUCKET=${MINIO_BUCKET}
+  #     - MINIO_SECURE=${MINIO_SECURE}
+  #     - RERANK_URL=${RERANK_URL}
+  #     - RERANK_API_KEY=${RERANK_API_KEY}
+  #     - TEXT_EMBEDDING_URL=${TEXT_EMBEDDING_URL}
+  #     - TEXT_EMBEDDING_API_KEY=${TEXT_EMBEDDING_API_KEY}
+  #     - TEXT_EMBEDDING_MODEL=${TEXT_EMBEDDING_MODEL}
+  #     - NTQAI_BASE_URL=${NTQAI_BASE_URL}
+  #     - NTQAI_API_KEY=${NTQAI_API_KEY}
+  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
+  #     - OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME}
+  #     - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+  #     - GOOGLE_API_MODEL=${GOOGLE_API_MODEL}
+  #     - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS}
+  #     - GOOGLE_API_TEMPERATURE=${GOOGLE_API_TEMPERATURE}
+  #     - NTQAI_MODEL=${NTQAI_MODEL}
+  #     - TEMPERATURE=${TEMPERATURE}
+  #     - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+  #     - PYTHONPATH=/app
+  #     - PYTHONDONTWRITEBYTECODE=1
+  #   command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload 
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  #     interval: 30s
+  #     timeout: 100s
+  #     retries: 3
+  #     start_period: 40s
 
   # nginx:
   #   image: nginx:alpine
@@ -179,8 +179,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
-      kms-app:
-        condition: service_healthy
+      # kms-app:
+      #   condition: service_healthy
       # neo4j:
       #   condition: service_healthy
     volumes:
@@ -188,7 +188,7 @@ services:
       - .:/app:cached
     environment:
       - REDIS_URI=redis://redis:6379/0
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=postgresql+asyncpg://kms_user:kms_password@postgres:5432/kms_db
       - SYNC_DATABASE_URL=${SYNC_DATABASE_URL}
       - VECTOR_STORAGE_URL=http://qdrant:6333
       - VECTOR_COLLECTION_NAME=${VECTOR_COLLECTION_NAME}
@@ -260,7 +260,24 @@ services:
   #   volumes:
   #     - ./src:/app/src:cached
   #     - .:/app:cached
-
+  # ngrok:
+  #   image: ngrok/ngrok:latest
+  #   container_name: kms-ngrok
+  #   restart: unless-stopped
+  #   ports:
+  #     - "4040:4040" # Port để truy cập giao diện web của Ngrok
+  #   environment:
+  #     # Lấy authtoken từ file .env để bảo mật
+  #     - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+  #   volumes:
+  #     # Mount file cấu hình ngrok vào container
+  #     - ./ngrok.yml:/etc/ngrok/ngrok.yml
+  #   command: start --all --config /etc/ngrok/ngrok.yml
+  #   depends_on:
+  #     - postgres
+  #     - redis
+  #     - qdrant
+  #     - minio
 volumes:
   postgres_data:
   redis_data:

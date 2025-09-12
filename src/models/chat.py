@@ -49,8 +49,7 @@ class ChatRequest(BaseModel):
     messages: List[MessageCreateRequest]
     knowledge_base_id: uuid.UUID
     stream: bool = Field(default=False)
-    folder_structure: Optional[Dict[str, Any]] = None
-    folder_context: Optional[str] = None
+
     agentic: Optional[bool] = Field(
         default=False, description="Whether to use agentic capabilities"
     )

@@ -1,0 +1,46 @@
+# ngrok.yml
+version: "2"
+# Bạn có thể đặt authtoken ở đây hoặc dùng biến môi trường, dùng biến môi trường sẽ an toàn hơn
+# authtoken: YOUR_NGROK_AUTHTOKEN_HERE
+
+tunnels:
+  # === Database & Cache ===
+  postgres:
+    proto: tcp
+    addr: postgres:5432 # Kết nối đến service 'postgres' ở port '5432'
+  redis:
+    proto: tcp
+    addr: redis:6379 # Kết nối đến service 'redis' ở port '6379'
+
+  # === Vector & Object Storage ===
+  qdrant-http:
+    proto: http
+    addr: http://qdrant:6333
+  qdrant-grpc:
+    proto: tcp
+    addr: qdrant:6334
+  minio-api:
+    proto: http
+    addr: http://minio:9000
+    # Ngrok sẽ báo lỗi nếu không có host_header, thêm nó để truy cập MinIO
+    host_header: "minio:9000"
+  minio-console:
+    proto: http
+    addr: http://minio:9001
+    host_header: "minio:9001"
+
+  # === Các service ứng dụng (ví dụ nếu bạn bỏ comment) ===
+  # kms-app:
+  #   proto: http
+  #   addr: http://kms-app:8000
+  # ragagent:
+  #   proto: http
+  #   addr: http://ragagent:10000
+
+  # === Neo4j (ví dụ nếu bạn bỏ comment) ===
+  # neo4j-http:
+  #   proto: http
+  #   addr: http://neo4j:7474
+  # neo4j-bolt:
+  #   proto: tcp
+  #   addr: neo4j:7687

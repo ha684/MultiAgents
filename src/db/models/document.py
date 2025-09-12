@@ -16,15 +16,13 @@ class KnowledgeBase(Base):
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text)
+    user_id: Mapped[Optional[str]] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-    created_by: Mapped[Optional[str]] = mapped_column(
-        String(255)
-    )  # User ID or username who created the knowledge base
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     documents: Mapped[List["Document"]] = relationship(

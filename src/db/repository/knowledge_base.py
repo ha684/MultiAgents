@@ -4,15 +4,16 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from src.db.models.document import Document, KnowledgeBase
 from src.db.repository.database_session import DatabaseSession
-from src.models.common import PaginationParams, SearchParams
 from src.models.knowledge_base import (
     KnowledgeBaseCreateRequest,
+    KnowledgeBaseListRequest,
     KnowledgeBaseListResponse,
     KnowledgeBaseResponse,
     KnowledgeBaseUpdateRequest,
 )
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
+import hashlib
 
 
 @singleton
@@ -22,7 +23,6 @@ class KnowledgeBaseRepository:
     async def create(
         self,
         request: KnowledgeBaseCreateRequest,
-        created_by: Optional[str] = None,
     ) -> KnowledgeBaseResponse:
         """Create a new knowledge base"""
         try:
@@ -30,9 +30,8 @@ class KnowledgeBaseRepository:
                 kb = KnowledgeBase(
                     name=request.name,
                     description=request.description,
-                    created_by=created_by,
+                    user_id=hashlib.sha256(request.user_id.encode()).hexdigest(),
                 )
-                logger.info(f"Creating knowledge base: {kb}")
                 session.add(kb)
                 await session.flush()
                 await session.refresh(kb)
@@ -41,11 +40,16 @@ class KnowledgeBaseRepository:
             logger.error(f"Error creating knowledge base: {e.args[0]}")
             raise e
 
-    async def get(self, kb_id: uuid.UUID) -> Optional[KnowledgeBase]:
+    async def get(self, kb_id: uuid.UUID, user_id: str) -> Optional[KnowledgeBase]:
         """Get a knowledge base by ID"""
         try:
             async with DatabaseSession() as session:
                 stmt = select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+                if user_id:
+                    stmt = stmt.where(
+                        KnowledgeBase.user_id
+                        == hashlib.sha256(user_id.encode()).hexdigest()
+                    )
                 result = await session.execute(stmt)
             return result.scalar_one_or_none()
         except SQLAlchemyError as e:
@@ -66,12 +70,12 @@ class KnowledgeBaseRepository:
             raise e
 
     async def update(
-        self, kb_id: uuid.UUID, request: KnowledgeBaseUpdateRequest
+        self, request: KnowledgeBaseUpdateRequest
     ) -> Optional[KnowledgeBaseResponse]:
         """Update a knowledge base"""
         try:
             async with DatabaseSession() as session:
-                stmt = select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+                stmt = select(KnowledgeBase).where(KnowledgeBase.id == request.id)
                 result = await session.execute(stmt)
                 kb = result.scalar_one_or_none()
 
@@ -80,7 +84,6 @@ class KnowledgeBaseRepository:
 
                 update_data = request.model_dump(exclude_unset=True)
 
-                # Update fields directly using attribute assignment
                 if "name" in update_data:
                     kb.name = update_data["name"]
                 if "description" in update_data:
@@ -113,32 +116,24 @@ class KnowledgeBaseRepository:
 
     async def list(
         self,
-        pagination: PaginationParams,
-        search: Optional[SearchParams] = None,
-        include_doc_count: bool = False,
+        request: KnowledgeBaseListRequest,
     ) -> KnowledgeBaseListResponse:
         """List knowledge bases with pagination and search"""
         try:
             async with DatabaseSession() as session:
                 stmt = select(KnowledgeBase)
-                if search and search.query:
-                    search_filter = KnowledgeBase.name.ilike(
-                        f"%{search.query}%"
-                    ) | KnowledgeBase.description.ilike(f"%{search.query}%")
-                    stmt = stmt.where(search_filter)
-
-                if search and search.created_by is not None:
-                    stmt = stmt.where(KnowledgeBase.created_by == search.created_by)
-
-                if search and search.is_active is not None:
-                    stmt = stmt.where(KnowledgeBase.is_active == search.is_active)
+                if request.user_id:
+                    stmt = stmt.where(
+                        KnowledgeBase.user_id
+                        == hashlib.sha256(request.user_id.encode()).hexdigest()
+                    )
 
                 count_stmt = select(func.count()).select_from(stmt.subquery())
                 total_result = await session.execute(count_stmt)
                 total = total_result.scalar()
 
                 stmt = stmt.order_by(KnowledgeBase.created_at.desc())
-                stmt = stmt.offset(pagination.skip).limit(pagination.limit)
+                stmt = stmt.offset(request.skip).limit(request.limit)
 
                 result = await session.execute(stmt)
                 kb_list = list(result.scalars().all())
@@ -146,12 +141,11 @@ class KnowledgeBaseRepository:
                 result_list = []
                 for kb in kb_list:
                     kb_response = KnowledgeBaseResponse.model_validate(kb)
-                    if include_doc_count:
-                        kb_response.document_count = await self.count_documents(kb.id)
+                    kb_response.document_count = await self.count_documents(kb.id)
                     result_list.append(kb_response)
 
             return await self.build_list_response(
-                kb_list=result_list, total=total, pagination=pagination
+                kb_list=result_list, total=total, request=request
             )
         except SQLAlchemyError as e:
             logger.error(f"Error listing knowledge bases: {e.args[0]}")
@@ -161,13 +155,13 @@ class KnowledgeBaseRepository:
         self,
         kb_list: List[KnowledgeBaseResponse],
         total: int,
-        pagination: PaginationParams,
+        request: KnowledgeBaseListRequest,
     ) -> KnowledgeBaseListResponse:
         """Build a paginated list response"""
         return KnowledgeBaseListResponse(
             items=kb_list,
             total=total,
-            skip=pagination.skip,
-            limit=pagination.limit,
-            has_more=(pagination.skip + len(kb_list) < total),
+            skip=request.skip,
+            limit=request.limit,
+            has_more=(request.skip + len(kb_list) < total),
         )

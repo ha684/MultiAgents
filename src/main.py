@@ -19,9 +19,9 @@ from src.config.settings import settings
 from src.utils.logger_conf import logger
 from src.connector import database_connector
 from src.rag.vector import vector_storage_migration
-from src.middleware.rate_limit import RateLimitMiddleware
 from src.middleware.response_handler import ResponseHandlerMiddleware
 from src.middleware.exception_handler import exception_handler
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -64,7 +64,7 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-app.add_middleware(RateLimitMiddleware) 
+# app.add_middleware(RateLimitMiddleware)
 app.add_middleware(ResponseHandlerMiddleware)
 
 
@@ -82,13 +82,13 @@ async def log_requests(request: Request, call_next):
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
-    
+
     response_info = f"{request.method} {request.url.path}"
-    if hasattr(response, 'status_code'):
+    if hasattr(response, "status_code"):
         response_info += f" - {response.status_code}"
     if isinstance(response, StreamingResponse):
         response_info += " (streaming)"
-    
+
     logger.info(f"Request: {response_info} - Completed in {process_time:.4f}s")
     return response
 
@@ -96,6 +96,7 @@ async def log_requests(request: Request, call_next):
 app.exception_handler(Exception)(exception_handler)
 app.exception_handler(HTTPException)(exception_handler)
 app.exception_handler(RequestValidationError)(exception_handler)
+
 
 @app.get("/health")
 async def health_check():
@@ -113,4 +114,4 @@ app.include_router(auth_router)
 
 if __name__ == "__main__":
     logger.info(f"Starting server on host=0.0.0.0, port={settings.port}")
-    uvicorn.run(app, host="0.0.0.0", port=settings.port)
+    uvicorn.run("src.main:app", host="127.0.0.1", port=settings.port)

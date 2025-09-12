@@ -3,11 +3,13 @@ from uuid import UUID
 from fastapi import HTTPException
 from langchain_core.documents import Document
 from src.agents.filename_agent import FilenameAgent
-from src.models.common import PaginationParams
 from src.models.knowledge_base import (
     KnowledgeBaseCreateRequest,
+    KnowledgeBaseListRequest,
     KnowledgeBaseListResponse,
     KnowledgeBaseResponse,
+    KnowledgeBaseUpdateRequest,
+    KnowledgeBaseDeleteRequest,
 )
 from src.db import knowledge_base_repository, document_repository, qa_repository
 from src.models.qa import DocumentQAResponse
@@ -26,11 +28,11 @@ class KnowledgeBaseService:
         self.filename_agent = FilenameAgent()
 
     async def list_knowledge_bases(
-        self, pagination: PaginationParams
+        self, request: KnowledgeBaseListRequest
     ) -> KnowledgeBaseListResponse:
         """Get a list of all knowledge bases."""
         logger.info("Fetching list of all knowledge bases")
-        return await self.kb_repository.list(pagination=pagination)
+        return await self.kb_repository.list(request)
 
     async def create_knowledge_base(self, knowledge_base: KnowledgeBaseCreateRequest):
         """Create a new knowledge base."""
@@ -74,28 +76,30 @@ class KnowledgeBaseService:
 
         return documents
 
-    async def delete_knowledge_base(self, kb_id: str) -> dict:
+    async def delete_knowledge_base(self, request: KnowledgeBaseDeleteRequest) -> dict:
         """Delete a knowledge base and all its documents."""
-        kb = await self.kb_repository.get(UUID(kb_id))
+        kb = await self.kb_repository.get(
+            kb_id=UUID(request.id), user_id=request.user_id
+        )
         if not kb:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
 
-        logger.info(f"Deleting knowledge base {kb_id} and all its documents")
+        logger.info(f"Deleting knowledge base {request.id} and all its documents")
 
         try:
             total = await self.document_repository.count_documents_in_kb(kb.id)
             await self.kb_repository.delete(kb.id)
-            await vector_storage.delete_chunks_by_kb_id(kb_id)
+            await vector_storage.delete_chunks_by_kb_id(request.id)
 
             logger.info(
-                f"Successfully deleted knowledge base {kb_id} with {total} documents files"
+                f"Successfully deleted knowledge base {request.id} with {total} documents files"
             )
             return {
                 "detail": f"Knowledge base deleted successfully. Removed {total} documents files."
             }
         except Exception as e:
             logger.exception(
-                f"Unexpected error deleting knowledge base {kb_id}: {str(e)}"
+                f"Unexpected error deleting knowledge base {request.id}: {str(e)}"
             )
             raise HTTPException(
                 status_code=500, detail="Failed to delete knowledge base"
@@ -114,3 +118,9 @@ class KnowledgeBaseService:
             return []
 
         return qas
+
+    async def update_knowledge_base(
+        self, knowledge_base_update_request: KnowledgeBaseUpdateRequest
+    ):
+        """Update a knowledge base."""
+        return await self.kb_repository.update(knowledge_base_update_request)

@@ -1,5 +1,5 @@
 # src/services/auth_service.py
-from typing import Optional
+from typing import Optional, List, Any
 from datetime import datetime, timezone, timedelta
 from src.db.repository.database_session import DatabaseSession
 from src.services.user_service import (
@@ -52,21 +52,13 @@ class AuthenticationService:
     async def register_user(
         self,
         registration_data: UserRegistrationRequest,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
     ) -> UserProfileResponse:
         """Register a new user"""
         try:
             logger.info(f"Registering new user: {registration_data.email}")
-
-            # Create user
             new_user = await self.user_repo.create_user(registration_data)
-
-            # Send email verification email
             await self._send_verification_email(new_user)
-
             logger.info(f"User registered successfully: {new_user.id}")
-
             return UserProfileResponse(
                 id=str(new_user.id),
                 email=new_user.email,
@@ -81,38 +73,29 @@ class AuthenticationService:
 
         except Exception as e:
             logger.error(f"Registration failed for {registration_data.email}: {str(e)}")
-            raise
+            raise e
 
     async def authenticate_user(
         self,
         login_data: UserLoginRequest,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
     ) -> TokenResponse:
         """Authenticate user and return tokens"""
         try:
             logger.info(f"Authentication attempt for: {login_data.email}")
 
-            # Get user
             user = await self.user_repo.get_user_by_email(login_data.email)
             if not user:
-                # Record failed attempt
                 await self.login_attempt_repo.record_login_attempt(
                     email=login_data.email,
                     success=False,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
                     failure_reason="user_not_found",
                 )
                 raise InvalidCredentialsException()
 
-            # Check if account is locked
             if await self.user_repo.is_account_locked(user):
                 await self.login_attempt_repo.record_login_attempt(
                     email=login_data.email,
                     success=False,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
                     failure_reason="account_locked",
                 )
                 lock_until = user.account_locked_until
@@ -122,35 +105,27 @@ class AuthenticationService:
                     else None
                 )
 
-            # Check account status
             if user.status == UserStatus.SUSPENDED:
                 await self.login_attempt_repo.record_login_attempt(
                     email=login_data.email,
                     success=False,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
                     failure_reason="account_suspended",
                 )
                 raise AccountSuspendedException()
 
-            # Verify password
             if not self.security_manager.verify_password(
                 login_data.password, user.hashed_password
             ):
-                # Increment failed attempts
                 await self.user_repo.increment_failed_login_attempts(user.email)
 
                 await self.login_attempt_repo.record_login_attempt(
                     email=login_data.email,
                     success=False,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
                     failure_reason="invalid_password",
                 )
 
                 raise InvalidCredentialsException()
 
-            # Check email verification (optional - depends on requirements)
             if (
                 not user.email_verified
                 and user.status == UserStatus.PENDING_VERIFICATION
@@ -158,19 +133,14 @@ class AuthenticationService:
                 await self.login_attempt_repo.record_login_attempt(
                     email=login_data.email,
                     success=False,
-                    ip_address=ip_address,
-                    user_agent=user_agent,
                     failure_reason="email_not_verified",
                 )
                 raise AccountNotVerifiedException()
 
-            # Reset failed login attempts on successful authentication
             await self.user_repo.reset_failed_login_attempts(str(user.id))
 
-            # Update last login
             await self.user_repo.update_last_login(str(user.id))
 
-            # Create session and tokens
             session_id = self.security_manager.generate_session_id()
             access_token = self.jwt_manager.create_access_token(
                 user_id=str(user.id),
@@ -182,7 +152,6 @@ class AuthenticationService:
             refresh_token = self.jwt_manager.create_refresh_token()
             refresh_token_hash = self.security_manager.hash_token(refresh_token)
 
-            # Store refresh token
             expires_at = datetime.now(timezone.utc) + timedelta(
                 days=auth_settings.jwt_refresh_token_expire_days
             )
@@ -191,17 +160,11 @@ class AuthenticationService:
                 user_id=str(user.id),
                 token_hash=refresh_token_hash,
                 expires_at=expires_at,
-                device_info=user_agent,
-                ip_address=ip_address,
-                user_agent=user_agent,
             )
 
-            # Record successful login
             await self.login_attempt_repo.record_login_attempt(
                 email=login_data.email,
                 success=True,
-                ip_address=ip_address,
-                user_agent=user_agent,
             )
 
             logger.info(f"Authentication successful for user: {user.id}")
@@ -223,11 +186,7 @@ class AuthenticationService:
         """Refresh access token using refresh token"""
         try:
             logger.info("Refreshing access token")
-
-            # Hash the provided token to match stored hash
             token_hash = self.security_manager.hash_token(refresh_token)
-
-            # Get refresh token from database
             stored_token = await self.refresh_token_repo.get_refresh_token(token_hash)
             if not stored_token:
                 raise RefreshTokenException("Invalid refresh token")
@@ -238,16 +197,13 @@ class AuthenticationService:
             if stored_token.expires_at <= datetime.now(timezone.utc):
                 raise RefreshTokenException("Refresh token has expired")
 
-            # Get user
             user = stored_token.user
             if not user:
                 raise RefreshTokenException("User not found for refresh token")
 
-            # Check user status
             if user.status != UserStatus.ACTIVE:
                 raise RefreshTokenException("User account is not active")
 
-            # Create new session and tokens
             session_id = self.security_manager.generate_session_id()
             new_access_token = self.jwt_manager.create_access_token(
                 user_id=str(user.id),
@@ -256,18 +212,13 @@ class AuthenticationService:
                 session_id=session_id,
             )
 
-            # Optionally rotate refresh token
-            new_refresh_token = refresh_token  # Keep same refresh token
-            if (
-                auth_settings.jwt_refresh_token_expire_days <= 1
-            ):  # Rotate for short-lived tokens
+            new_refresh_token = refresh_token
+            if auth_settings.jwt_refresh_token_expire_days <= 1:
                 new_refresh_token = self.jwt_manager.create_refresh_token()
                 new_token_hash = self.security_manager.hash_token(new_refresh_token)
 
-                # Revoke old token
                 await self.refresh_token_repo.revoke_refresh_token(token_hash)
 
-                # Create new refresh token
                 expires_at = datetime.now(timezone.utc) + timedelta(
                     days=auth_settings.jwt_refresh_token_expire_days
                 )
@@ -276,9 +227,6 @@ class AuthenticationService:
                     user_id=str(user.id),
                     token_hash=new_token_hash,
                     expires_at=expires_at,
-                    device_info=stored_token.device_info,
-                    ip_address=stored_token.ip_address,
-                    user_agent=stored_token.user_agent,
                 )
 
             logger.info(f"Token refreshed successfully for user: {user.id}")
@@ -354,14 +302,11 @@ class AuthenticationService:
         try:
             user = await self.user_repo.get_user_by_email(email)
             if not user:
-                # Don't reveal if user exists or not
                 logger.info(f"Password reset requested for non-existent user: {email}")
                 return True
 
-            # Generate reset token
             reset_token, expires_at = self.token_manager.create_password_reset_token()
 
-            # Update user with reset token
             await self.user_repo.update_user(
                 str(user.id),
                 {
@@ -370,7 +315,6 @@ class AuthenticationService:
                 },
             )
 
-            # Send password reset email
             await self._send_password_reset_email(user, reset_token)
 
             logger.info(f"Password reset requested for user: {user.id}")
@@ -383,7 +327,6 @@ class AuthenticationService:
     async def reset_password(self, reset_data: PasswordResetConfirmRequest) -> bool:
         """Reset password with token"""
         try:
-            # Find user with valid reset token
             user = None
             async with DatabaseSession() as session:
                 user = await session.execute(
@@ -399,24 +342,21 @@ class AuthenticationService:
             if not user:
                 raise InvalidTokenException("Invalid or expired reset token")
 
-            # Hash new password
             new_password_hash = self.security_manager.hash_password(
                 reset_data.new_password
             )
 
-            # Update user
             await self.user_repo.update_user(
                 str(user.id),
                 {
                     "hashed_password": new_password_hash,
                     "password_reset_token": None,
                     "password_reset_expires": None,
-                    "failed_login_attempts": 0,  # Reset failed attempts
-                    "account_locked_until": None,  # Unlock account
+                    "failed_login_attempts": 0,
+                    "account_locked_until": None,
                 },
             )
 
-            # Revoke all existing refresh tokens for security
             await self.refresh_token_repo.revoke_all_user_tokens(str(user.id))
 
             logger.info(f"Password reset successful for user: {user.id}")
@@ -435,24 +375,19 @@ class AuthenticationService:
             if not user:
                 raise UserNotFoundException()
 
-            # Verify current password
             if not self.security_manager.verify_password(
                 change_data.current_password, user.hashed_password
             ):
                 raise InvalidCredentialsException("Current password is incorrect")
 
-            # Hash new password
             new_password_hash = self.security_manager.hash_password(
                 change_data.new_password
             )
 
-            # Update password
             await self.user_repo.update_user(
                 user_id, {"hashed_password": new_password_hash}
             )
 
-            # Optionally revoke all refresh tokens except current session
-            # This forces user to login again on other devices
             await self.refresh_token_repo.revoke_all_user_tokens(user_id)
 
             logger.info(f"Password changed for user: {user.id}")
@@ -469,7 +404,6 @@ class AuthenticationService:
             if not user:
                 raise UserNotFoundException()
 
-            # Convert user permissions to response format
             permissions = []
             for user_perm in user.user_permissions:
                 permissions.append(
@@ -525,3 +459,30 @@ class AuthenticationService:
                 f"Failed to send password reset email to {user.email}: {str(e)}"
             )
             raise
+
+    async def update_user(self, user_id: str, update_data: dict) -> UserProfileResponse:
+        """Update user profile"""
+        try:
+            user = await self.user_repo.update_user(user_id, update_data)
+            return UserProfileResponse(
+                id=str(user.id),
+                email=user.email,
+                username=user.username,
+                full_name=user.full_name,
+                role=user.role,
+                status=user.status,
+                email_verified=user.email_verified,
+                created_at=user.created_at,
+                last_login_at=user.last_login_at,
+            )
+        except Exception as e:
+            logger.error(f"Update user profile failed for {user_id}: {str(e)}")
+            raise
+
+    async def count_users(self) -> int:
+        """Count all users"""
+        return await self.user_repo.count_users()
+
+    async def get_users(self, offset: int, limit: int, order_by: Any) -> List[User]:
+        """Get users with pagination"""
+        return await self.user_repo.get_users(offset, limit, order_by)

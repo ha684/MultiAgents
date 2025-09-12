@@ -2,11 +2,13 @@ from typing import List, Sequence
 from uuid import UUID
 from fastapi import APIRouter
 from langchain_core.documents import Document
-from src.models.common import PaginationParams
 from src.models.knowledge_base import (
     KnowledgeBaseCreateRequest,
+    KnowledgeBaseListRequest,
     KnowledgeBaseListResponse,
     KnowledgeBaseResponse,
+    KnowledgeBaseUpdateRequest,
+    KnowledgeBaseDeleteRequest,
 )
 from src.models.qa import DocumentQAResponse
 from src.services.knowledge_base_service import KnowledgeBaseService
@@ -14,9 +16,10 @@ from src.services.knowledge_base_service import KnowledgeBaseService
 router = APIRouter(prefix="/kb", tags=["Knowledge Base"])
 kb_service = KnowledgeBaseService()
 
+
 @router.get("/")
 async def get_list_knowledge_bases(
-    skip: int = 0, limit: int = 10
+    request: KnowledgeBaseListRequest,
 ) -> KnowledgeBaseListResponse:
     """
     Get a list of all knowledge bases.
@@ -24,19 +27,18 @@ async def get_list_knowledge_bases(
     Returns:
         A list of knowledge bases.
     """
-    pagination = PaginationParams(skip=skip, limit=limit)
-    return await kb_service.list_knowledge_bases(pagination)
+    return await kb_service.list_knowledge_bases(request)
+
 
 @router.post("/")
 async def create_knowledge_base(
-    knowledge_base: KnowledgeBaseCreateRequest
+    knowledge_base: KnowledgeBaseCreateRequest,
 ) -> KnowledgeBaseResponse:
     return await kb_service.create_knowledge_base(knowledge_base)
 
+
 @router.get("/{kb_id}")
-async def get_knowledge_base_by_id(
-    kb_id: str
-) -> KnowledgeBaseResponse:
+async def get_knowledge_base_by_id(kb_id: str) -> KnowledgeBaseResponse:
     """
     Get a knowledge base by its ID.
 
@@ -48,10 +50,9 @@ async def get_knowledge_base_by_id(
     """
     return await kb_service.get_knowledge_base_by_id(kb_id)
 
+
 @router.post("/{kb_id}/query")
-async def query_knowledge_base(
-    kb_id: str, query: str
-) -> List[Document]:
+async def query_knowledge_base(kb_id: str, query: str) -> List[Document]:
     """
     Query a knowledge base by its ID.
 
@@ -64,8 +65,9 @@ async def query_knowledge_base(
     """
     return await kb_service.query_knowledge_base(kb_id, query)
 
+
 @router.delete("/{kb_id}", response_model=dict)
-async def delete_knowledge_base(kb_id: str) -> dict:
+async def delete_knowledge_base(request: KnowledgeBaseDeleteRequest) -> dict:
     """
     Delete a knowledge base and all its documents.
 
@@ -76,12 +78,12 @@ async def delete_knowledge_base(kb_id: str) -> dict:
     4. Delete the knowledge base itself
 
     Args:
-        kb_id: The ID of the knowledge base to delete.
+        request: The request containing the ID of the knowledge base to delete.
 
     Returns:
         A success message if deletion was successful.
     """
-    return await kb_service.delete_knowledge_base(kb_id)
+    return await kb_service.delete_knowledge_base(request)
 
 
 @router.get("/{kb_id}/qa")
@@ -98,3 +100,19 @@ async def get_qa_pairs_by_kb_id(
         A list of question-answer pairs.
     """
     return await kb_service.get_qa_pairs_by_kb_id(kb_id, limit)
+
+
+@router.put("/{kb_id}/update")
+async def update_knowledge_base(
+    knowledge_base: KnowledgeBaseUpdateRequest,
+) -> KnowledgeBaseResponse:
+    """
+    Update a knowledge base.
+
+    Args:
+        knowledge_base: The knowledge base to update.
+
+    Returns:
+        The updated knowledge base.
+    """
+    return await kb_service.update_knowledge_base(knowledge_base)

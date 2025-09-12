@@ -148,8 +148,6 @@ async def _process_document_async(
             chunk_start = time.time()
             chunks = strategy.chunk(file_path=str(temp_file_path), document=document)
             chunk_time = time.time() - chunk_start
-            for i, chunk in enumerate(chunks):
-                logger.info(f"Chunk {i} : {chunk}")
 
             if not chunks:
                 logger.warning(f"No chunks extracted from document {document_id}")
