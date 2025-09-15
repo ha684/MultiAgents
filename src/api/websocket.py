@@ -1,123 +1,214 @@
+# src/api/websocket.py
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from src.services.document_service import DocumentService
 from src.event_pub import get_event_publisher
 from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 import uuid
-import asyncio  
+import asyncio
+from typing import Dict, Any, Optional
 from src.utils.logger_conf import logger
 
 router = APIRouter(prefix="/websocket", tags=["WebSocket"])
 
-@router.websocket("/ws/test")
-async def test_websocket(websocket: WebSocket):
-    """Simple test WebSocket endpoint"""
-    await websocket.accept()
-    logger.info("WebSocket test connection established")
-    
-    try:
-        await websocket.send_json({"message": "Connected successfully", "status": "ok"})
-        
-        while True:
-            try:
-                data = await websocket.receive_text()
-                logger.info(f"Received WebSocket message: {data}")
-                
-                # Echo back
-                await websocket.send_json({
-                    "echo": data,
-                    "timestamp": str(asyncio.get_event_loop().time())
-                })
-                
-            except WebSocketDisconnect:
-                logger.info("WebSocket test connection disconnected")
-                break
-            except Exception as e:
-                logger.error(f"Error in WebSocket test: {e}")
-                await websocket.send_json({
-                    "error": str(e),
-                    "type": "error"
-                })
-                
-    except Exception as e:
-        logger.error(f"WebSocket test error: {e}")
-    finally:
-        logger.info("WebSocket test connection closed")
+
+class WebSocketManager:
+    """Manages WebSocket connection for document status updates"""
+
+    def __init__(self, websocket: WebSocket, document_id: uuid.UUID):
+        self.websocket = websocket
+        self.document_id = document_id
+        self.document_service = DocumentService()
+        self.event_publisher = get_event_publisher()
+        self.is_connected = False
+
+    async def connect(self) -> bool:
+        """Establish WebSocket connection"""
+        try:
+            await self.websocket.accept()
+            self.is_connected = True
+            logger.info(
+                f"WebSocket connection established for document: {self.document_id}"
+            )
+            return True
+        except Exception as e:
+            logger.error(
+                f"Failed to establish WebSocket connection for document {self.document_id}: {e}"
+            )
+            return False
+
+    async def send_message(
+        self,
+        message_type: str,
+        data: Optional[Dict[str, Any]] = None,
+        message: Optional[str] = None,
+    ) -> bool:
+        """Send message to client with error handling"""
+        if not self.is_connected:
+            return False
+
+        try:
+            payload = {"type": message_type}
+            if data is not None:
+                payload["data"] = data
+            if message is not None:
+                payload["message"] = message
+
+            await self.websocket.send_json(payload)
+            return True
+        except Exception as e:
+            logger.error(
+                f"Failed to send message to WebSocket for document {self.document_id}: {e}"
+            )
+            self.is_connected = False
+            return False
+
+    async def send_initial_status(self) -> bool:
+        """Send initial document status to client"""
+        try:
+            initial_status = await self.document_service.get_document_status(
+                self.document_id
+            )
+            status_data = initial_status.model_dump(mode="json")
+
+            success = await self.send_message("initial_status", data=status_data)
+            if success:
+                logger.info(f"Sent initial status for document {self.document_id}")
+            return success
+
+        except Exception as e:
+            logger.error(
+                f"Failed to get initial status for document {self.document_id}: {e}"
+            )
+            await self.send_message(
+                "error", message=f"Failed to get initial status: {str(e)}"
+            )
+            return False
+
+    async def process_status_event(self, event: Dict[str, Any]) -> bool:
+        """Process and send status update event"""
+        try:
+            event_doc_id = event.get("id") or event.get("document_id")
+
+            # Only process events for this document
+            if event_doc_id != str(self.document_id):
+                return True
+
+            # Send status update
+            success = await self.send_message("status_update", data=event)
+            if not success:
+                return False
+
+            logger.info(
+                f"Sent status update for document {self.document_id}: {event.get('status')}"
+            )
+
+            # Check if processing is complete
+            status = event.get("status")
+            if status in ["COMPLETED", "FAILED"]:
+                await self.send_message(
+                    "complete", message=f"Processing finished with status: {status}"
+                )
+                logger.info(f"Processing complete for document {self.document_id}")
+                return False  # Signal to stop processing
+
+            return True
+
+        except Exception as e:
+            logger.error(f"Error processing event for document {self.document_id}: {e}")
+            await self.send_message(
+                "error", message=f"Error processing event: {str(e)}"
+            )
+            return False
+
+    async def listen_for_updates(self) -> None:
+        """Listen for status updates from event publisher"""
+        try:
+            async for event in self.event_publisher.subscribe(DOCUMENT_STATUS_CHANNEL):
+                if not self.is_connected:
+                    break
+
+                should_continue = await self.process_status_event(event)
+                if not should_continue:
+                    break
+
+        except asyncio.CancelledError:
+            logger.info(
+                f"Status update listener cancelled for document {self.document_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Error in status update listener for document {self.document_id}: {e}"
+            )
+            await self.send_message(
+                "error", message=f"Error in update listener: {str(e)}"
+            )
+
+    async def disconnect(self) -> None:
+        """Clean up WebSocket connection"""
+        self.is_connected = False
+        try:
+            await self.websocket.close()
+        except Exception as e:
+            logger.debug(
+                f"Error closing WebSocket for document {self.document_id}: {e}"
+            )
+
+        logger.info(f"WebSocket connection closed for document {self.document_id}")
+
 
 @router.websocket("/ws/document_status/{document_id}")
 async def document_status_ws(websocket: WebSocket, document_id: uuid.UUID):
     """WebSocket endpoint for real-time document status updates"""
-    await websocket.accept()
-    logger.info(f"WebSocket connection established for document: {document_id}")
-    
+
+    ws_manager = WebSocketManager(websocket, document_id)
+
+    # Establish connection
+    if not await ws_manager.connect():
+        return
+
     try:
-        document_service = DocumentService()
-        
-        try:
-            initial_status = await document_service.get_document_status(document_id)
-            status_data = initial_status.model_dump(mode='json')
-            await websocket.send_json({
-                "type": "initial_status",
-                "data": status_data
-            })
-            logger.info(f"Sent initial status for document {document_id}")
-            
-        except Exception as e:
-            logger.error(f"Failed to get initial status for document {document_id}: {e}")
-            await websocket.send_json({
-                "type": "error",
-                "message": f"Failed to get initial status: {str(e)}"
-            })
+        # Send initial status
+        if not await ws_manager.send_initial_status():
             return
-        
+
+        # Listen for status updates
+        await ws_manager.listen_for_updates()
+
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket for document {document_id} disconnected by client")
+    except asyncio.CancelledError:
+        logger.info(f"WebSocket task cancelled for document {document_id}")
+    except Exception as e:
+        logger.error(f"Unexpected WebSocket error for document {document_id}: {e}")
+        await ws_manager.send_message("error", message=f"Unexpected error: {str(e)}")
+    finally:
+        await ws_manager.disconnect()
+
+
+# Optional: Add WebSocket endpoint for multiple documents (if needed)
+@router.websocket("/ws/documents")
+async def multiple_documents_ws(websocket: WebSocket):
+    """WebSocket endpoint for monitoring multiple documents"""
+    await websocket.accept()
+    logger.info("Multi-document WebSocket connection established")
+
+    try:
         event_publisher = get_event_publisher()
-        
+
         async for event in event_publisher.subscribe(DOCUMENT_STATUS_CHANNEL):
             try:
-                event_doc_id = event.get("id") or event.get("document_id")
-                
-                if event_doc_id == str(document_id):
-                    await websocket.send_json({
-                        "type": "status_update",
-                        "data": event
-                    })
-                    
-                    logger.info(f"Sent status update for document {document_id}: {event.get('status')}")
-                    
-                    if event.get("status") in ["COMPLETED", "FAILED"]:
-                        await websocket.send_json({
-                            "type": "complete",
-                            "message": f"Processing finished with status: {event.get('status')}"
-                        })
-                        logger.info(f"Processing complete for document {document_id}")
-                        break
-                        
+                await websocket.send_json({"type": "document_update", "data": event})
             except Exception as e:
-                logger.error(f"Error processing event for document {document_id}: {e}")
-                await websocket.send_json({
-                    "type": "error",
-                    "message": f"Error processing event: {str(e)}"
-                })
-                
+                logger.error(f"Error sending multi-document update: {e}")
+                break
+
     except WebSocketDisconnect:
-        logger.info(f"WebSocket for document {document_id} disconnected")
+        logger.info("Multi-document WebSocket disconnected")
     except Exception as e:
-        logger.error(f"WebSocket error for document {document_id}: {e}")
-        try:
-            await websocket.send_json({
-                "type": "error",
-                "message": f"WebSocket error: {str(e)}"
-            })
-        except:
-            pass
+        logger.error(f"Multi-document WebSocket error: {e}")
     finally:
         try:
             await websocket.close()
-        except:
+        except Exception:
             pass
-        logger.info(f"WebSocket connection closed for document {document_id}")
-
-@router.get("/health")
-async def websocket_health():
-    """Health check for WebSocket router"""
-    return {"status": "WebSocket router is working", "endpoints": ["/ws/test", "/ws/document_status/{document_id}"]}
-
+        logger.info("Multi-document WebSocket connection closed")

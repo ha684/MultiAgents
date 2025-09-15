@@ -1,19 +1,17 @@
 # src/main.py
 import time
 from contextlib import asynccontextmanager
-
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-
 from src.api.document import router as document_router
 from src.api.knowledge_base import router as knowledge_base_router
 from src.api.chat import router as chat_router
 from src.api.chunks import router as chunks_router
 from src.api.websocket import router as websocket_router
-from src.api.conv_agent import router as conversation_router
+from src.api.conversation import router as conversation_router
 from src.api.auth import router as auth_router
 from src.config.settings import settings
 from src.utils.logger_conf import logger
@@ -21,6 +19,7 @@ from src.connector import database_connector
 from src.rag.vector import vector_storage_migration
 from src.middleware.response_handler import ResponseHandlerMiddleware
 from src.middleware.exception_handler import exception_handler
+from src.middleware.rate_limit import RateLimitMiddleware
 
 
 @asynccontextmanager
@@ -64,7 +63,7 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# app.add_middleware(RateLimitMiddleware)
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(ResponseHandlerMiddleware)
 
 
@@ -113,5 +112,6 @@ app.include_router(conversation_router)
 app.include_router(auth_router)
 
 if __name__ == "__main__":
-    logger.info(f"Starting server on host=0.0.0.0, port={settings.port}")
-    uvicorn.run("src.main:app", host="127.0.0.1", port=settings.port)
+    host = "127.0.0.1"
+    logger.info(f"Starting server on host={host}, port={settings.port}")
+    uvicorn.run("src.main:app", host=host, port=settings.port)

@@ -13,7 +13,6 @@ from src.models.knowledge_base import (
 )
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
-import hashlib
 
 
 @singleton
@@ -30,7 +29,7 @@ class KnowledgeBaseRepository:
                 kb = KnowledgeBase(
                     name=request.name,
                     description=request.description,
-                    user_id=hashlib.sha256(request.user_id.encode()).hexdigest(),
+                    user_id=request.user_id,
                 )
                 session.add(kb)
                 await session.flush()
@@ -46,10 +45,7 @@ class KnowledgeBaseRepository:
             async with DatabaseSession() as session:
                 stmt = select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
                 if user_id:
-                    stmt = stmt.where(
-                        KnowledgeBase.user_id
-                        == hashlib.sha256(user_id.encode()).hexdigest()
-                    )
+                    stmt = stmt.where(KnowledgeBase.user_id == user_id)
                 result = await session.execute(stmt)
             return result.scalar_one_or_none()
         except SQLAlchemyError as e:
@@ -123,10 +119,7 @@ class KnowledgeBaseRepository:
             async with DatabaseSession() as session:
                 stmt = select(KnowledgeBase)
                 if request.user_id:
-                    stmt = stmt.where(
-                        KnowledgeBase.user_id
-                        == hashlib.sha256(request.user_id.encode()).hexdigest()
-                    )
+                    stmt = stmt.where(KnowledgeBase.user_id == request.user_id)
 
                 count_stmt = select(func.count()).select_from(stmt.subquery())
                 total_result = await session.execute(count_stmt)
@@ -145,7 +138,40 @@ class KnowledgeBaseRepository:
                     result_list.append(kb_response)
 
             return await self.build_list_response(
-                kb_list=result_list, total=total, request=request
+                kb_list=result_list, total=total, skip=request.skip, limit=request.limit
+            )
+        except SQLAlchemyError as e:
+            logger.error(f"Error listing knowledge bases: {e.args[0]}")
+            raise e
+
+    async def list_all(
+        self,
+        skip: int,
+        limit: int,
+    ) -> KnowledgeBaseListResponse:
+        """List knowledge bases with pagination and search"""
+        try:
+            async with DatabaseSession() as session:
+                stmt = select(KnowledgeBase)
+
+                count_stmt = select(func.count()).select_from(stmt.subquery())
+                total_result = await session.execute(count_stmt)
+                total = total_result.scalar()
+
+                stmt = stmt.order_by(KnowledgeBase.created_at.desc())
+                stmt = stmt.offset(skip).limit(limit)
+
+                result = await session.execute(stmt)
+                kb_list = list(result.scalars().all())
+
+                result_list = []
+                for kb in kb_list:
+                    kb_response = KnowledgeBaseResponse.model_validate(kb)
+                    kb_response.document_count = await self.count_documents(kb.id)
+                    result_list.append(kb_response)
+
+            return await self.build_list_response(
+                kb_list=result_list, total=total, skip=skip, limit=limit
             )
         except SQLAlchemyError as e:
             logger.error(f"Error listing knowledge bases: {e.args[0]}")
@@ -155,13 +181,14 @@ class KnowledgeBaseRepository:
         self,
         kb_list: List[KnowledgeBaseResponse],
         total: int,
-        request: KnowledgeBaseListRequest,
+        skip: int,
+        limit: int,
     ) -> KnowledgeBaseListResponse:
         """Build a paginated list response"""
         return KnowledgeBaseListResponse(
             items=kb_list,
             total=total,
-            skip=request.skip,
-            limit=request.limit,
-            has_more=(request.skip + len(kb_list) < total),
+            skip=skip,
+            limit=limit,
+            has_more=(skip + len(kb_list) < total),
         )

@@ -34,6 +34,13 @@ class KnowledgeBaseService:
         logger.info("Fetching list of all knowledge bases")
         return await self.kb_repository.list(request)
 
+    async def list_knowledge_bases_all(
+        self, skip: int, limit: int
+    ) -> KnowledgeBaseListResponse:
+        """Get a list of all knowledge bases."""
+        logger.info("Fetching list of all knowledge bases")
+        return await self.kb_repository.list_all(skip, limit)
+
     async def create_knowledge_base(self, knowledge_base: KnowledgeBaseCreateRequest):
         """Create a new knowledge base."""
         logger.info(f"Creating knowledge base: {knowledge_base.name}")

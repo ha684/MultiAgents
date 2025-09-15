@@ -1,16 +1,13 @@
 import base64
 import uuid
 from typing import Optional
-
 from fastapi import Response
-
 from src.common.types import FileContent, FilePart, Message
 from src.db.repository.conversation import ConversationRepository
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
-
-from .server.adk_host_manager import get_message_id
-from .types import (
+from src.services.server.adk_host_manager import get_message_id
+from src.services.types import (
     CreateConversationResponse,
     GetEventResponse,
     ListConversationResponse,
@@ -30,13 +27,9 @@ class ConversationService:
         self._message_to_cache = {}
 
     async def _create_conversation(
-        self, app_name: str, user_id: str, conversation_id: Optional[str] = None
+        self, app_name: str, user_id: str
     ) -> CreateConversationResponse:
-        if not conversation_id:
-            conversation_id = str(uuid.uuid4())
-        c = await self.conv_repository.create_conversation(
-            conversation_id, app_name, user_id
-        )
+        c = await self.conv_repository.create_conversation(app_name, user_id)
         return CreateConversationResponse(result=c)
 
     async def _list_messages(self, conversation_id: str) -> ListMessageResponse:

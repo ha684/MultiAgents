@@ -13,12 +13,10 @@ from src.models.auth import (
 from src.db.models.user import User
 from src.services.auth_service import AuthenticationService
 from src.auth.dependencies import get_current_user, require_admin
-from src.middleware.rate_limit import check_rate_limit, RedisRateLimiter
 from src.utils.logger_conf import logger
 from src.utils.security import token_manager
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-rate_limiter = RedisRateLimiter()
 auth_service = AuthenticationService()
 
 
@@ -29,14 +27,6 @@ async def register(
 ):
     """Register a new user"""
     try:
-        await check_rate_limit(
-            request,
-            registration_data.email,
-            limit=5,
-            window_minutes=15,
-            rate_limiter=rate_limiter,
-        )
-
         user = await auth_service.register_user(registration_data)
 
         return {
@@ -56,13 +46,6 @@ async def login(
 ):
     """Authenticate user and return JWT tokens"""
     try:
-        await check_rate_limit(
-            request,
-            login_data.email,
-            limit=10,
-            window_minutes=15,
-            rate_limiter=rate_limiter,
-        )
         token_response = await auth_service.authenticate_user(login_data)
 
         return {
@@ -209,14 +192,6 @@ async def request_password_reset(
 ):
     """Request password reset"""
     try:
-        await check_rate_limit(
-            request,
-            reset_data.email,
-            limit=3,
-            window_minutes=60,
-            rate_limiter=rate_limiter,
-        )
-
         await auth_service.request_password_reset(reset_data.email)
 
         return "If the email exists, a password reset link has been sent"
@@ -233,14 +208,6 @@ async def confirm_password_reset(
 ):
     """Confirm password reset with token"""
     try:
-        await check_rate_limit(
-            request,
-            reset_data.token,
-            limit=5,
-            window_minutes=15,
-            rate_limiter=rate_limiter,
-        )
-
         success = await auth_service.reset_password(reset_data)
 
         if success:
@@ -276,14 +243,6 @@ async def resend_verification_email(
 ):
     """Resend email verification"""
     try:
-        await check_rate_limit(
-            request,
-            str(current_user.id),
-            limit=3,
-            window_minutes=60,
-            rate_limiter=rate_limiter,
-        )
-
         if current_user.email_verified:
             return "Email is already verified"
 

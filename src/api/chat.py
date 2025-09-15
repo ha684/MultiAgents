@@ -1,3 +1,4 @@
+# src/api/chat.py
 from fastapi import APIRouter, HTTPException, Request, Body
 from typing import cast, AsyncGenerator
 from src.models.chat import ChatRequest

@@ -6,23 +6,14 @@ import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import desc, delete, select
-from sqlalchemy.orm import selectinload
+from sqlalchemy import desc, select
 import copy
 from src.db.models.conversation import (
     ConversationModel,
     MessageModel,
-    TaskModel,
-    TaskStatusModel,
-    TaskArtifactModel,
-    TaskHistoryModel,
-    ArtifactChunkModel,
-    TaskMappingModel,
-    NextIdMappingModel,
 )
 from src.common.types import (
     Message,
-    Task,
     TaskStatus,
     Part,
     TextPart,
@@ -43,102 +34,19 @@ from src.utils.decorators import singleton
 class ConversationRepository:
     """Service layer for all database operations"""
 
-    async def add_artifact_chunk(
-        self, task_id: str, index: int, data: Dict[str, Any]
-    ) -> str:
-        """Add an artifact chunk"""
-        try:
-            async with DatabaseSession() as session:
-                chunk_id = str(uuid.uuid4())
-                chunk = ArtifactChunkModel(
-                    id=chunk_id, task_id=task_id, index=index, data=data
-                )
-                session.add(chunk)
-                await session.commit()
-            return chunk_id
-        except SQLAlchemyError as e:
-            logger.error(f"Error adding artifact chunk: {e.args[0]}")
-            raise e
-
-    async def get_artifact_chunks(self, task_id: str) -> Dict[int, Dict[str, Any]]:
-        """Get all artifact chunks for a task"""
-        try:
-            async with DatabaseSession() as session:
-                result = await session.execute(
-                    select(ArtifactChunkModel).filter_by(task_id=task_id)
-                )
-                chunks = result.scalars().all()
-            return {chunk.index: chunk.data for chunk in chunks}
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting artifact chunks: {e.args[0]}")
-            raise e
-
-    async def remove_artifact_chunk(self, task_id: str, index: int):
-        """Remove an artifact chunk"""
-        try:
-            async with DatabaseSession() as session:
-                await session.execute(
-                    delete(ArtifactChunkModel).where(
-                        ArtifactChunkModel.task_id == task_id,
-                        ArtifactChunkModel.index == index,
-                    )
-                )
-        except SQLAlchemyError as e:
-            logger.error(f"Error removing artifact chunk: {e.args[0]}")
-            raise e
-
-    async def add_next_id_mapping(self, last_message_id: str, next_message_id: str):
-        """Add a next ID mapping"""
-        try:
-            async with DatabaseSession() as session:
-                mapping = NextIdMappingModel(
-                    last_message_id=last_message_id, next_message_id=next_message_id
-                )
-                await session.merge(mapping)
-        except SQLAlchemyError as e:
-            logger.error(f"Error adding next ID mapping: {e.args[0]}")
-            raise e
-
-    async def add_task_mapping(self, message_id: str, task_id: str):
-        """Add a message to task mapping"""
-        try:
-            async with DatabaseSession() as session:
-                mapping = TaskMappingModel(message_id=message_id, task_id=task_id)
-                await session.merge(mapping)
-        except SQLAlchemyError as e:
-            logger.error(f"Error adding task mapping: {e.args[0]}")
-            raise e
-
-    async def get_task_id_for_message(self, message_id: str) -> Optional[str]:
-        """Get task ID for a message"""
-        try:
-            async with DatabaseSession() as session:
-                result = await session.execute(
-                    select(TaskMappingModel).filter_by(message_id=message_id)
-                )
-                mapping = result.scalar_one_or_none()
-            return mapping.task_id if mapping else None
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting task ID for message: {e.args[0]}")
-            raise e
-
-    async def create_conversation(
-        self, conversation_id: str, app_name: str, user_id: str
-    ) -> Conversation:
+    async def create_conversation(self, app_name: str, user_id: str) -> Conversation:
         """Create a new conversation in the database"""
         try:
             async with DatabaseSession() as session:
                 conv_model = ConversationModel(
-                    id=conversation_id,
                     app_name=app_name,
                     user_id=user_id,
                     is_active=True,
-                    task_ids=[],
                 )
                 session.add(conv_model)
 
             return Conversation(
-                conversation_id=conversation_id, is_active=True, name="", task_ids=[]
+                conversation_id=conv_model.id, is_active=True, name=app_name
             )
 
         except SQLAlchemyError as e:
@@ -163,7 +71,6 @@ class ConversationRepository:
                 conversation_id=conv_model.id,
                 is_active=conv_model.is_active,
                 name=conv_model.name,
-                task_ids=conv_model.task_ids or [],
             )
 
         except SQLAlchemyError as e:
@@ -187,7 +94,6 @@ class ConversationRepository:
                 if conv_model:
                     conv_model.is_active = conversation.is_active
                     conv_model.name = conversation.name
-                    conv_model.task_ids = conversation.task_ids
                     conv_model.updated_at = datetime.now()
         except SQLAlchemyError as e:
             logger.error(f"Error updating conversation: {e.args[0]}")
@@ -216,7 +122,6 @@ class ConversationRepository:
                             conversation_id=conv_model.id,
                             is_active=conv_model.is_active,
                             name=conv_model.name,
-                            task_ids=conv_model.task_ids or [],
                         )
                     )
 
@@ -342,7 +247,6 @@ class ConversationRepository:
                 if not conv_model:
                     return None, []
 
-                # Get messages
                 msg_result = await session.execute(
                     select(MessageModel)
                     .filter_by(conversation_id=conversation_id)
@@ -354,160 +258,11 @@ class ConversationRepository:
                     conversation_id=conv_model.id,
                     is_active=conv_model.is_active,
                     name=conv_model.name,
-                    task_ids=conv_model.task_ids or [],
                 )
 
             return conversation, [self._model_to_message(msg) for msg in messages]
         except SQLAlchemyError as e:
             logger.error(f"Error getting conversation with messages: {e.args[0]}")
-            raise e
-
-    async def add_task(self, task: Task):
-        """Add or update a task with split data structure"""
-        try:
-            async with DatabaseSession() as session:
-                existing_result = await session.execute(
-                    select(TaskModel).filter_by(id=task.id)
-                )
-                existing = existing_result.scalar_one_or_none()
-
-                status_state = (
-                    task.status.get("state", "unknown")
-                    if isinstance(task.status, dict)
-                    else "unknown"
-                )
-                status_message = (
-                    task.status.get("message", {})
-                    .get("parts", [{}])[0]
-                    .get("text", "")[:500]
-                    if isinstance(task.status, dict)
-                    else ""
-                )
-
-                task_data = {
-                    "id": task.id,
-                    "conversation_id": task.sessionId,
-                    "status_state": status_state,
-                    "status_message": status_message,
-                    "task_metadata": task.metadata,
-                }
-
-                if existing:
-                    for key, value in task_data.items():
-                        if key != "id":
-                            setattr(existing, key, value)
-                    existing.updated_at = datetime.now()
-
-                    if existing.status_details:
-                        existing.status_details.full_status = (
-                            self._serialize_task_status(task.status)
-                        )
-                    else:
-                        status_detail = TaskStatusModel(
-                            task_id=task.id,
-                            full_status=self._serialize_task_status(task.status),
-                        )
-                        session.add(status_detail)
-
-                    await session.execute(
-                        delete(TaskArtifactModel).where(
-                            TaskArtifactModel.task_id == task.id
-                        )
-                    )
-                    for i, artifact in enumerate(task.artifacts or []):
-                        artifact_model = TaskArtifactModel(
-                            id=f"{task.id}_artifact_{i}",
-                            task_id=task.id,
-                            artifact_data=self._serialize_artifact(artifact),
-                            sequence_order=i,
-                        )
-                        session.add(artifact_model)
-
-                    await session.execute(
-                        delete(TaskHistoryModel).where(
-                            TaskHistoryModel.task_id == task.id
-                        )
-                    )
-                    for i, message in enumerate(task.history or []):
-                        history_model = TaskHistoryModel(
-                            id=f"{task.id}_history_{i}",
-                            task_id=task.id,
-                            history_data=self._serialize_message(message),
-                            sequence_order=i,
-                        )
-                        session.add(history_model)
-                else:
-                    task_model = TaskModel(**task_data)
-                    session.add(task_model)
-
-                    status_detail = TaskStatusModel(
-                        task_id=task.id,
-                        full_status=self._serialize_task_status(task.status),
-                    )
-                    session.add(status_detail)
-
-                    for i, artifact in enumerate(task.artifacts or []):
-                        artifact_model = TaskArtifactModel(
-                            id=f"{task.id}_artifact_{i}",
-                            task_id=task.id,
-                            artifact_data=self._serialize_artifact(artifact),
-                            sequence_order=i,
-                        )
-                        session.add(artifact_model)
-
-                    for i, message in enumerate(task.history or []):
-                        history_model = TaskHistoryModel(
-                            id=f"{task.id}_history_{i}",
-                            task_id=task.id,
-                            history_data=self._serialize_message(message),
-                            sequence_order=i,
-                        )
-                        session.add(history_model)
-        except SQLAlchemyError as e:
-            logger.error(f"Error adding task: {e.args[0]}")
-            raise e
-
-    async def get_task(self, task_id: str) -> Optional[Task]:
-        """Get a task by ID"""
-        try:
-            async with DatabaseSession() as session:
-                result = await session.execute(
-                    select(TaskModel)
-                    .options(
-                        selectinload(TaskModel.status_details),
-                        selectinload(TaskModel.artifacts),
-                        selectinload(TaskModel.history_items),
-                    )
-                    .filter_by(id=task_id)
-                )
-                task_model = result.scalar_one_or_none()
-                if not task_model:
-                    return None
-
-            return self._model_to_task(task_model)
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting task: {e.args[0]}")
-            raise e
-
-    async def list_tasks(self, conversation_id: Optional[str] = None) -> List[Task]:
-        """List all tasks, optionally filtered by conversation"""
-        try:
-            async with DatabaseSession() as session:
-                query = select(TaskModel).options(
-                    selectinload(TaskModel.status_details),
-                    selectinload(TaskModel.artifacts),
-                    selectinload(TaskModel.history_items),
-                )
-                if conversation_id:
-                    query = query.filter_by(conversation_id=conversation_id)
-
-                query = query.order_by(desc(TaskModel.updated_at))
-                result = await session.execute(query)
-                tasks = result.scalars().all()
-
-            return [self._model_to_task(t) for t in tasks]
-        except SQLAlchemyError as e:
-            logger.error(f"Error listing tasks: {e.args[0]}")
             raise e
 
     async def get_events_all(self, conversation_id: Optional[str] = None) -> List[Any]:
@@ -676,43 +431,6 @@ class ConversationRepository:
             role=msg_model.role,
             parts=self._deserialize_parts(msg_model.parts),
             metadata=msg_model.message_metadata,
-        )
-
-    def _model_to_task(self, task_model: TaskModel) -> Task:
-        """Convert TaskModel to Task"""
-        artifacts = []
-        if task_model.artifacts:
-            for artifact_model in sorted(
-                task_model.artifacts, key=lambda x: x.sequence_order
-            ):
-                artifacts.append(artifact_model.artifact_data)
-
-        history = []
-        if task_model.history_items:
-            for history_model in sorted(
-                task_model.history_items, key=lambda x: x.sequence_order
-            ):
-                history.append(self._deserialize_message(history_model.history_data))
-
-        status = None
-        if task_model.status_details:
-            status = self._deserialize_task_status(
-                task_model.status_details.full_status
-            )
-        else:
-            status = {
-                "state": task_model.status_state,
-                "message": task_model.status_message,
-                "timestamp": task_model.created_at.isoformat(),
-            }
-
-        return Task(
-            id=task_model.id,
-            sessionId=task_model.conversation_id,
-            status=status,
-            artifacts=artifacts if artifacts else None,
-            history=history if history else None,
-            metadata=task_model.task_metadata,
         )
 
 

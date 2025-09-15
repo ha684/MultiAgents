@@ -19,8 +19,7 @@ class SearchService:
             SearchProvider.FIRECRAWL: FireCrawlService(),
         }
         logger.info(
-            "UnifiedSearchService initialized with providers: %s",
-            list(self._providers.keys()),
+            f"UnifiedSearchService initialized with providers: {list(self._providers.keys())}",
         )
 
     async def search(

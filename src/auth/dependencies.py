@@ -1,7 +1,7 @@
 # src/auth/dependencies.py
 from typing import Optional, List
 from fastapi import Depends, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, APIKeyHeader
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timezone
 from src.models.auth import TokenData, UserRole, AccessControlContext
 from src.db.models.user import User, UserStatus
@@ -18,7 +18,6 @@ from src.exceptions.auth_exceptions import (
 from src.config.auth_settings import ROLE_PERMISSIONS
 from src.utils.logger_conf import logger
 
-# HTTP Bearer token security scheme
 security = HTTPBearer(auto_error=False)
 
 

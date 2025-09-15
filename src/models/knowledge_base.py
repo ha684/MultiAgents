@@ -21,10 +21,10 @@ class KnowledgeBaseUpdateRequest(BaseModel):
 class KnowledgeBaseResponse(BaseModel):
     id: uuid.UUID
     name: str
+    user_id: str
     description: Optional[str]
     created_at: datetime
     updated_at: datetime
-    created_by: Optional[str]
     is_active: bool
     document_count: Optional[int] = 0
 
