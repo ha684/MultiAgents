@@ -46,10 +46,10 @@ class WebSearchConfig(BaseModel):
 
 # Chat Interaction Schemas
 class ChatRequest(BaseModel):
-    messages: List[MessageCreateRequest]
+    messages: MessageCreateRequest
     knowledge_base_id: uuid.UUID
+    conversation_id: uuid.UUID
     stream: bool = Field(default=False)
-
     agentic: Optional[bool] = Field(
         default=False, description="Whether to use agentic capabilities"
     )

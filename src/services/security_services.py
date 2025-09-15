@@ -234,77 +234,8 @@ class AccessControlManager:
         return [f"user_{user_id}_*"]
 
 
-class RateLimitManager:
-    """Rate limiting utilities"""
-
-    @staticmethod
-    def create_rate_limit_key(identifier: str, endpoint: str) -> str:
-        """Create a rate limit key for Redis or memory store"""
-        return f"rate_limit:{endpoint}:{identifier}"
-
-    @staticmethod
-    def is_rate_limited(requests_made: int, limit: int) -> bool:
-        """Check if rate limit is exceeded"""
-        return requests_made >= limit
-
-    @staticmethod
-    def calculate_reset_time(window_minutes: int) -> datetime:
-        """Calculate when rate limit resets"""
-        return datetime.now(timezone.utc) + timedelta(minutes=window_minutes)
-
-
-class SecurityValidator:
-    """Security validation utilities"""
-
-    @staticmethod
-    def validate_ip_address(ip_address: str) -> bool:
-        """Validate IP address format"""
-        import ipaddress
-
-        try:
-            ipaddress.ip_address(ip_address)
-            return True
-        except ValueError:
-            return False
-
-    @staticmethod
-    def is_safe_redirect_url(url: str, allowed_domains: list) -> bool:
-        """Check if redirect URL is safe"""
-        from urllib.parse import urlparse
-
-        try:
-            parsed = urlparse(url)
-            if not parsed.netloc:
-                return True  # Relative URLs are safe
-
-            return any(parsed.netloc.endswith(domain) for domain in allowed_domains)
-        except Exception:
-            return False
-
-    @staticmethod
-    def sanitize_user_agent(user_agent: str) -> str:
-        """Sanitize user agent string"""
-        if not user_agent:
-            return "Unknown"
-
-        # Limit length and remove potentially harmful characters
-        sanitized = user_agent[:500]
-        # Remove null bytes and control characters
-        sanitized = "".join(
-            char for char in sanitized if ord(char) >= 32 or char in "\t\n\r"
-        )
-        return sanitized
-
-    @staticmethod
-    def generate_correlation_id() -> str:
-        """Generate correlation ID for request tracking"""
-        return str(uuid.uuid4())
-
-
 # Create global instances
 security_manager = SecurityManager()
 jwt_manager = JWTManager()
 token_manager = TokenManager()
 access_control = AccessControlManager()
-rate_limit_manager = RateLimitManager()
-security_validator = SecurityValidator()

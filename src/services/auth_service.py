@@ -19,7 +19,7 @@ from src.models.auth import (
     TokenData,
     UserPermissionResponse,
 )
-from src.utils.security import (
+from src.services.security_services import (
     security_manager,
     jwt_manager,
     token_manager,
@@ -57,7 +57,7 @@ class AuthenticationService:
         try:
             logger.info(f"Registering new user: {registration_data.email}")
             new_user = await self.user_repo.create_user(registration_data)
-            await self._send_verification_email(new_user)
+            # await self._send_verification_email(new_user)
             logger.info(f"User registered successfully: {new_user.id}")
             return UserProfileResponse(
                 id=str(new_user.id),

@@ -1,4 +1,5 @@
 # src/main.py
+from datetime import datetime
 import time
 from contextlib import asynccontextmanager
 import uvicorn
@@ -20,6 +21,7 @@ from src.rag.vector import vector_storage_migration
 from src.middleware.response_handler import ResponseHandlerMiddleware
 from src.middleware.exception_handler import exception_handler
 from src.middleware.rate_limit import RateLimitMiddleware
+from src.common.types import HealthCheckResponse
 
 
 @asynccontextmanager
@@ -98,9 +100,9 @@ app.exception_handler(RequestValidationError)(exception_handler)
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> HealthCheckResponse:
     """Health check endpoint"""
-    return {"status": "healthy"}
+    return HealthCheckResponse(status="healthy", timestamp=datetime.now())
 
 
 app.include_router(websocket_router)

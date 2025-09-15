@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from src.models.auth import TokenData, UserRole, AccessControlContext
 from src.db.models.user import User, UserStatus
 from src.services.user_service import UserRepository
-from src.utils.security import jwt_manager, access_control
+from src.services.security_services import jwt_manager, access_control
 from src.exceptions.auth_exceptions import (
     InvalidTokenException,
     TokenNotFoundException,

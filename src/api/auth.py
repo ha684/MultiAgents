@@ -14,7 +14,7 @@ from src.db.models.user import User
 from src.services.auth_service import AuthenticationService
 from src.auth.dependencies import get_current_user, require_admin
 from src.utils.logger_conf import logger
-from src.utils.security import token_manager
+from src.services.security_services import token_manager
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 auth_service = AuthenticationService()

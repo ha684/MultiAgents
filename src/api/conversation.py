@@ -20,7 +20,6 @@ async def list_conversations(
     """List the conversations"""
     try:
         result = await conversation_service._list_conversation(app_name, user_id)
-        logger.info(f"Listed {len(result.result)} conversations")
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -43,9 +42,6 @@ async def list_messages(conversation_id: str) -> ListMessageResponse:
     """List the messages for a conversation"""
     try:
         result = await conversation_service._list_messages(conversation_id)
-        logger.info(
-            f"Got {len(result.result)} messages for conversation {conversation_id}"
-        )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -56,9 +52,7 @@ async def delete_conversation(conversation_id: str) -> dict[str, str]:
     """Delete a conversation and all its related data including messages, events, tasks, etc."""
     try:
         result = await conversation_service._delete_conversation(conversation_id)
-        return {"status": "success", "result": result}
-    except HTTPException:
-        raise
+        return result
     except Exception as e:
         logger.error(f"Error deleting conversation {conversation_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

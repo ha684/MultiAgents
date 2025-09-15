@@ -1,8 +1,6 @@
-from fastapi import HTTPException
 from typing import List, Dict
 from src.agents.chat_agent import ChatAgent
 from src.models.chat import ChatRequest
-from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
 from src.utils import format_history
 from src.config.settings import settings
@@ -10,11 +8,18 @@ from src.models.chat import WebSearchConfig
 from src.models.chat import SearchProvider
 from src.agents.researcher.main_agent import MainAgent, AgentInputState
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from src.services.conversation_service import ConversationService
+import tiktoken
+from fastapi import HTTPException
+
+
 @singleton
 class ChatService:
     def __init__(self):
         self.chat_agent = ChatAgent()
-        
+        self.conv_service = ConversationService()
+        self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
+
     def _format_history(self, history: List[Dict[str, str]]) -> List[BaseMessage]:
         """Converts simple dict history to LangChain message objects."""
         return [
@@ -24,50 +29,49 @@ class ChatService:
             for item in history
             if item.get("role") in ("user", "assistant")
         ]
-        
+
     async def ask(self, request: ChatRequest):
         """Process a chat request and return a response."""
-        try:
-            if settings.enable_websearch and request.web_search:
-                web_search_config = WebSearchConfig(
-                    provider=settings.websearch_provider,
-                    active=True,
-                    api_key=_get_api_key_for_provider(settings.websearch_provider),
-                )
+        if settings.enable_websearch and request.web_search:
+            web_search_config = WebSearchConfig(
+                provider=settings.websearch_provider,
+                active=True,
+                api_key=_get_api_key_for_provider(settings.websearch_provider),
+            )
+        else:
+            web_search_config = WebSearchConfig(active=False)
+
+        stream = getattr(request, "stream", False)
+        request.messages = await self.messages_handling(request)
+
+        if request.agentic:
+            main_agent = MainAgent(kb_id=request.knowledge_base_id)
+            initial_state: AgentInputState = {
+                "messages": request.messages,
+                "web_search": web_search_config,
+            }
+
+            if stream:
+                response = main_agent.generate_streaming_response(initial_state)
             else:
-                web_search_config = WebSearchConfig(active=False)
-                
-            stream = getattr(request, "stream", False)
-            
-            if request.agentic:
-                main_agent = MainAgent(kb_id=request.knowledge_base_id)
-                dict_history = [item.model_dump() for item in request.messages[-5:]]
-                messages = format_history(dict_history)
-                initial_state: AgentInputState = {
-                    "messages": messages,
-                    "folder_context": request.folder_context,
-                    "web_search": web_search_config,
-                }
-
-                if stream:
-                    response = main_agent.generate_streaming_response(initial_state)
-                else:
-                    response = main_agent.generate_response(initial_state)
+                response = main_agent.generate_response(initial_state)
+        else:
+            if stream:
+                response = self.chat_agent.ask_stream(request, web_search_config)
             else:
-                dict_history = [item.model_dump() for item in request.messages[-5:]]
-                lc_history = self._format_history(dict_history)
-                request.messages = lc_history
+                response = await self.chat_agent.ask_normal(request, web_search_config)
 
-                if stream:
-                    response = self.chat_agent.ask_stream(request, web_search_config)
-                else:
-                    response = await self.chat_agent.ask_normal(request, web_search_config)
+        return response
 
-            return response
+    async def messages_handling(self, request: ChatRequest) -> List[BaseMessage]:
+        """Handle messages for the chat request."""
+        messages = await self.conv_service._list_messages(str(request.conversation_id))
+        if not messages:
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
-        except Exception as e:
-            logger.exception(f"Error processing chat request: {str(e)}")
-            raise HTTPException(status_code=500, detail=f"{str(e)}")
+        dict_history = [item.model_dump() for item in request.messages[-5:]]
+        messages = format_history(dict_history)
+        return messages
 
 
 def _get_api_key_for_provider(provider: SearchProvider) -> str:
@@ -76,4 +80,3 @@ def _get_api_key_for_provider(provider: SearchProvider) -> str:
         return settings.tavily_api_key
     elif provider == SearchProvider.FIRECRAWL:
         return settings.firecrawl_api_key
-

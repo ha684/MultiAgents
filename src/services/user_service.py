@@ -6,7 +6,7 @@ from sqlalchemy import and_, update, delete, func
 from datetime import datetime, timezone, timedelta
 import uuid
 from src.db.repository.database_session import DatabaseSession
-from src.utils.security import token_manager
+from src.services.security_services import token_manager
 from src.db.models.user import (
     User,
     RefreshToken,
@@ -17,7 +17,7 @@ from src.db.models.user import (
     UserStatus,
 )
 from src.models.auth import UserRegistrationRequest
-from src.utils.security import security_manager
+from src.services.security_services import security_manager
 from src.config.auth_settings import auth_settings, ROLE_PERMISSIONS
 from src.exceptions.auth_exceptions import (
     UserNotFoundException,

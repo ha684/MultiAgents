@@ -18,39 +18,39 @@ class UserStatus(str, Enum):
     PENDING_VERIFICATION = "pending_verification"
 
 
-# Request Models
 class UserRegistrationRequest(BaseModel):
     email: EmailStr
     username: str = Field(..., min_length=3, max_length=50, pattern="^[a-zA-Z0-9_-]+$")
     password: str = Field(..., min_length=8, max_length=128)
     full_name: Optional[str] = Field(None, max_length=100)
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def validate_password_comprehensive(self):
         """Validate password with all errors at once"""
         password = self.password
         errors = []
-        
+
         if len(password) < 8:
             errors.append("Password must be at least 8 characters long")
-        
+
         if not any(c.isupper() for c in password):
             errors.append("Password must contain at least one uppercase letter")
-        
+
         if not any(c.islower() for c in password):
             errors.append("Password must contain at least one lowercase letter")
-        
+
         if not any(c.isdigit() for c in password):
             errors.append("Password must contain at least one digit")
-        
+
         if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
             errors.append("Password must contain at least one special character")
-        
+
         if errors:
             error_message = ". ".join(errors)
             raise ValueError(error_message)
-        
+
         return self
+
 
 class UserLoginRequest(BaseModel):
     email: EmailStr
@@ -70,33 +70,34 @@ class PasswordResetConfirmRequest(BaseModel):
     token: str
     new_password: str = Field(..., min_length=8, max_length=128)
 
-    @model_validator(mode='after')
+    @model_validator(mode="after")
     def validate_password_comprehensive(self):
         """Validate password with all errors at once"""
         password = self.password
         errors = []
-        
+
         if len(password) < 8:
             errors.append("Password must be at least 8 characters long")
-        
+
         if not any(c.isupper() for c in password):
             errors.append("Password must contain at least one uppercase letter")
-        
+
         if not any(c.islower() for c in password):
             errors.append("Password must contain at least one lowercase letter")
-        
+
         if not any(c.isdigit() for c in password):
             errors.append("Password must contain at least one digit")
-        
+
         if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
             errors.append("Password must contain at least one special character")
-        
+
         if errors:
             error_message = ". ".join(errors)
             raise ValueError(error_message)
-        
+
         return self
-    
+
+
 class PasswordChangeRequest(BaseModel):
     current_password: str
     new_password: str = Field(..., min_length=8, max_length=128)
@@ -112,7 +113,6 @@ class OAuthCallbackRequest(BaseModel):
     state: Optional[str] = None
 
 
-# Response Models
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
@@ -176,7 +176,6 @@ class UserWithPermissionsResponse(UserProfileResponse):
     permissions: List[UserPermissionResponse] = []
 
 
-# Standard API Response Models
 class StandardResponse(BaseModel):
     """Standard API response format"""
 
@@ -207,7 +206,6 @@ class ErrorResponse(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
-# JWT Token Claims
 class TokenData(BaseModel):
     user_id: str
     email: str
@@ -218,7 +216,6 @@ class TokenData(BaseModel):
     jti: str  # JWT ID for token tracking
 
 
-# Multi-layer Access Control Models
 class ResourcePermissionCheck(BaseModel):
     resource: str  # e.g., 'document', 'knowledge_base'
     action: str  # e.g., 'read', 'write', 'delete'
@@ -232,7 +229,6 @@ class AccessControlContext(BaseModel):
     resource_permissions: Dict[str, List[str]] = {}  # resource_id -> [permissions]
 
 
-# Rate Limiting Models
 class RateLimitInfo(BaseModel):
     limit: int
     remaining: int
@@ -240,15 +236,6 @@ class RateLimitInfo(BaseModel):
     retry_after: Optional[int] = None
 
 
-# Health Check Models
-class HealthCheckResponse(BaseModel):
-    status: str
-    timestamp: datetime
-    version: str
-    services: Dict[str, str]  # service_name -> status
-
-
-# Request Context Models
 class RequestContext(BaseModel):
     request_id: str
     user_id: Optional[str] = None

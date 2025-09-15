@@ -11,7 +11,6 @@ from src.services.types import (
     CreateConversationResponse,
     GetEventResponse,
     ListConversationResponse,
-    ListMessageResponse,
     ListTaskResponse,
 )
 
@@ -32,12 +31,12 @@ class ConversationService:
         c = await self.conv_repository.create_conversation(app_name, user_id)
         return CreateConversationResponse(result=c)
 
-    async def _list_messages(self, conversation_id: str) -> ListMessageResponse:
+    async def _list_messages(self, conversation_id: str) -> list[Message]:
         conversation = await self.conv_repository.get_conversation(conversation_id)
         if conversation:
             messages = await self.conv_repository.get_messages(conversation_id)
-            return ListMessageResponse(result=self.cache_content(messages))
-        return ListMessageResponse(result=[])
+            return self.cache_content(messages)
+        return []
 
     def cache_content(self, messages: list[Message]):
         rval = []
