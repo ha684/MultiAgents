@@ -7,24 +7,19 @@ from datetime import datetime
 from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import desc, select
-import copy
 from src.db.models.conversation import (
     ConversationModel,
     MessageModel,
 )
 from src.common.types import (
     Message,
-    TaskStatus,
     Part,
     TextPart,
     DataPart,
     FilePart,
     FileContent,
-    TaskState,
 )
 from src.services.types import Conversation
-from google.adk.sessions.state import State
-from google.adk.sessions.database_session_service import StorageEvent
 from src.utils.logger_conf import logger
 from .database_session import DatabaseSession
 from src.utils.decorators import singleton
@@ -265,33 +260,6 @@ class ConversationRepository:
             logger.error(f"Error getting conversation with messages: {e.args[0]}")
             raise e
 
-    async def get_events_all(self, conversation_id: Optional[str] = None) -> List[Any]:
-        """Get all events"""
-        try:
-            async with DatabaseSession() as session:
-                query = select(StorageEvent)
-                if conversation_id:
-                    query = query.filter_by(session_id=conversation_id)
-
-                query = query.order_by(StorageEvent.timestamp)
-                result = await session.execute(query)
-                event_models = result.scalars().all()
-
-                events = []
-                for event_model in event_models:
-                    event_dict = {
-                        "id": event_model.id,
-                        "actor": event_model.author,
-                        "content": event_model.content,
-                        "timestamp": event_model.timestamp,
-                    }
-                    events.append(event_dict)
-
-            return events
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting events: {e.args[0]}")
-            raise e
-
     async def delete_conversation(
         self, conversation_id: str, app_name: Optional[str] = None
     ) -> bool:
@@ -308,14 +276,6 @@ class ConversationRepository:
                     return False
 
                 await session.delete(conversation)
-
-                events_result = await session.execute(
-                    select(StorageEvent).filter_by(session_id=conversation_id)
-                )
-                storage_events = events_result.scalars().all()
-                for event in storage_events:
-                    await session.delete(event)
-
                 logger.info(
                     f"Deleted conversation {conversation_id} and all related data"
                 )
@@ -393,38 +353,6 @@ class ConversationRepository:
             metadata=message_data.get("metadata"),
         )
 
-    def _serialize_task_status(self, status: TaskStatus) -> Dict[str, Any]:
-        """Serialize task status to JSON"""
-        return {
-            "state": status.state.value,
-            "message": self._serialize_message(status.message)
-            if status.message
-            else None,
-            "timestamp": status.timestamp.isoformat(),
-        }
-
-    def _deserialize_task_status(self, status_data: Dict[str, Any]) -> TaskStatus:
-        """Deserialize task status from JSON"""
-        message = None
-        if status_data.get("message"):
-            message = self._deserialize_message(status_data["message"])
-
-        return TaskStatus(
-            state=TaskState(status_data["state"]),
-            message=message,
-            timestamp=datetime.fromisoformat(status_data["timestamp"]),
-        )
-
-    def _serialize_artifact(self, artifact: Any) -> Dict[str, Any]:
-        """Serialize an artifact to JSON"""
-        return {
-            "id": getattr(artifact, "id", None),
-            "index": getattr(artifact, "index", None),
-            "parts": self._serialize_parts(getattr(artifact, "parts", [])),
-            "append": getattr(artifact, "append", False),
-            "lastChunk": getattr(artifact, "lastChunk", True),
-        }
-
     def _model_to_message(self, msg_model: MessageModel) -> Message:
         """Convert MessageModel to Message"""
         return Message(
@@ -432,28 +360,3 @@ class ConversationRepository:
             parts=self._deserialize_parts(msg_model.parts),
             metadata=msg_model.message_metadata,
         )
-
-
-def _extract_state_delta(state: dict[str, Any]):
-    app_state_delta = {}
-    user_state_delta = {}
-    session_state_delta = {}
-    if state:
-        for key in state.keys():
-            if key.startswith(State.APP_PREFIX):
-                app_state_delta[key.removeprefix(State.APP_PREFIX)] = state[key]
-            elif key.startswith(State.USER_PREFIX):
-                user_state_delta[key.removeprefix(State.USER_PREFIX)] = state[key]
-            elif not key.startswith(State.TEMP_PREFIX):
-                session_state_delta[key] = state[key]
-    return app_state_delta, user_state_delta, session_state_delta
-
-
-def _merge_state(app_state, user_state, session_state):
-    # Merge states for response
-    merged_state = copy.deepcopy(session_state)
-    for key in app_state.keys():
-        merged_state[State.APP_PREFIX + key] = app_state[key]
-    for key in user_state.keys():
-        merged_state[State.USER_PREFIX + key] = user_state[key]
-    return merged_state

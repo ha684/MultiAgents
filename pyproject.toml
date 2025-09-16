@@ -57,6 +57,7 @@ dependencies = [
     "langchain-experimental>=0.3.4",
     "tavily-python>=0.7.12",
     "autopep8>=2.3.2",
+    "uuid7>=0.1.0",
 ]
 
 [tool.ruff]

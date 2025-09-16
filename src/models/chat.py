@@ -1,36 +1,9 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
-from datetime import datetime
-import uuid
 from enum import Enum
+from src.common.types import Message
 
 
-# Message Schemas
-class MessageCreateRequest(BaseModel):
-    content: str = Field(..., min_length=1)
-    role: str = Field(default="user")
-
-
-class MessageResponse(BaseModel):
-    kb_id: uuid.UUID
-    content: str
-    role: str
-    created_at: datetime
-    metadata: Optional[Dict[str, Any]] = None
-
-    class Config:
-        from_attributes = True
-
-
-class MessageListResponse(BaseModel):
-    items: List[MessageResponse]
-    total: int
-    skip: int
-    limit: int
-    has_more: bool
-
-
-# Chat Interaction Schemas
 class SearchProvider(Enum):
     """Enumeration of available search providers."""
 
@@ -46,16 +19,13 @@ class WebSearchConfig(BaseModel):
 
 # Chat Interaction Schemas
 class ChatRequest(BaseModel):
-    messages: MessageCreateRequest
-    knowledge_base_id: uuid.UUID
-    conversation_id: uuid.UUID
-    stream: bool = Field(default=False)
-    agentic: Optional[bool] = Field(
+    message: Message
+    agentic: bool = Field(
         default=False, description="Whether to use agentic capabilities"
     )
-    web_search: Optional[bool] = Field(default=False)
+    web_search: bool = Field(default=False)
 
 
 class ChatResponse(BaseModel):
-    message: MessageResponse
+    message: Message
     sources: Optional[List[Dict[str, Any]]] = None

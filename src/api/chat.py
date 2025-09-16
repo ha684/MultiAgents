@@ -1,7 +1,6 @@
 # src/api/chat.py
 from fastapi import APIRouter, HTTPException, Request, Body
-from typing import cast, AsyncGenerator
-from src.models.chat import ChatRequest
+from src.models.chat import ChatRequest, ChatResponse
 from src.services.chat_service import ChatService
 from src.utils.logger_conf import logger
 from fastapi.responses import StreamingResponse
@@ -11,28 +10,35 @@ from src.services.types import SendMessageResponse
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 server_instance = ConversationService()
+chat_service = ChatService()
 
 
 @router.post("/ask")
 async def ask(
     request: ChatRequest,
-):
-    chat_service = ChatService()
-    if not request.messages:
-        raise HTTPException(status_code=400, detail="Messages are required")
-
+) -> ChatResponse:
     try:
         response = await chat_service.ask(request)
+        return response
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(status_code=500, detail=f"Error creating message: {str(e)}")
 
-        if not request.stream:
-            return response
-        else:
-            return StreamingResponse(
-                cast(AsyncGenerator[str, None], response),
-                media_type="text/event-stream",
-                headers={"Content-Type": "text/event-stream"},
-            )
 
+@router.post("/ask/sse")
+async def ask_sse(
+    request: ChatRequest,
+) -> StreamingResponse:
+    try:
+        return StreamingResponse(
+            chat_service.ask_sse(request),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=f"Error creating message: {str(e)}")
