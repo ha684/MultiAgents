@@ -8,7 +8,7 @@ from starlette.responses import JSONResponse
 import redis
 from src.config.auth_settings import RATE_LIMIT_CONFIG
 from src.exceptions.auth_exceptions import RateLimitExceededException
-from src.utils.security import jwt_manager
+from src.services.security_services import jwt_manager
 from src.utils.logger_conf import logger
 from dotenv import load_dotenv
 import os

@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, cast, AsyncGenerator, Union, Generator
+from typing import List, Dict, Any, cast, AsyncGenerator, Union, Generator, Tuple
 from qdrant_client.models import Filter, models
 from src.agents.citation_agent import CitationAgent
 from src.agents.filename_agent import FilenameAgent
@@ -8,7 +8,6 @@ from src.agents.verification_agent import VerificationAgent
 from src.agents.folder_categorization_agent import FolderCategorizationAgent
 from src.agents.query_context_agent import QueryContextAgent
 from langchain_core.messages import BaseMessage
-from src.models.chat import ChatRequest
 from src.utils.logger_conf import logger
 from langchain_core.documents import Document
 from src.utils.decorators import singleton
@@ -19,6 +18,10 @@ from src.models.reference import Reference
 import tiktoken
 from src.services.web_search_service import search_service
 from src.models.chat import WebSearchConfig
+from src.services.conversation_service import ConversationService
+from src.common.types import Message
+from src.common.types import TextPart
+
 
 @singleton
 class ChatAgent:
@@ -29,18 +32,21 @@ class ChatAgent:
         self.folder_categorization_agent = FolderCategorizationAgent()
         self.filename_agent = FilenameAgent()
         self.query_context_agent = QueryContextAgent()
+        self.conv_service = ConversationService()
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
         logger.info("Chat Agent initialized successfully.")
 
     async def _retrieve(
-        self, request: ChatRequest, web_search_config: WebSearchConfig
+        self,
+        conversation: List[BaseMessage],
+        web_search_config: WebSearchConfig,
+        metadata: Dict[str, Any],
     ) -> List[Document]:
         """Retrieves relevant documents based on the query and knowledge base ID."""
         embed_top = 50
         rerank_top = 20
-        original_query = request.messages[-1].content
-        kb_id = request.knowledge_base_id
-        folder_structure = request.folder_structure or {}
+        original_query = conversation[-1].content
+        kb_id = metadata.get("kb_id")
         contextualized_query = original_query
         cited_docs = []
         retrieved_docs = []
@@ -50,21 +56,12 @@ class ChatAgent:
             f"Retrieving documents for query: {original_query} in knowledgebase: {kb_id}"
         )
 
-        logger.info(f"Folder structure: {folder_structure}")
-
-        if len(request.messages) > 2:
+        if len(conversation) > 2:
             contextualized_query = await self.query_context_agent.contextualize_query(
-                history=request.messages
+                history=conversation
             )
             logger.info(f"Contextualized query: {contextualized_query}")
 
-        # relevant_folder = self.folder_categorization_agent.get_relevant_folder(
-        #     query=query, folder_structure=folder_structure
-        # )
-        # logger.info(f"Relevant folder: {relevant_folder}")
-        # NOTE: For now, we are temporarily disabling folder categorization
-
-        relevant_folder = request.folder_context or None
         if web_search_config.active:
             retrieved_docs = await search_service.search(
                 query=contextualized_query,
@@ -85,15 +82,6 @@ class ChatAgent:
                     models.FieldCondition(
                         key="metadata.original_filename",
                         match=models.MatchText(text=requested_filename),
-                    )
-                )
-
-            if relevant_folder:
-                logger.info(f"Relevant folder: {relevant_folder}")
-                cast(List[models.Condition], filters.must).append(
-                    models.FieldCondition(
-                        key="metadata.folder_path",
-                        match=models.MatchAny(any=[relevant_folder]),
                     )
                 )
 
@@ -135,13 +123,12 @@ class ChatAgent:
 
             retrieved_docs = final_docs
 
-        # Stash the original index in the metadata before citation filtering
         for i, doc in enumerate(retrieved_docs):
             doc.metadata["original_index"] = i
 
         if retrieved_docs:
             citation_indexes = await self.citation_agent.extract_citations(
-                history=request.messages,
+                history=conversation,
                 reference=retrieved_docs,
             )
             if citation_indexes.indexes:
@@ -157,14 +144,16 @@ class ChatAgent:
         return cited_docs
 
     async def _retrieve_stream(
-        self, request: ChatRequest, web_search_config: WebSearchConfig
+        self,
+        conversation: List[BaseMessage],
+        web_search_config: WebSearchConfig,
+        metadata: Dict[str, Any],
     ) -> Generator[Union[str, List[Document]], None, None]:
         """Retrieves relevant documents based on the query and knowledge base ID."""
         embed_top = 50
         rerank_top = 20
-        original_query = request.messages[-1].content
-        kb_id = request.knowledge_base_id
-        folder_structure = request.folder_structure or {}
+        original_query = conversation[-1].content
+        kb_id = metadata.get("kb_id")
         contextualized_query = original_query
         cited_docs = []
         retrieved_docs = []
@@ -174,26 +163,17 @@ class ChatAgent:
             f"Retrieving documents for query: {original_query} in knowledgebase: {kb_id}"
         )
 
-        logger.info(f"Folder structure: {folder_structure}")
-
-        if len(request.messages) > 2:
+        if len(conversation) > 2:
             yield StreamEventBuilder.status_update(
                 StreamPhase.CONTEXT_ANALYSIS,
                 "Analyzing conversation context...",
                 progress=0.1,
             )
             contextualized_query = await self.query_context_agent.contextualize_query(
-                history=request.messages
+                history=conversation
             )
             logger.info(f"Contextualized query: {contextualized_query}")
 
-        # relevant_folder = self.folder_categorization_agent.get_relevant_folder(
-        #     query=query, folder_structure=folder_structure
-        # )
-        # logger.info(f"Relevant folder: {relevant_folder}")
-        # NOTE: For now, we are temporarily disabling folder categorization
-
-        relevant_folder = request.folder_context or None
         if web_search_config.active:
             yield StreamEventBuilder.status_update(
                 StreamPhase.WEB_SEARCH,
@@ -238,15 +218,6 @@ class ChatAgent:
                     models.FieldCondition(
                         key="metadata.original_filename",
                         match=models.MatchText(text=requested_filename),
-                    )
-                )
-
-            if relevant_folder:
-                logger.info(f"Relevant folder: {relevant_folder}")
-                cast(List[models.Condition], filters.must).append(
-                    models.FieldCondition(
-                        key="metadata.folder_path",
-                        match=models.MatchAny(any=[relevant_folder]),
                     )
                 )
 
@@ -297,7 +268,7 @@ class ChatAgent:
                 progress=0.8,
             )
             citation_indexes = await self.citation_agent.extract_citations(
-                history=request.messages,
+                history=conversation,
                 reference=retrieved_docs,
             )
             if citation_indexes.indexes:
@@ -316,31 +287,48 @@ class ChatAgent:
         yield cited_docs
 
     async def ask_normal(
-        self, request: ChatRequest, web_search_config: WebSearchConfig
-    ) -> Dict[str, Any]:
+        self,
+        conversation: List[Message],
+        web_search_config: WebSearchConfig,
+        metadata: Dict[str, Any],
+    ) -> Tuple[Message, List[Dict]]:
         """Handles non-streaming (full text) response."""
-        citations = await self._retrieve(request, web_search_config)
+        citations = await self._retrieve(conversation, web_search_config, metadata)
         response = await self.response_agent.generate_response(
             contexts=citations,
-            history=request.messages,
+            history=conversation,
         )
         response_dict = response.model_dump()
-        if citations:
-            response_dict["reference"] = create_reference(citations)
         if web_search_config.active:
-            response_dict["search_method"] = "web_search"
+            response_dict["response_metadata"]["search_method"] = "web_search"
         else:
-            response_dict["search_method"] = "database_search"
-        return response_dict
+            response_dict["response_metadata"]["search_method"] = "database_search"
+        response_dict["response_metadata"].update(metadata)
+        message = Message(
+            role="agent",
+            parts=[TextPart(type="text", text=response_dict["content"])],
+            metadata=response_dict["response_metadata"],
+        )
+        if citations:
+            sources = create_reference(citations)
+        else:
+            sources = []
+        await self.conv_service.add_message(message, metadata.get("conversation_id"))
+        return message, sources
 
     async def ask_stream(
-        self, request: ChatRequest, web_search_config: WebSearchConfig
+        self,
+        conversation: List[BaseMessage],
+        web_search_config: WebSearchConfig,
+        metadata: Dict[str, Any],
     ) -> AsyncGenerator[str | BaseMessage, None]:
         """Handles streaming response with robust error handling."""
         try:
             yield StreamEventBuilder.message_start()
 
-            retrieve_generator = self._retrieve_stream(request, web_search_config)
+            retrieve_generator = self._retrieve_stream(
+                conversation, web_search_config, metadata
+            )
             citations = []
 
             async for event in retrieve_generator:
@@ -355,15 +343,17 @@ class ChatAgent:
 
             response_generator = self.response_agent.generate_streaming_response(
                 contexts=citations,
-                history=request.messages,
+                history=conversation,
             )
 
             i = 0
+            final_response = None
             async for chunk in response_generator:
                 if isinstance(chunk, str) and chunk != "error":
                     yield StreamEventBuilder.content_delta(chunk, index=i)
                     i += 1
                 elif isinstance(chunk, dict):
+                    final_response = chunk
                     break
                 else:
                     yield StreamEventBuilder.error(
@@ -373,16 +363,33 @@ class ChatAgent:
             yield StreamEventBuilder.status_update(
                 StreamPhase.COMPLETE, "Response generation complete", progress=1.0
             )
+
             references = create_reference(citations) if citations else None
 
             if web_search_config.active:
-                metadata = {"search_method": "web_search"}
+                final_metadata = {"search_method": "web_search"}
+                final_metadata.update(metadata)
+                response_metadata = final_response.get("response_metadata")
+                final_metadata.update(response_metadata)
             else:
-                metadata = {"search_method": "database_search"}
+                final_metadata = {"search_method": "database_search"}
+                final_metadata.update(metadata)
+                response_metadata = final_response.get("response_metadata")
+                final_metadata.update(response_metadata)
+
+            message = Message(
+                role="agent",
+                parts=[TextPart(type="text", text=final_response.get("content"))],
+                metadata=final_metadata,
+            )
+
+            await self.conv_service.add_message(
+                message, metadata.get("conversation_id")
+            )
 
             yield StreamEventBuilder.message_stop(
                 references=references,
-                metadata=metadata,
+                metadata=final_metadata,
             )
 
         except Exception as e:

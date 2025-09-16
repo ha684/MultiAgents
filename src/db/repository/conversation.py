@@ -2,7 +2,6 @@
 Database service layer for handling all database operations
 """
 
-import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any, Tuple
 from sqlalchemy.exc import SQLAlchemyError
@@ -34,55 +33,51 @@ class ConversationRepository:
         try:
             async with DatabaseSession() as session:
                 conv_model = ConversationModel(
-                    app_name=app_name,
+                    name=app_name,
                     user_id=user_id,
                     is_active=True,
                 )
                 session.add(conv_model)
-
-            return Conversation(
-                conversation_id=conv_model.id, is_active=True, name=app_name
-            )
+                await session.flush()
+                await session.refresh(conv_model)
+                result = Conversation(
+                    conversation_id=str(conv_model.id), is_active=True, name=app_name
+                )
+            return result
 
         except SQLAlchemyError as e:
             logger.error(f"Error creating conversation: {e.args[0]}")
             raise e
 
-    async def get_conversation(
-        self, conversation_id: str, app_name: Optional[str] = None
-    ) -> Optional[Conversation]:
+    async def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
         """Get a conversation by ID"""
         try:
             async with DatabaseSession() as session:
                 query = select(ConversationModel).filter_by(id=conversation_id)
-                if app_name:
-                    query = query.filter_by(app_name=app_name)
                 result = await session.execute(query)
                 conv_model = result.scalar_one_or_none()
                 if not conv_model:
                     return None
-
-            return Conversation(
-                conversation_id=conv_model.id,
-                is_active=conv_model.is_active,
-                name=conv_model.name,
-            )
+                await session.flush()
+                await session.refresh(conv_model)
+                result = Conversation(
+                    conversation_id=str(conv_model.id),
+                    is_active=conv_model.is_active,
+                    name=conv_model.name,
+                )
+            return result
 
         except SQLAlchemyError as e:
             logger.error(f"Error getting conversation: {e.args[0]}")
             raise e
 
-    async def update_conversation(
-        self, conversation: Conversation, app_name: Optional[str] = None
-    ):
+    async def update_conversation(self, conversation: Conversation) -> Conversation:
         """Update a conversation"""
         try:
             async with DatabaseSession() as session:
                 query = select(ConversationModel).filter_by(
                     id=conversation.conversation_id
                 )
-                if app_name:
-                    query = query.filter_by(app_name=app_name)
 
                 result = await session.execute(query)
                 conv_model = result.scalar_one_or_none()
@@ -90,22 +85,24 @@ class ConversationRepository:
                     conv_model.is_active = conversation.is_active
                     conv_model.name = conversation.name
                     conv_model.updated_at = datetime.now()
+                await session.flush()
+                await session.refresh(conv_model)
+                result = Conversation(
+                    conversation_id=str(conv_model.id),
+                    is_active=conv_model.is_active,
+                    name=conv_model.name,
+                )
+            return result
         except SQLAlchemyError as e:
             logger.error(f"Error updating conversation: {e.args[0]}")
             raise e
 
-    async def list_conversations(
-        self, app_name: Optional[str] = None, user_id: Optional[str] = None
-    ) -> List[Conversation]:
+    async def list_conversations(self, user_id: str) -> List[Conversation]:
         """List all conversations, optionally filtered by app_name and user"""
         try:
             async with DatabaseSession() as session:
                 query = select(ConversationModel)
-                if app_name:
-                    query = query.filter_by(app_name=app_name)
-                if user_id:
-                    query = query.filter_by(user_id=user_id)
-
+                query = query.filter_by(user_id=user_id)
                 query = query.order_by(desc(ConversationModel.updated_at))
                 result = await session.execute(query)
                 conv_models = result.scalars().all()
@@ -114,7 +111,7 @@ class ConversationRepository:
                 for conv_model in conv_models:
                     conversations.append(
                         Conversation(
-                            conversation_id=conv_model.id,
+                            conversation_id=str(conv_model.id),
                             is_active=conv_model.is_active,
                             name=conv_model.name,
                         )
@@ -133,15 +130,7 @@ class ConversationRepository:
                     select(MessageModel).filter_by(conversation_id=conversation_id)
                 )
                 max_order = len(count_result.scalars().all())
-
-                message_id = (
-                    message.metadata.get("message_id") if message.metadata else None
-                )
-                if not message_id:
-                    message_id = str(uuid.uuid4())
-
                 msg_model = MessageModel(
-                    id=message_id,
                     conversation_id=conversation_id,
                     role=message.role,
                     parts=self._serialize_parts(message.parts),
@@ -150,7 +139,7 @@ class ConversationRepository:
                 )
                 session.add(msg_model)
 
-            return message_id
+            return msg_model.id
         except SQLAlchemyError as e:
             logger.error(f"Error adding message: {e.args[0]}")
             raise e
@@ -162,7 +151,6 @@ class ConversationRepository:
         if not messages_with_conversations:
             return []
 
-        message_ids = []
         try:
             async with DatabaseSession() as session:
                 messages_by_conversation = {}
@@ -180,19 +168,8 @@ class ConversationRepository:
                     max_order = len(count_result.scalars().all())
 
                     for i, message in enumerate(messages):
-                        message_id = (
-                            message.metadata.get("message_id")
-                            if message.metadata
-                            else None
-                        )
-                        if not message_id:
-                            message_id = str(uuid.uuid4())
-
-                        message_ids.append(message_id)
-
                         bulk_data.append(
                             {
-                                "id": message_id,
                                 "conversation_id": conv_id,
                                 "role": message.role,
                                 "parts": self._serialize_parts(message.parts),
@@ -205,12 +182,12 @@ class ConversationRepository:
                     await session.execute(MessageModel.__table__.insert(), bulk_data)
                     logger.info(f"Batch inserted {len(bulk_data)} messages")
 
-            return message_ids
+            return [message.id for message in bulk_data]
         except SQLAlchemyError as e:
             logger.error(f"Error batch adding messages: {e.args[0]}")
             raise e
 
-    async def get_messages(self, conversation_id: str) -> List[Message]:
+    async def get_messages(self, conversation_id: str) -> List[Message | None]:
         """Get all messages for a conversation"""
         try:
             async with DatabaseSession() as session:
@@ -228,14 +205,12 @@ class ConversationRepository:
             raise e
 
     async def get_conversation_with_messages(
-        self, conversation_id: str, app_name: Optional[str] = None
+        self, conversation_id: str
     ) -> Tuple[Optional[Conversation], List[Message]]:
         """Get conversation and its messages in a single transaction - reduces DB round trips"""
         try:
             async with DatabaseSession() as session:
                 conv_query = select(ConversationModel).filter_by(id=conversation_id)
-                if app_name:
-                    conv_query = conv_query.filter_by(app_name=app_name)
 
                 conv_result = await session.execute(conv_query)
                 conv_model = conv_result.scalar_one_or_none()
@@ -260,21 +235,15 @@ class ConversationRepository:
             logger.error(f"Error getting conversation with messages: {e.args[0]}")
             raise e
 
-    async def delete_conversation(
-        self, conversation_id: str, app_name: Optional[str] = None
-    ) -> bool:
+    async def delete_conversation(self, conversation_id: str) -> bool:
         """Delete a conversation and all related data"""
         try:
             async with DatabaseSession() as session:
                 query = select(ConversationModel).filter_by(id=conversation_id)
-                if app_name:
-                    query = query.filter_by(app_name=app_name)
-
                 result = await session.execute(query)
                 conversation = result.scalar_one_or_none()
                 if not conversation:
                     return False
-
                 await session.delete(conversation)
                 logger.info(
                     f"Deleted conversation {conversation_id} and all related data"
@@ -306,9 +275,9 @@ class ConversationRepository:
                     {
                         "type": "file",
                         "file": file_data,
-                        "uri": part.uri,
-                        "bytes": part.bytes,
-                        "mimeType": part.mimeType,
+                        "uri": part.file.uri,
+                        "bytes": part.file.bytes,
+                        "mimeType": part.file.mimeType,
                     }
                 )
         return serialized
