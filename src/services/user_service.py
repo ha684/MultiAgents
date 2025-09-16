@@ -162,6 +162,7 @@ class UserRepository:
                             User.email_verification_token == token,
                             User.email_verification_expires
                             > datetime.now(timezone.utc),
+                            User.status == UserStatus.PENDING_VERIFICATION,
                         )
                     )
                 )

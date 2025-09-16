@@ -27,11 +27,12 @@ async def register(
 ):
     """Register a new user"""
     try:
-        user = await auth_service.register_user(registration_data)
+        user, verification_token = await auth_service.register_user(registration_data)
 
         return {
             "data": user.model_dump(),
             "message": "User registered successfully. Please check your email for verification.",
+            "verification_token": verification_token,
         }
 
     except Exception as e:

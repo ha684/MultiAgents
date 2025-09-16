@@ -1,5 +1,5 @@
 # src/services/auth_service.py
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Tuple
 from datetime import datetime, timezone, timedelta
 from src.db.repository.database_session import DatabaseSession
 from src.services.user_service import (
@@ -52,23 +52,26 @@ class AuthenticationService:
     async def register_user(
         self,
         registration_data: UserRegistrationRequest,
-    ) -> UserProfileResponse:
+    ) -> Tuple[UserProfileResponse, str]:
         """Register a new user"""
         try:
             logger.info(f"Registering new user: {registration_data.email}")
             new_user = await self.user_repo.create_user(registration_data)
-            # await self._send_verification_email(new_user)
+            await self._send_verification_email(new_user)
             logger.info(f"User registered successfully: {new_user.id}")
-            return UserProfileResponse(
-                id=str(new_user.id),
-                email=new_user.email,
-                username=new_user.username,
-                full_name=new_user.full_name,
-                role=new_user.role,
-                status=new_user.status,
-                email_verified=new_user.email_verified,
-                created_at=new_user.created_at,
-                last_login_at=new_user.last_login_at,
+            return (
+                UserProfileResponse(
+                    id=str(new_user.id),
+                    email=new_user.email,
+                    username=new_user.username,
+                    full_name=new_user.full_name,
+                    role=new_user.role,
+                    status=new_user.status,
+                    email_verified=new_user.email_verified,
+                    created_at=new_user.created_at,
+                    last_login_at=new_user.last_login_at,
+                ),
+                new_user.email_verification_token,
             )
 
         except Exception as e:
