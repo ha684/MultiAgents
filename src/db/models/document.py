@@ -1,10 +1,12 @@
+# src/db/models/document.py
 from src.connector.database_conn import Base
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Index
 from datetime import datetime
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
 from typing import List, Optional
 from sqlalchemy import func, Text
+from uuid_extensions import uuid7
 import uuid
 
 
@@ -12,7 +14,7 @@ class KnowledgeBase(Base):
     __tablename__ = "knowledge_bases"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid7
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text)
@@ -33,15 +35,22 @@ class KnowledgeBase(Base):
         "DocumentQA", back_populates="knowledge_base", cascade="all, delete-orphan"
     )
 
+    __table_args__ = (
+        Index("idx_kb_user_active", "user_id", "is_active", "created_at"),
+        Index("idx_kb_name_search", "name"),
+    )
+
 
 class Document(Base):
     __tablename__ = "documents"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid7
     )
     knowledge_base_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("knowledge_bases.id"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
+        nullable=False,
     )
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -91,18 +100,29 @@ class Document(Base):
         "DocumentQA", back_populates="document", cascade="all, delete-orphan"
     )
 
+    __table_args__ = (
+        Index("idx_doc_kb_status", "knowledge_base_id", "status", "is_inactive"),
+        Index("idx_doc_filename", "filename"),
+        Index("idx_doc_processing", "status", "created_at"),
+        Index("idx_doc_uploader", "uploaded_by", "created_at"),
+    )
+
 
 class DocumentQA(Base):
     __tablename__ = "document_qa"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True), primary_key=True, default=uuid7
     )
     document_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
     )
     kb_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("knowledge_bases.id"), nullable=False
+        UUID(as_uuid=True),
+        ForeignKey("knowledge_bases.id", ondelete="CASCADE"),
+        nullable=False,
     )
     question: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
@@ -113,4 +133,10 @@ class DocumentQA(Base):
     document: Mapped["Document"] = relationship("Document", back_populates="qa_pairs")
     knowledge_base: Mapped["KnowledgeBase"] = relationship(
         "KnowledgeBase", back_populates="qa_pairs"
+    )
+
+    __table_args__ = (
+        Index("idx_qa_document", "document_id", "created_at"),
+        Index("idx_qa_kb", "kb_id", "created_at"),
+        Index("idx_qa_search", "question"),
     )

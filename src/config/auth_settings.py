@@ -20,7 +20,7 @@ class AuthSettings(BaseSettings):
     # Password Configuration
     password_hash_algorithm: str = "bcrypt"
     password_reset_token_expire_hours: int = 24
-    email_verification_token_expire_hours: int = 48
+    email_verification_token_expire_minutes: int = 48
 
     # Account Security
     max_login_attempts: int = 5

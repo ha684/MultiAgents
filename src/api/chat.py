@@ -18,8 +18,9 @@ async def ask(
     request: ChatRequest,
 ) -> ChatResponse:
     try:
-        response = await chat_service.ask(request)
-        return response
+        response, sources = await chat_service.ask(request)
+        result = ChatResponse(message=response, sources=sources)
+        return result
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=f"Error creating message: {str(e)}")
@@ -31,7 +32,7 @@ async def ask_sse(
 ) -> StreamingResponse:
     try:
         return StreamingResponse(
-            chat_service.ask_sse(request),
+            await chat_service.ask_sse(request),
             media_type="text/plain",
             headers={
                 "Cache-Control": "no-cache",

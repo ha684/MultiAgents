@@ -4,7 +4,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import BaseMessage
 from src.config.llm_config import SupportedLLMProviders
 from src.llm.factory import get_llm
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from pydantic import BaseModel, Field
 from src.nlp.language_detector import language_detection
 from src.prompts.get_prompt_template import load_prompt_template
@@ -144,12 +144,13 @@ class ResponseAgent:
         self,
         contexts: List[Document],
         history: List[BaseMessage],
-    ) -> Dict[str, Any]:
+    ) -> AIMessage:
         """Generates a full response (non-streaming) based on verification results and history."""
         try:
             messages_prompt = self._prepare_messages(contexts, history)
             response_chain = messages_prompt | self.llm
             response = await response_chain.ainvoke({})
+            logger.info(f"Response type: {type(response)}")
             return response
 
         except Exception as e:
@@ -186,8 +187,9 @@ class ResponseAgent:
                 usage_data = calculate_usage_metadata(
                     formatted_messages, accumulated_content
                 )
-
+                response_metadata.update(usage_data)
                 final_response = {
+                    "content": accumulated_content,
                     "response_metadata": response_metadata,
                     "type": "ai",
                     "name": None,
@@ -195,7 +197,6 @@ class ResponseAgent:
                     "example": False,
                     "tool_calls": [],
                     "invalid_tool_calls": [],
-                    "usage_metadata": usage_data["usage_metadata"],
                 }
 
                 yield final_response
@@ -203,6 +204,7 @@ class ResponseAgent:
         except Exception as e:
             logger.exception(f"Error during streaming response generation: {e}")
             yield "error"
+
 
 def count_tokens(text: str) -> int:
     """Count tokens in text using the same tokenizer as the chat agent."""
@@ -224,22 +226,22 @@ def calculate_usage_metadata(
         total_tokens = input_tokens + output_tokens
 
         return {
-            "usage_metadata": {
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
+            "token_usage": {
+                "prompt_tokens": input_tokens,
+                "completion_tokens": output_tokens,
                 "total_tokens": total_tokens,
-                "input_token_details": {},
-                "output_token_details": {},
+                "prompt_tokens_details": {},
+                "completion_tokens_details": {},
             },
         }
     except Exception as e:
         logger.warning(f"Failed to calculate usage metadata: {e}")
         return {
-            "usage_metadata": {
-                "input_tokens": None,
-                "output_tokens": None,
+            "token_usage": {
+                "prompt_tokens": None,
+                "completion_tokens": None,
                 "total_tokens": None,
-                "input_token_details": {},
-                "output_token_details": {},
+                "prompt_tokens_details": {},
+                "completion_tokens_details": {},
             },
         }

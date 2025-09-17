@@ -9,6 +9,7 @@ from src.config.auth_settings import auth_settings
 from src.models.auth import TokenData, UserRole
 import hashlib
 import hmac
+import random
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -145,20 +146,11 @@ class TokenManager:
     """Manage various types of tokens (verification, reset, etc.)"""
 
     @staticmethod
-    def create_email_verification_token() -> tuple[str, datetime]:
-        """Create an email verification token with expiry"""
-        token = SecurityManager.generate_secure_token(32)
+    def create_verification_token() -> tuple[str, datetime]:
+        """Create an verification token with expiry"""
+        token = f"{random.randint(100000, 999999):06d}"
         expires_at = datetime.now(timezone.utc) + timedelta(
-            hours=auth_settings.email_verification_token_expire_hours
-        )
-        return token, expires_at
-
-    @staticmethod
-    def create_password_reset_token() -> tuple[str, datetime]:
-        """Create a password reset token with expiry"""
-        token = SecurityManager.generate_secure_token(32)
-        expires_at = datetime.now(timezone.utc) + timedelta(
-            hours=auth_settings.password_reset_token_expire_hours
+            minutes=auth_settings.email_verification_token_expire_minutes
         )
         return token, expires_at
 
