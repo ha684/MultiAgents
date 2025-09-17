@@ -99,3 +99,27 @@ class GmailAPI:
                 )
                 logger.error(response.text)
                 return None
+
+    async def health_check(self):
+        """Check if Gmail API is accessible"""
+        try:
+            await self.ensure_valid_token()
+            url = f"{self.base_url}/users/me/profile"
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=self.get_headers())
+
+                if response.status_code == 200:
+                    logger.info("Gmail API health check: OK")
+                    return {"status": "healthy", "api_accessible": True}
+                else:
+                    logger.warning(
+                        f"Gmail API health check failed: {response.status_code}"
+                    )
+                    return {
+                        "status": "degraded",
+                        "api_accessible": False,
+                        "error": response.status_code,
+                    }
+        except Exception as e:
+            logger.error(f"Gmail API health check error: {str(e)}")
+            return {"status": "unhealthy", "api_accessible": False, "error": str(e)}

@@ -42,7 +42,7 @@ class UserRepository:
             hashed_password = security_manager.hash_password(user_data.password)
 
             verification_token, verification_expires = (
-                token_manager.create_email_verification_token()
+                token_manager.create_verification_token()
             )
 
             new_user = User(

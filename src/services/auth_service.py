@@ -1,5 +1,5 @@
 # src/services/auth_service.py
-from typing import Optional, List, Any, Tuple
+from typing import Optional, List, Any
 from datetime import datetime, timezone, timedelta
 from src.db.repository.database_session import DatabaseSession
 from src.services.user_service import (
@@ -36,6 +36,8 @@ from src.exceptions.auth_exceptions import (
 )
 from sqlalchemy import select, and_
 from src.utils.logger_conf import logger
+from src.common.gmail_api import GmailAPI
+from src.config.settings import settings
 
 
 class AuthenticationService:
@@ -45,6 +47,11 @@ class AuthenticationService:
         self.user_repo = UserRepository()
         self.refresh_token_repo = RefreshTokenRepository()
         self.login_attempt_repo = LoginAttemptRepository()
+        self.gmail_api = GmailAPI(
+            client_id=settings.google_client_id,
+            client_secret=settings.google_client_secret,
+            refresh_token=settings.google_refresh_token,
+        )
         self.jwt_manager = jwt_manager
         self.security_manager = security_manager
         self.token_manager = token_manager
@@ -52,26 +59,23 @@ class AuthenticationService:
     async def register_user(
         self,
         registration_data: UserRegistrationRequest,
-    ) -> Tuple[UserProfileResponse, str]:
+    ) -> UserProfileResponse:
         """Register a new user"""
         try:
             logger.info(f"Registering new user: {registration_data.email}")
             new_user = await self.user_repo.create_user(registration_data)
             await self._send_verification_email(new_user)
             logger.info(f"User registered successfully: {new_user.id}")
-            return (
-                UserProfileResponse(
-                    id=str(new_user.id),
-                    email=new_user.email,
-                    username=new_user.username,
-                    full_name=new_user.full_name,
-                    role=new_user.role,
-                    status=new_user.status,
-                    email_verified=new_user.email_verified,
-                    created_at=new_user.created_at,
-                    last_login_at=new_user.last_login_at,
-                ),
-                new_user.email_verification_token,
+            return UserProfileResponse(
+                id=str(new_user.id),
+                email=new_user.email,
+                username=new_user.username,
+                full_name=new_user.full_name,
+                role=new_user.role,
+                status=new_user.status,
+                email_verified=new_user.email_verified,
+                created_at=new_user.created_at,
+                last_login_at=new_user.last_login_at,
             )
 
         except Exception as e:
@@ -85,7 +89,6 @@ class AuthenticationService:
         """Authenticate user and return tokens"""
         try:
             logger.info(f"Authentication attempt for: {login_data.email}")
-
             user = await self.user_repo.get_user_by_email(login_data.email)
             if not user:
                 await self.login_attempt_repo.record_login_attempt(
@@ -308,7 +311,7 @@ class AuthenticationService:
                 logger.info(f"Password reset requested for non-existent user: {email}")
                 return True
 
-            reset_token, expires_at = self.token_manager.create_password_reset_token()
+            reset_token, expires_at = self.token_manager.create_verification_token()
 
             await self.user_repo.update_user(
                 str(user.id),
@@ -444,10 +447,38 @@ class AuthenticationService:
             return None
 
     async def _send_verification_email(self, user: User) -> None:
-        """Send verification email to user"""
+        """Send verification code email to user"""
         try:
-            # TODO: Implement email sending
-            logger.info(f"Verification email sent to {user.email}")
+            subject = "Your Email Verification Code"
+            verification_code = user.email_verification_token
+
+            body = f"""
+Hello {user.full_name},
+
+Thank you for registering with our service!
+
+Your email verification code is: {verification_code}
+
+Please enter this code on the verification page to complete your registration.
+
+This verification code will expire on {user.email_verification_expires.strftime("%Y-%m-%d %H:%M:%S UTC")}.
+
+If you didn't create this account, you can safely ignore this email.
+
+Best regards,
+The Team
+            """.strip()
+
+            result = await self.gmail_api.send_message(
+                to_email=user.email, subject=subject, body=body
+            )
+
+            if result:
+                logger.info(f"Verification code sent successfully to {user.email}")
+            else:
+                logger.error(f"Failed to send verification code to {user.email}")
+                raise Exception("Failed to send verification email")
+
         except Exception as e:
             logger.error(f"Failed to send verification email to {user.email}: {str(e)}")
             raise
@@ -455,8 +486,34 @@ class AuthenticationService:
     async def _send_password_reset_email(self, user: User, reset_token: str) -> None:
         """Send password reset email to user"""
         try:
-            # TODO: Implement email sending
-            logger.info(f"Password reset email sent to {user.email}")
+            subject = "Your Password Reset Code"
+
+            body = f"""
+            Hello {user.full_name},
+
+            Thank you for requesting a password reset!
+
+            Your password reset code is: {reset_token}
+
+            Please enter this code on the password reset page to complete your password reset.
+
+            This password reset code will expire on {user.password_reset_expires.strftime("%Y-%m-%d %H:%M:%S UTC")}.
+
+            If you didn't request a password reset, you can safely ignore this email.
+
+            Best regards,
+            The Team
+            """.strip()
+
+            result = await self.gmail_api.send_message(
+                to_email=user.email, subject=subject, body=body
+            )
+
+            if result:
+                logger.info(f"Password reset email sent to {user.email}")
+            else:
+                logger.error(f"Failed to send password reset email to {user.email}")
+                raise Exception("Failed to send password reset email")
         except Exception as e:
             logger.error(
                 f"Failed to send password reset email to {user.email}: {str(e)}"
