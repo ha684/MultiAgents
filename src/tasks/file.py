@@ -5,6 +5,7 @@ import random
 import uuid
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any, Dict, List
 from contextlib import asynccontextmanager
@@ -195,7 +196,7 @@ async def _process_document_async(
                 update_data={
                     "status": DocumentStatusEnum.FINISHED,
                     "total_chunks": len(chunks),
-                    "processed_at": datetime.now(),
+                    "processed_at": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
                 },
             )
 

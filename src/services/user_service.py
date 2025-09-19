@@ -3,7 +3,8 @@ from typing import Optional, Dict, Any, List
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy import and_, update, delete, func
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 import uuid
 from src.db.repository.database_session import DatabaseSession
 from src.services.security_services import token_manager
@@ -55,8 +56,8 @@ class UserRepository:
                 status=UserStatus.PENDING_VERIFICATION,
                 email_verification_token=verification_token,
                 email_verification_expires=verification_expires,
-                created_at=datetime.now(timezone.utc),
-                updated_at=datetime.now(timezone.utc),
+                created_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+                updated_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
             )
 
             async with DatabaseSession() as session:
@@ -128,7 +129,7 @@ class UserRepository:
                 if hasattr(user, field):
                     setattr(user, field, value)
 
-            user.updated_at = datetime.now(timezone.utc)
+            user.updated_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
             async with DatabaseSession() as session:
                 await session.flush()
                 await session.refresh(user)
@@ -161,7 +162,7 @@ class UserRepository:
                         and_(
                             User.email_verification_token == token,
                             User.email_verification_expires
-                            > datetime.now(timezone.utc),
+                            > datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
                             User.status == UserStatus.PENDING_VERIFICATION,
                         )
                     )
@@ -173,7 +174,7 @@ class UserRepository:
                     user.status = UserStatus.ACTIVE
                     user.email_verification_token = None
                     user.email_verification_expires = None
-                    user.updated_at = datetime.now(timezone.utc)
+                    user.updated_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
                     await session.flush()
 
             return user
@@ -188,7 +189,7 @@ class UserRepository:
                 await session.execute(
                     update(User)
                     .where(User.id == uuid.UUID(user_id))
-                    .values(last_login_at=datetime.now(timezone.utc))
+                    .values(last_login_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")))
                 )
         except Exception as e:
             logger.error(f"Error updating last login: {str(e)}")
@@ -204,11 +205,11 @@ class UserRepository:
             user.failed_login_attempts += 1
 
             if user.failed_login_attempts >= auth_settings.max_login_attempts:
-                user.account_locked_until = datetime.now(timezone.utc) + timedelta(
-                    minutes=auth_settings.account_lockout_duration_minutes
-                )
+                user.account_locked_until = datetime.now(
+                    ZoneInfo("Asia/Ho_Chi_Minh")
+                ) + timedelta(minutes=auth_settings.account_lockout_duration_minutes)
 
-            user.updated_at = datetime.now(timezone.utc)
+            user.updated_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
             async with DatabaseSession() as session:
                 await session.flush()
 
@@ -235,7 +236,7 @@ class UserRepository:
         if not user.account_locked_until:
             return False
 
-        if datetime.now(timezone.utc) > user.account_locked_until:
+        if datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) > user.account_locked_until:
             await self.reset_failed_login_attempts(str(user.id))
             return False
 
@@ -258,7 +259,7 @@ class UserRepository:
                             id=uuid.uuid4(),
                             user_id=user_id,
                             permission_id=permission.id,
-                            granted_at=datetime.now(timezone.utc),
+                            granted_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
                         )
                         session.add(user_permission)
 
@@ -306,7 +307,7 @@ class RefreshTokenRepository:
                 user_id=uuid.UUID(user_id),
                 token_hash=token_hash,
                 expires_at=expires_at,
-                created_at=datetime.now(timezone.utc),
+                created_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
             )
 
             async with DatabaseSession() as session:
@@ -330,7 +331,8 @@ class RefreshTokenRepository:
                         and_(
                             RefreshToken.token_hash == token_hash,
                             not RefreshToken.is_revoked,
-                            RefreshToken.expires_at > datetime.now(timezone.utc),
+                            RefreshToken.expires_at
+                            > datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
                         )
                     )
                 )
@@ -346,7 +348,10 @@ class RefreshTokenRepository:
                 result = await session.execute(
                     update(RefreshToken)
                     .where(RefreshToken.token_hash == token_hash)
-                    .values(is_revoked=True, revoked_at=datetime.now(timezone.utc))
+                    .values(
+                        is_revoked=True,
+                        revoked_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+                    )
                 )
             return result.rowcount > 0
         except Exception as e:
@@ -360,7 +365,10 @@ class RefreshTokenRepository:
                 result = await session.execute(
                     update(RefreshToken)
                     .where(RefreshToken.user_id == uuid.UUID(user_id))
-                    .values(is_revoked=True, revoked_at=datetime.now(timezone.utc))
+                    .values(
+                        is_revoked=True,
+                        revoked_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+                    )
                 )
             return result.rowcount
         except Exception as e:
@@ -373,7 +381,8 @@ class RefreshTokenRepository:
             async with DatabaseSession() as session:
                 result = await session.execute(
                     delete(RefreshToken).where(
-                        RefreshToken.expires_at < datetime.now(timezone.utc)
+                        RefreshToken.expires_at
+                        < datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
                     )
                 )
             return result.rowcount
@@ -398,7 +407,7 @@ class LoginAttemptRepository:
                 email=email.lower(),
                 success=success,
                 failure_reason=failure_reason,
-                attempted_at=datetime.now(timezone.utc),
+                attempted_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
             )
 
             async with DatabaseSession() as session:

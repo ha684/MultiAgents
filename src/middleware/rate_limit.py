@@ -1,7 +1,7 @@
 # src/middleware/rate_limiting.py
 import time
 from typing import Dict, Optional, Callable, Any, Tuple
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -12,6 +12,7 @@ from src.services.security_services import jwt_manager
 from src.utils.logger_conf import logger
 from dotenv import load_dotenv
 import os
+from zoneinfo import ZoneInfo
 
 load_dotenv()
 
@@ -74,10 +75,10 @@ class RedisRateLimiter:
                     "limit": limit,
                     "remaining": 0,
                     "reset_time": datetime.fromtimestamp(
-                        oldest_time + window_seconds, tz=timezone.utc
+                        oldest_time + window_seconds, tz=ZoneInfo("Asia/Ho_Chi_Minh")
                     )
                     if oldest_requests
-                    else datetime.now(timezone.utc),
+                    else datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
                     "retry_after": retry_after,
                 }
             unique_score = now + (time.time_ns() % 1000000) / 1000000000
@@ -86,10 +87,11 @@ class RedisRateLimiter:
             oldest_requests = self.redis.zrange(redis_key, 0, 0, withscores=True)
             reset_time = (
                 datetime.fromtimestamp(
-                    oldest_requests[0][1] + window_seconds, tz=timezone.utc
+                    oldest_requests[0][1] + window_seconds,
+                    tz=ZoneInfo("Asia/Ho_Chi_Minh"),
                 )
                 if oldest_requests
-                else datetime.now(timezone.utc)
+                else datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
             )
 
             return True, {

@@ -3,7 +3,8 @@ from typing import Any, Dict
 from fastapi import Request
 from fastapi.responses import JSONResponse
 import json
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 from src.utils.logger_conf import logger
@@ -124,4 +125,4 @@ class ResponseHandlerMiddleware(BaseHTTPMiddleware):
 
     def _get_timestamp(self) -> str:
         """Create timestamp in ISO format handler"""
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).isoformat()

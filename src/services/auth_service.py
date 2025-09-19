@@ -1,43 +1,42 @@
 # src/services/auth_service.py
-from typing import Optional, List, Any
-from datetime import datetime, timezone, timedelta
-from src.db.repository.database_session import DatabaseSession
-from src.services.user_service import (
-    UserRepository,
-    RefreshTokenRepository,
-    LoginAttemptRepository,
-)
-from src.db.models.user import User, UserStatus
-from src.models.auth import (
-    UserRegistrationRequest,
-    UserLoginRequest,
-    TokenResponse,
-    UserProfileResponse,
-    UserWithPermissionsResponse,
-    PasswordChangeRequest,
-    PasswordResetConfirmRequest,
-    TokenData,
-    UserPermissionResponse,
-)
-from src.services.security_services import (
-    security_manager,
-    jwt_manager,
-    token_manager,
-)
+from datetime import datetime, timedelta
+from typing import Any, List, Optional
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import and_, select
+
+from src.common.gmail_api import GmailAPI
 from src.config.auth_settings import auth_settings
+from src.config.settings import settings
+from src.db.models.user import User, UserStatus
+from src.db.repository.database_session import DatabaseSession
 from src.exceptions.auth_exceptions import (
-    InvalidCredentialsException,
-    UserNotFoundException,
     AccountLockedException,
     AccountNotVerifiedException,
     AccountSuspendedException,
+    InvalidCredentialsException,
     InvalidTokenException,
     RefreshTokenException,
+    UserNotFoundException,
 )
-from sqlalchemy import select, and_
+from src.models.auth import (
+    PasswordChangeRequest,
+    PasswordResetConfirmRequest,
+    TokenData,
+    TokenResponse,
+    UserLoginRequest,
+    UserPermissionResponse,
+    UserProfileResponse,
+    UserRegistrationRequest,
+    UserWithPermissionsResponse,
+)
+from src.services.security_services import jwt_manager, security_manager, token_manager
+from src.services.user_service import (
+    LoginAttemptRepository,
+    RefreshTokenRepository,
+    UserRepository,
+)
 from src.utils.logger_conf import logger
-from src.common.gmail_api import GmailAPI
-from src.config.settings import settings
 
 
 class AuthenticationService:
@@ -158,7 +157,7 @@ class AuthenticationService:
             refresh_token = self.jwt_manager.create_refresh_token()
             refresh_token_hash = self.security_manager.hash_token(refresh_token)
 
-            expires_at = datetime.now(timezone.utc) + timedelta(
+            expires_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
                 days=auth_settings.jwt_refresh_token_expire_days
             )
 
@@ -200,7 +199,7 @@ class AuthenticationService:
             if stored_token.is_revoked:
                 raise RefreshTokenException("Refresh token has been revoked")
 
-            if stored_token.expires_at <= datetime.now(timezone.utc):
+            if stored_token.expires_at <= datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")):
                 raise RefreshTokenException("Refresh token has expired")
 
             user = stored_token.user
@@ -225,7 +224,7 @@ class AuthenticationService:
 
                 await self.refresh_token_repo.revoke_refresh_token(token_hash)
 
-                expires_at = datetime.now(timezone.utc) + timedelta(
+                expires_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
                     days=auth_settings.jwt_refresh_token_expire_days
                 )
 
@@ -312,6 +311,7 @@ class AuthenticationService:
                 return True
 
             reset_token, expires_at = self.token_manager.create_verification_token()
+            reset_token, expires_at = self.token_manager.create_verification_token()
 
             await self.user_repo.update_user(
                 str(user.id),
@@ -339,7 +339,8 @@ class AuthenticationService:
                     select(User).where(
                         and_(
                             User.password_reset_token == reset_data.token,
-                            User.password_reset_expires > datetime.now(timezone.utc),
+                            User.password_reset_expires
+                            > datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
                         )
                     )
                 )

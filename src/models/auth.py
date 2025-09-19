@@ -3,6 +3,7 @@ from pydantic import BaseModel, EmailStr, Field, model_validator
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
+from zoneinfo import ZoneInfo
 
 
 class UserRole(str, Enum):
@@ -182,7 +183,9 @@ class StandardResponse(BaseModel):
     success: bool
     message: str
     data: Optional[Union[Dict[str, Any], List[Dict[str, Any]], Any]] = None
-    timestamp: datetime = Field(default_factory=datetime.now)
+    timestamp: datetime = Field(
+        default_factory=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    )
     request_id: Optional[str] = None
     status_code: int = 200
 
