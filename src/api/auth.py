@@ -27,12 +27,11 @@ async def register(
 ):
     """Register a new user"""
     try:
-        user, verification_token = await auth_service.register_user(registration_data)
+        user = await auth_service.register_user(registration_data)
 
         return {
             "data": user.model_dump(),
             "message": "User registered successfully. Please check your email for verification.",
-            "verification_token": verification_token,
         }
 
     except Exception as e:
@@ -247,7 +246,7 @@ async def resend_verification_email(
         if current_user.email_verified:
             return "Email is already verified"
 
-        verification_token, expires_at = token_manager.create_email_verification_token()
+        verification_token, expires_at = token_manager.create_verification_token()
 
         await auth_service.update_user(
             str(current_user.id),

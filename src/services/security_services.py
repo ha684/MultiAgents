@@ -1,5 +1,5 @@
 # src/utils/security.py
-import jwt
+from jwt import JWT
 import secrets
 import uuid
 from datetime import datetime, timedelta
@@ -56,6 +56,7 @@ class JWTManager:
         self.secret_key = auth_settings.jwt_secret_key
         self.algorithm = auth_settings.jwt_algorithm
         self.issuer = auth_settings.jwt_issuer
+        self.jwt = JWT()
 
     def create_access_token(
         self,
@@ -81,10 +82,10 @@ class JWTManager:
             "exp": expire,
             "iat": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
             "iss": self.issuer,
-            "jti": str(uuid.uuid4()),  # JWT ID for token tracking
+            "jti": str(uuid.uuid4()),
         }
 
-        return jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
+        return self.jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
 
     def create_refresh_token(self) -> str:
         """Create a refresh token (just a secure random string)"""
@@ -93,7 +94,7 @@ class JWTManager:
     def verify_token(self, token: str) -> Optional[TokenData]:
         """Verify and decode a JWT token"""
         try:
-            payload = jwt.decode(
+            payload = self.jwt.decode(
                 token, self.secret_key, algorithms=[self.algorithm], issuer=self.issuer
             )
 
@@ -120,19 +121,13 @@ class JWTManager:
                 iat=payload["iat"],
                 jti=payload["jti"],
             )
-
-        except jwt.ExpiredSignatureError:
-            return None
-        except jwt.InvalidTokenError:
-            return None
         except Exception:
             return None
 
     def get_token_expiry(self, token: str) -> Optional[datetime]:
         """Get the expiry time of a token without full validation"""
         try:
-            # Decode without verification to get expiry
-            payload = jwt.decode(
+            payload = self.jwt.decode(
                 token, options={"verify_signature": False, "verify_exp": False}
             )
             exp_timestamp = payload.get("exp")

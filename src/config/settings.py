@@ -55,6 +55,10 @@ class Settings(BaseSettings):
 
     port: int = 8000
 
+    google_client_id: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")
+    google_client_secret: Optional[str] = os.getenv("GOOGLE_CLIENT_SECRET")
+    google_refresh_token: Optional[str] = os.getenv("GOOGLE_REFRESH_TOKEN")
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )
