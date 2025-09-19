@@ -1,6 +1,7 @@
 # src/services/auth_service.py
 from typing import Optional, List, Any, Tuple
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from src.db.repository.database_session import DatabaseSession
 from src.services.user_service import (
     UserRepository,
@@ -155,7 +156,7 @@ class AuthenticationService:
             refresh_token = self.jwt_manager.create_refresh_token()
             refresh_token_hash = self.security_manager.hash_token(refresh_token)
 
-            expires_at = datetime.now(timezone.utc) + timedelta(
+            expires_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
                 days=auth_settings.jwt_refresh_token_expire_days
             )
 
@@ -197,7 +198,7 @@ class AuthenticationService:
             if stored_token.is_revoked:
                 raise RefreshTokenException("Refresh token has been revoked")
 
-            if stored_token.expires_at <= datetime.now(timezone.utc):
+            if stored_token.expires_at <= datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")):
                 raise RefreshTokenException("Refresh token has expired")
 
             user = stored_token.user
@@ -222,7 +223,7 @@ class AuthenticationService:
 
                 await self.refresh_token_repo.revoke_refresh_token(token_hash)
 
-                expires_at = datetime.now(timezone.utc) + timedelta(
+                expires_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
                     days=auth_settings.jwt_refresh_token_expire_days
                 )
 
@@ -308,7 +309,7 @@ class AuthenticationService:
                 logger.info(f"Password reset requested for non-existent user: {email}")
                 return True
 
-            reset_token, expires_at = self.token_manager.create_password_reset_token()
+            reset_token, expires_at = self.token_manager.create_verification_token()
 
             await self.user_repo.update_user(
                 str(user.id),
@@ -336,7 +337,8 @@ class AuthenticationService:
                     select(User).where(
                         and_(
                             User.password_reset_token == reset_data.token,
-                            User.password_reset_expires > datetime.now(timezone.utc),
+                            User.password_reset_expires
+                            > datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
                         )
                     )
                 )

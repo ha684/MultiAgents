@@ -2,7 +2,8 @@
 import jwt
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Optional
 from passlib.context import CryptContext
 from src.config.auth_settings import auth_settings
@@ -66,9 +67,9 @@ class JWTManager:
     ) -> str:
         """Create a JWT access token"""
         if expires_delta:
-            expire = datetime.now(timezone.utc) + expires_delta
+            expire = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + expires_delta
         else:
-            expire = datetime.now(timezone.utc) + timedelta(
+            expire = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
                 minutes=auth_settings.jwt_access_token_expire_minutes
             )
 
@@ -78,7 +79,7 @@ class JWTManager:
             "role": role.value if isinstance(role, UserRole) else role,
             "session_id": session_id,
             "exp": expire,
-            "iat": datetime.now(timezone.utc),
+            "iat": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
             "iss": self.issuer,
             "jti": str(uuid.uuid4()),  # JWT ID for token tracking
         }
@@ -136,7 +137,9 @@ class JWTManager:
             )
             exp_timestamp = payload.get("exp")
             if exp_timestamp:
-                return datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
+                return datetime.fromtimestamp(
+                    exp_timestamp, tz=ZoneInfo("Asia/Ho_Chi_Minh")
+                )
             return None
         except Exception:
             return None
@@ -149,7 +152,7 @@ class TokenManager:
     def create_verification_token() -> tuple[str, datetime]:
         """Create an verification token with expiry"""
         token = f"{random.randint(100000, 999999):06d}"
-        expires_at = datetime.now(timezone.utc) + timedelta(
+        expires_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
             minutes=auth_settings.email_verification_token_expire_minutes
         )
         return token, expires_at
@@ -157,7 +160,7 @@ class TokenManager:
     @staticmethod
     def is_token_expired(expires_at: datetime) -> bool:
         """Check if a token has expired"""
-        return datetime.now(timezone.utc) > expires_at
+        return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) > expires_at
 
 
 class AccessControlManager:

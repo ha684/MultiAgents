@@ -22,6 +22,7 @@ from src.middleware.response_handler import ResponseHandlerMiddleware
 from src.middleware.exception_handler import exception_handler
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.common.types import HealthCheckResponse
+from zoneinfo import ZoneInfo
 
 
 @asynccontextmanager
@@ -102,7 +103,9 @@ app.exception_handler(RequestValidationError)(exception_handler)
 @app.get("/health")
 async def health_check() -> HealthCheckResponse:
     """Health check endpoint"""
-    return HealthCheckResponse(status="healthy", timestamp=datetime.now())
+    return HealthCheckResponse(
+        status="healthy", timestamp=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    )
 
 
 app.include_router(websocket_router)

@@ -13,9 +13,10 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from src.connector.database_conn import Base
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid_extensions import uuid7
 import enum
+from zoneinfo import ZoneInfo
 
 
 class UserRole(enum.Enum):
@@ -50,12 +51,14 @@ class User(Base):
 
     # Timestamps
     created_at = Column(
-        DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+        nullable=False,
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=datetime.now(timezone.utc),
-        onupdate=datetime.now(timezone.utc),
+        default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+        onupdate=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
         nullable=False,
     )
     last_login_at = Column(DateTime(timezone=True), nullable=True)
@@ -115,7 +118,9 @@ class RefreshToken(Base):
     token_hash = Column(String(255), nullable=False, unique=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(
-        DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+        nullable=False,
     )
     is_revoked = Column(Boolean, default=False, nullable=False)
     revoked_at = Column(DateTime(timezone=True), nullable=True)
@@ -149,10 +154,14 @@ class UserSession(Base):
     ip_address = Column(String(45), nullable=True)
     user_agent = Column(Text, nullable=True)
     created_at = Column(
-        DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+        nullable=False,
     )
     last_activity = Column(
-        DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+        nullable=False,
     )
     expires_at = Column(DateTime(timezone=True), nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
@@ -182,7 +191,9 @@ class Permission(Base):
         String(50), nullable=False
     )  # e.g., 'read', 'write', 'delete', 'manage'
     created_at = Column(
-        DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+        nullable=False,
     )
 
     # Relationships
@@ -218,7 +229,9 @@ class UserPermission(Base):
         UUID(as_uuid=True), nullable=True
     )  # Who granted this permission
     granted_at = Column(
-        DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+        nullable=False,
     )
     expires_at = Column(DateTime(timezone=True), nullable=True)  # Optional expiration
 
@@ -251,7 +264,9 @@ class LoginAttempt(Base):
     success = Column(Boolean, nullable=False)
     failure_reason = Column(String(100), nullable=True)
     attempted_at = Column(
-        DateTime(timezone=True), default=datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True),
+        default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+        nullable=False,
     )
 
     __table_args__ = (

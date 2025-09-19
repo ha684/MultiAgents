@@ -2,7 +2,7 @@
 from typing import Optional, List
 from fastapi import Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from datetime import datetime, timezone
+from datetime import datetime
 from src.models.auth import TokenData, UserRole, AccessControlContext
 from src.db.models.user import User, UserStatus
 from src.services.user_service import UserRepository
@@ -17,6 +17,7 @@ from src.exceptions.auth_exceptions import (
 )
 from src.config.auth_settings import ROLE_PERMISSIONS
 from src.utils.logger_conf import logger
+from zoneinfo import ZoneInfo
 
 security = HTTPBearer(auto_error=False)
 
@@ -131,7 +132,8 @@ def require_permission(resource: str, action: str):
         user_permissions = [
             f"{up.permission.resource}:{up.permission.action}"
             for up in user_with_perms.user_permissions
-            if up.expires_at is None or up.expires_at > datetime.now(timezone.utc)
+            if up.expires_at is None
+            or up.expires_at > datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
         ]
 
         if not access_control.has_resource_access(user_permissions, resource, action):
@@ -201,7 +203,7 @@ async def get_access_context(
 
     for user_perm in user_with_perms.user_permissions:
         if user_perm.expires_at is None or user_perm.expires_at > datetime.now(
-            timezone.utc
+            ZoneInfo("Asia/Ho_Chi_Minh")
         ):
             perm_name = f"{user_perm.permission.resource}:{user_perm.permission.action}"
             permissions.append(perm_name)

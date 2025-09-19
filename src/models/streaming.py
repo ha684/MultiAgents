@@ -2,7 +2,8 @@ from enum import Enum
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 class StreamEventType(Enum):
@@ -28,7 +29,7 @@ class StreamEvent:
         if self.id is None:
             self.id = str(uuid.uuid4())
         if self.timestamp is None:
-            self.timestamp = datetime.now(timezone.utc).isoformat()
+            self.timestamp = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).isoformat()
 
 
 class StreamPhase(Enum):
