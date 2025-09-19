@@ -6,7 +6,7 @@ import uvicorn
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 from src.api.document import router as document_router
 from src.api.knowledge_base import router as knowledge_base_router
 from src.api.chat import router as chat_router
@@ -103,6 +103,24 @@ app.exception_handler(RequestValidationError)(exception_handler)
 async def health_check() -> HealthCheckResponse:
     """Health check endpoint"""
     return HealthCheckResponse(status="healthy", timestamp=datetime.now())
+
+
+@app.get("/", include_in_schema=False, response_class=HTMLResponse)
+def landing():
+    return """
+    <!doctype html>
+    <html>
+        <head><meta charset="utf-8"><title>KMS Service</title></head>
+        <body style="font-family: system-ui; max-width: 720px; margin: 40px auto;">
+        <h1>KMS Service</h1>
+            <ul>
+                <li><a href="/docs">Swagger UI</a></li>
+                <li><a href="/redoc">ReDoc</a></li>
+                <li><a href="/health">Health check</a></li>
+            </ul>
+        </body>
+    </html>
+    """
 
 
 app.include_router(websocket_router)

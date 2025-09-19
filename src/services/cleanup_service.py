@@ -1,7 +1,7 @@
 from datetime import datetime, timezone, timedelta
 from sqlalchemy import select, delete, and_
-from src.db.session import DatabaseSession
-from src.models.user import User, UserStatus
+from src.db.repository.database_session import DatabaseSession
+from src.db.models.user import User, UserStatus
 from src.utils.logger_conf import logger
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -15,7 +15,6 @@ class UserCleanupService:
 
     def setup_cleanup_jobs(self):
         """Setup periodic cleanup jobs"""
-        # Chạy cleanup mỗi ngày lúc 2:00 AM
         self.scheduler.add_job(
             func=self.cleanup_expired_users,
             trigger=CronTrigger(hour=2, minute=0),
@@ -24,7 +23,6 @@ class UserCleanupService:
             replace_existing=True,
         )
 
-        # Chạy cleanup warning mỗi ngày lúc 6:00 PM (gửi email nhắc nhở)
         self.scheduler.add_job(
             func=self.send_verification_reminders,
             trigger=CronTrigger(hour=18, minute=0),
@@ -90,11 +88,8 @@ class UserCleanupService:
         """Send reminder emails to users whose verification will expire soon"""
         try:
             current_time = datetime.now(timezone.utc)
-            # Tìm users sẽ hết hạn trong 24h tới
             reminder_threshold = current_time + timedelta(hours=24)
-
             logger.info("Checking for users needing verification reminders...")
-
             async with DatabaseSession() as session:
                 result = await session.execute(
                     select(User).where(
@@ -115,7 +110,6 @@ class UserCleanupService:
                 reminder_count = len(users_needing_reminder)
                 logger.info(f"Sending verification reminders to {reminder_count} users")
 
-                # TODO: Implement actual email sending
                 for user in users_needing_reminder:
                     await self._send_reminder_email(user)
 
