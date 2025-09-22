@@ -470,19 +470,12 @@ Best regards,
 The Team
             """.strip()
 
-            result = await self.gmail_api.send_message(
+            await self.gmail_api.send_message(
                 to_email=user.email, subject=subject, body=body
             )
-
-            if result:
-                logger.info(f"Verification code sent successfully to {user.email}")
-            else:
-                logger.error(f"Failed to send verification code to {user.email}")
-                raise Exception("Failed to send verification email")
-
         except Exception as e:
             logger.error(f"Failed to send verification email to {user.email}: {str(e)}")
-            raise
+            raise e
 
     async def _send_password_reset_email(self, user: User, reset_token: str) -> None:
         """Send password reset email to user"""
