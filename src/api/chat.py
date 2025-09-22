@@ -7,6 +7,8 @@ from fastapi.responses import StreamingResponse
 from ..common.types import Message
 from src.services.conversation_service import ConversationService
 from src.services.types import SendMessageResponse
+from src.middleware.endpoint_manager import endpoint_protection
+
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 server_instance = ConversationService()
@@ -14,6 +16,13 @@ chat_service = ChatService()
 
 
 @router.post("/ask")
+@endpoint_protection(
+    endpoint_name="/ask",
+    max_concurrent=80,
+    max_queue_size=300,
+    queue_timeout=300,
+    processing_timeout=600,
+)
 async def ask(
     request: ChatRequest,
 ) -> ChatResponse:
@@ -27,6 +36,13 @@ async def ask(
 
 
 @router.post("/ask/sse")
+@endpoint_protection(
+    endpoint_name="/ask/sse",
+    max_concurrent=80,
+    max_queue_size=300,
+    queue_timeout=300,
+    processing_timeout=600,
+)
 async def ask_sse(
     request: ChatRequest,
 ) -> StreamingResponse:

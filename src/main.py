@@ -3,7 +3,7 @@ from datetime import datetime
 import time
 from contextlib import asynccontextmanager
 import uvicorn
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
@@ -24,6 +24,8 @@ from src.middleware.rate_limit import RateLimitMiddleware
 from src.common.types import HealthCheckResponse
 from zoneinfo import ZoneInfo
 from src.middleware.endpoint_manager import endpoint_manager
+from prometheus_fastapi_instrumentator import Instrumentator
+from src.tracking.observability import setup_tracing
 
 
 @asynccontextmanager
@@ -32,6 +34,7 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up application...")
 
     try:
+        setup_tracing(app)
         await database_connector.initialize()
         logger.info("Database connection initialized successfully")
         await vector_storage_migration.run_migrations()
@@ -134,8 +137,10 @@ async def global_health_check():
     return endpoint_manager.get_global_health()
 
 
-@app.get("/health/{endpoint_name}")
-async def endpoint_health_check(endpoint_name: str):
+@app.get("/health/specific")
+async def endpoint_health_check(
+    endpoint_name: str = Query(..., description="Name of the endpoint to check"),
+):
     """Health check for specific endpoint"""
     manager = endpoint_manager.get_protector(endpoint_name)
     if not manager:
@@ -147,6 +152,8 @@ async def endpoint_health_check(endpoint_name: str):
     await manager.start_workers()
     return manager.get_health_status()
 
+
+Instrumentator().instrument(app).expose(app)
 
 app.include_router(websocket_router)
 app.include_router(document_router)

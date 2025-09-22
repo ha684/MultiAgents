@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s # Cứ sau 15 giây sẽ cào dữ liệu một lần
+
+scrape_configs:
+  - job_name: 'kms-app'
+    # FastAPI app của bạn sẽ expose metrics tại /metrics
+    # Prometheus sẽ gọi vào endpoint này của container kms-app
+    static_configs:
+      - targets: ['localhost:8000']

@@ -189,7 +189,6 @@ services:
     environment:
       - REDIS_URI=redis://redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://kms_user:kms_password@postgres:5432/kms_db
-      - SYNC_DATABASE_URL=${SYNC_DATABASE_URL}
       - VECTOR_STORAGE_URL=http://qdrant:6333
       - VECTOR_COLLECTION_NAME=${VECTOR_COLLECTION_NAME}
       - MINIO_ENDPOINT=minio:9000
@@ -214,73 +213,47 @@ services:
       - PYTHONPATH=/app
       - PYTHONDONTWRITEBYTECODE=1
     command: python -m src.worker
-  
-  # ragagent:
-  #   image: hapt
-  #   restart: unless-stopped
-  #   ports:
-  #   - "${RAG_AGENT_PORT:-10000}:${RAG_AGENT_PORT:-10000}"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #     qdrant:
-  #       condition: service_started
-  #     minio:
-  #       condition: service_healthy
-  #     minio-init:
-  #       condition: service_completed_successfully
-  #   environment:
-  #     - DATABASE_URL=${DATABASE_URL}
-  #     - SYNC_DATABASE_URL=${SYNC_DATABASE_URL}
-  #     - MINIO_ENDPOINT=${MINIO_ENDPOINT}
-  #     - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-  #     - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-  #     - MINIO_BUCKET=${MINIO_BUCKET}
-  #     - MINIO_SECURE=${MINIO_SECURE}
-  #     - RERANK_URL=${RERANK_URL}
-  #     - RERANK_API_KEY=${RERANK_API_KEY}
-  #     - TEXT_EMBEDDING_URL=${TEXT_EMBEDDING_URL}
-  #     - TEXT_EMBEDDING_API_KEY=${TEXT_EMBEDDING_API_KEY}
-  #     - TEXT_EMBEDDING_MODEL=${TEXT_EMBEDDING_MODEL}
-  #     - NTQAI_BASE_URL=${NTQAI_BASE_URL}
-  #     - NTQAI_API_KEY=${NTQAI_API_KEY}
-  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
-  #     - OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME}
-  #     - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-  #     - GOOGLE_API_MODEL=${GOOGLE_API_MODEL}
-  #     - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS}
-  #     - RAG_AGENT_PORT=${RAG_AGENT_PORT:-10000}
-  #     - GOOGLE_API_TEMPERATURE=${GOOGLE_API_TEMPERATURE}
-  #     - NTQAI_MODEL=${NTQAI_MODEL}
-  #     - TEMPERATURE=${TEMPERATURE}
-  #     - PYTHONDONTWRITEBYTECODE=1
-  #   command: sh -c "sleep 10 && python -m src.agents.rag_agent.main --port ${RAG_AGENT_PORT:-10000}"
-  #   volumes:
-  #     - ./src:/app/src:cached
-  #     - .:/app:cached
-  # ngrok:
-  #   image: ngrok/ngrok:latest
-  #   container_name: kms-ngrok
-  #   restart: unless-stopped
-  #   ports:
-  #     - "4040:4040" # Port để truy cập giao diện web của Ngrok
-  #   environment:
-  #     # Lấy authtoken từ file .env để bảo mật
-  #     - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
-  #   volumes:
-  #     # Mount file cấu hình ngrok vào container
-  #     - ./ngrok.yml:/etc/ngrok/ngrok.yml
-  #   command: start --all --config /etc/ngrok/ngrok.yml
-  #   depends_on:
-  #     - postgres
-  #     - redis
-  #     - qdrant
-  #     - minio
+    
+  prometheus:
+    image: prom/prometheus:v2.47.1
+    container_name: kms-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./etc/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    depends_on:
+      - kms-worker
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.50
+    container_name: kms-jaeger
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  grafana:
+    image: grafana/grafana-oss:10.1.5
+    container_name: kms-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - jaeger
+
 volumes:
   postgres_data:
   redis_data:
   qdrant_data:
   minio_data:
   # neo4j_data:
+  grafana_data:
