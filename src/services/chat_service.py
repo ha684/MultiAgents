@@ -111,16 +111,6 @@ class ChatService:
             managed_conversation = await self._manage_conversation_length(
                 formatted_conversation
             )
-
-            original_tokens = self.summary_agent.count_tokens(formatted_conversation)
-            managed_tokens = self.summary_agent.count_tokens(managed_conversation)
-
-            if original_tokens != managed_tokens:
-                logger.info(
-                    f"Conversation length managed: {original_tokens} → {managed_tokens} tokens "
-                    f"({len(formatted_conversation)} → {len(managed_conversation)} messages)"
-                )
-
             return managed_conversation
 
         except Exception as e:

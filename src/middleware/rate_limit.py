@@ -1,13 +1,12 @@
 # src/middleware/rate_limiting.py
 import time
 from typing import Dict, Optional, Callable, Any, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime
 from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 import redis
 from src.config.auth_settings import RATE_LIMIT_CONFIG
-from src.exceptions.auth_exceptions import RateLimitExceededException
 from src.services.security_services import jwt_manager
 from src.utils.logger_conf import logger
 from dotenv import load_dotenv
@@ -235,36 +234,3 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return real_ip
 
         return request.client.host if request.client else "unknown"
-
-
-def rate_limit(requests: int, window_minutes: int):
-    """Decorator to apply rate limiting to specific endpoints"""
-
-    def decorator(func):
-        func._rate_limit_config = {
-            "requests": requests,
-            "window": timedelta(minutes=window_minutes),
-        }
-        return func
-
-    return decorator
-
-
-async def check_rate_limit(
-    request: Request,
-    identifier: str,
-    limit: int,
-    window_minutes: int,
-    rate_limiter: Optional[RedisRateLimiter] = None,
-) -> None:
-    """Manual rate limit check for use in endpoints"""
-    limiter = rate_limiter or RedisRateLimiter()
-
-    key = f"manual:{identifier}:{request.url.path}"
-    allowed, limit_info = limiter.is_allowed(key, limit, window_minutes * 60)
-
-    if not allowed:
-        raise RateLimitExceededException(
-            detail=f"Rate limit exceeded. Try again in {limit_info['retry_after']} seconds",
-            retry_after=limit_info["retry_after"],
-        )

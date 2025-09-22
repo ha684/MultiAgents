@@ -23,6 +23,7 @@ from src.middleware.exception_handler import exception_handler
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.common.types import HealthCheckResponse
 from zoneinfo import ZoneInfo
+from src.middleware.endpoint_manager import endpoint_manager
 
 
 @asynccontextmanager
@@ -102,10 +103,31 @@ app.exception_handler(RequestValidationError)(exception_handler)
 
 @app.get("/health")
 async def health_check() -> HealthCheckResponse:
-    """Health check endpoint"""
+    """Health check application"""
     return HealthCheckResponse(
         status="healthy", timestamp=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
     )
+
+
+@app.get("/health/global")
+async def global_health_check():
+    """Global health check for all managed endpoints"""
+    await endpoint_manager.start_all_workers()
+    return endpoint_manager.get_global_health()
+
+
+@app.get("/health/{endpoint_name}")
+async def endpoint_health_check(endpoint_name: str):
+    """Health check for specific endpoint"""
+    manager = endpoint_manager.get_protector(endpoint_name)
+    if not manager:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Endpoint {endpoint_name} not found or not protected",
+        )
+
+    await manager.start_workers()
+    return manager.get_health_status()
 
 
 app.include_router(websocket_router)
