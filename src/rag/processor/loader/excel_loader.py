@@ -14,13 +14,11 @@ import xml.etree.ElementTree as ET
 import os
 import subprocess
 import shutil
-import uuid
 import logging
 from PIL import Image, ImageChops
 from typing import List, Optional
-
+import uuid
 from src.config.settings import settings
-from src.utils.create_uuid import create_uuid
 from src.connector import minio_client
 from src.agents.image_agent import ImageExtractionAgent
 
@@ -598,7 +596,7 @@ class ExcelLoader(BaseLoader):
         return None
 
     def flowchart_loader(self) -> Optional[List]:
-        uuid_obj = create_uuid()
+        uuid_obj = uuid.uuid4()
         data = self.flowchart_create_info(uuid_obj)
         if data is None:
             return None
