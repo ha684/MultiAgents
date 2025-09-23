@@ -19,3 +19,7 @@ tmp/
 .cache/
 
 .DS_Store
+
+*.logs
+
+test.py

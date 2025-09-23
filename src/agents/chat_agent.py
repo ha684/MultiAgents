@@ -21,6 +21,7 @@ from src.models.chat import WebSearchConfig
 from src.services.conversation_service import ConversationService
 from src.common.types import Message
 from src.common.types import TextPart
+from src.tracking.observability import tracer
 
 
 @singleton
@@ -55,93 +56,106 @@ class ChatAgent:
         logger.info(
             f"Retrieving documents for query: {original_query} in knowledgebase: {kb_id}"
         )
-
-        if len(conversation) > 2:
-            contextualized_query = await self.query_context_agent.contextualize_query(
-                history=conversation
-            )
-            logger.info(f"Contextualized query: {contextualized_query}")
-
-        if web_search_config.active:
-            retrieved_docs = await search_service.search(
-                query=contextualized_query,
-                provider=web_search_config.provider,
-                api_key=web_search_config.api_key,
-                max_results=rerank_top,
-            )
-        else:
-            requested_filename = await self.filename_agent.extract_filename(
-                query=original_query
-            )
-
-            filters: Filter = Filter(must=[])
-
-            if requested_filename:
-                logger.info(f"Requested filename: {requested_filename}")
-                cast(List[models.Condition], filters.must).append(
-                    models.FieldCondition(
-                        key="metadata.original_filename",
-                        match=models.MatchText(text=requested_filename),
+        with tracer.start_as_current_span("ChatAgent._retrieve") as span:
+            if len(conversation) > 2:
+                with tracer.start_as_current_span(
+                    "QueryContextAgent.contextualize_query"
+                ):
+                    contextualized_query = (
+                        await self.query_context_agent.contextualize_query(
+                            history=conversation
+                        )
                     )
+                    logger.info(f"Contextualized query: {contextualized_query}")
+                span.set_attribute("contextualized_query", contextualized_query)
+            if web_search_config.active:
+                with tracer.start_as_current_span("search_service.search"):
+                    retrieved_docs = await search_service.search(
+                        query=contextualized_query,
+                        provider=web_search_config.provider,
+                        api_key=web_search_config.api_key,
+                        max_results=rerank_top,
+                    )
+            else:
+                with tracer.start_as_current_span("FilenameAgent.extract_filename"):
+                    requested_filename = await self.filename_agent.extract_filename(
+                        query=original_query
+                    )
+
+                filters: Filter = Filter(must=[])
+
+                if requested_filename:
+                    logger.info(f"Requested filename: {requested_filename}")
+                    cast(List[models.Condition], filters.must).append(
+                        models.FieldCondition(
+                            key="metadata.original_filename",
+                            match=models.MatchText(text=requested_filename),
+                        )
+                    )
+
+                logger.info(f"Filter applied: {filters}")
+                with tracer.start_as_current_span("vector_retrieval.retrieve"):
+                    retrieved_docs = await vector_retrieval.retrieve(
+                        kb_id=str(kb_id),
+                        query=contextualized_query,
+                        filters=filters,
+                        top_k=embed_top,
+                        top_n=rerank_top,
+                    )
+
+            logger.info(
+                f"Retrieved {len(retrieved_docs)} documents for query: {contextualized_query} in knowledgebase: {kb_id}"
+            )
+            span.set_attribute("retrieved_docs", len(retrieved_docs))
+            if len(retrieved_docs) > rerank_top:
+                retrieved_docs = retrieved_docs[:rerank_top]
+
+            texts_list = [doc.page_content for doc in retrieved_docs]
+            encoded_batches = self.tokenizer.encode_batch(
+                text=texts_list, num_threads=4
+            )
+            total_tokens = sum(len(tokens) for tokens in encoded_batches)
+            logger.info(
+                f"Total retrieved documents tokens: {total_tokens} / {max_tokens}"
+            )
+
+            if total_tokens > max_tokens:
+                final_docs = []
+                current_tokens = 0
+                for i, doc in enumerate(retrieved_docs):
+                    doc_tokens = len(encoded_batches[i])
+                    final_docs.append(doc)
+                    current_tokens += doc_tokens
+
+                    if current_tokens + doc_tokens > max_tokens and final_docs:
+                        logger.warning(
+                            f"Token limit ({max_tokens}) reached. "
+                            f"Truncating context from {len(retrieved_docs)} to {len(final_docs)} documents."
+                        )
+                        break
+
+                retrieved_docs = final_docs
+
+            for i, doc in enumerate(retrieved_docs):
+                doc.metadata["original_index"] = i
+
+            if retrieved_docs:
+                with tracer.start_as_current_span("CitationAgent.extract_citations"):
+                    citation_indexes = await self.citation_agent.extract_citations(
+                        history=conversation,
+                        reference=retrieved_docs,
+                    )
+                if citation_indexes.indexes:
+                    cited_docs = [
+                        retrieved_docs[i - 1]
+                        for i in citation_indexes.indexes
+                        if 0 < i <= len(retrieved_docs)
+                    ]
+                logger.info(
+                    f"Extracted {len(cited_docs)} citations for query: {original_query} in knowledgebase: {kb_id}"
                 )
 
-            logger.info(f"Filter applied: {filters}")
-            retrieved_docs = await vector_retrieval.retrieve(
-                kb_id=str(kb_id),
-                query=contextualized_query,
-                filters=filters,
-                top_k=embed_top,
-                top_n=rerank_top,
-            )
-
-        logger.info(
-            f"Retrieved {len(retrieved_docs)} documents for query: {contextualized_query} in knowledgebase: {kb_id}"
-        )
-
-        if len(retrieved_docs) > rerank_top:
-            retrieved_docs = retrieved_docs[:rerank_top]
-
-        texts_list = [doc.page_content for doc in retrieved_docs]
-        encoded_batches = self.tokenizer.encode_batch(text=texts_list, num_threads=4)
-        total_tokens = sum(len(tokens) for tokens in encoded_batches)
-        logger.info(f"Total retrieved documents tokens: {total_tokens} / {max_tokens}")
-
-        if total_tokens > max_tokens:
-            final_docs = []
-            current_tokens = 0
-            for i, doc in enumerate(retrieved_docs):
-                doc_tokens = len(encoded_batches[i])
-                final_docs.append(doc)
-                current_tokens += doc_tokens
-
-                if current_tokens + doc_tokens > max_tokens and final_docs:
-                    logger.warning(
-                        f"Token limit ({max_tokens}) reached. "
-                        f"Truncating context from {len(retrieved_docs)} to {len(final_docs)} documents."
-                    )
-                    break
-
-            retrieved_docs = final_docs
-
-        for i, doc in enumerate(retrieved_docs):
-            doc.metadata["original_index"] = i
-
-        if retrieved_docs:
-            citation_indexes = await self.citation_agent.extract_citations(
-                history=conversation,
-                reference=retrieved_docs,
-            )
-            if citation_indexes.indexes:
-                cited_docs = [
-                    retrieved_docs[i - 1]
-                    for i in citation_indexes.indexes
-                    if 0 < i <= len(retrieved_docs)
-                ]
-            logger.info(
-                f"Extracted {len(cited_docs)} citations for query: {original_query} in knowledgebase: {kb_id}"
-            )
-
-        return cited_docs
+            return cited_docs
 
     async def _retrieve_stream(
         self,
@@ -294,11 +308,12 @@ class ChatAgent:
     ) -> Tuple[Message, List[Dict]]:
         """Handles non-streaming (full text) response."""
         citations = await self._retrieve(conversation, web_search_config, metadata)
-        response = await self.response_agent.generate_response(
-            contexts=citations,
-            history=conversation,
-        )
-        response_dict = response.model_dump()
+        with tracer.start_as_current_span("ResponseAgent.generate_response"):
+            response = await self.response_agent.generate_response(
+                contexts=citations,
+                history=conversation,
+            )
+            response_dict = response.model_dump()
         if web_search_config.active:
             response_dict["response_metadata"]["search_method"] = "web_search"
         else:

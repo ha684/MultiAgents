@@ -17,10 +17,6 @@ class TavilyService(BaseSearchService):
 
         try:
             client = AsyncTavilyClient(api_key=api_key)
-            logger.info(
-                f"Searching Tavily for: '{query}' with max_results={max_results}"
-            )
-
             search_depth = kwargs.get("search_depth", "basic")
             topic = kwargs.get("topic", "general")
             time_range = kwargs.get("time_range", "day")

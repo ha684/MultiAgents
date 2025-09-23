@@ -150,7 +150,6 @@ class ResponseAgent:
             messages_prompt = self._prepare_messages(contexts, history)
             response_chain = messages_prompt | self.llm
             response = await response_chain.ainvoke({})
-            logger.info(f"Response type: {type(response)}")
             return response
 
         except Exception as e:

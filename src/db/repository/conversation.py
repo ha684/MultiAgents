@@ -1,3 +1,4 @@
+# src/db/repository/conversation.py
 """
 Database service layer for handling all database operations
 """
@@ -20,7 +21,7 @@ from src.common.types import (
 )
 from src.services.types import Conversation
 from src.utils.logger_conf import logger
-from .database_session import DatabaseSession
+from src.db.repository.database_session import DatabaseSession
 from src.utils.decorators import singleton
 
 

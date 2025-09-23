@@ -2,7 +2,10 @@
 #     "message": {
 #         "role": "user",
 #         "parts": [
-#             {"type": "text", "text": "i want to know about the weather in Tokyo"}
+#             {
+#                 "type": "text",
+#                 "text": "i want to know about the recent storm coming to viet nam",
+#             }
 #         ],
 #         "metadata": {
 #             "conversation_id": "068c905d-9c89-73d6-8000-20e18c4c8252",
@@ -12,5 +15,5 @@
 #         },
 #     },
 #     "agentic": false,
-#     "web_search": false,
+#     "web_search": true,
 # }

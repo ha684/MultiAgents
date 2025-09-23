@@ -1,3 +1,4 @@
+# src/db/repository/__init__.py
 """
 Database Repository Module
 
@@ -13,7 +14,7 @@ from .conversation import ConversationRepository
 
 __all__ = [
     "KnowledgeBaseRepository",
-    "DocumentRepository", 
+    "DocumentRepository",
     "QARepository",
     "ConversationRepository",
 ]

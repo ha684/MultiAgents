@@ -184,7 +184,6 @@ services:
       # neo4j:
       #   condition: service_healthy
     volumes:
-      - ./src:/app/src:cached
       - .:/app:cached
     environment:
       - REDIS_URI=redis://redis:6379/0

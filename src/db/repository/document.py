@@ -1,3 +1,4 @@
+# src/db/repository/document.py
 import json
 import uuid
 from datetime import datetime
@@ -5,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import select, func
 from src.db.models.document import Document
-from .database_session import DatabaseSession
+from src.db.repository.database_session import DatabaseSession
 from src.models.common import PaginationParams, SearchParams
 from src.models.document import (
     DocumentListResponse,

@@ -1,4 +1,4 @@
-# worker.py
+# src/worker.py
 from src.config.celery_app import celery_app
 from src.utils.logger_conf import logger
 

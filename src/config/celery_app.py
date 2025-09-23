@@ -1,3 +1,4 @@
+# src/config/celery_app.py
 from celery import Celery
 # from src.tasks import file, qac  # noqa: F401
 

@@ -13,6 +13,7 @@ from fastapi import HTTPException
 from src.common.types import Message
 from src.services.utils import get_message_id
 from src.utils.logger_conf import logger
+from src.tracking.observability import tracer
 
 
 @singleton
@@ -120,31 +121,34 @@ class ChatService:
 
     async def ask(self, request: ChatRequest) -> Tuple[Message, List[Dict]]:
         """Process a chat request and return a response."""
-        request = self.sanitize_request(request)
-        if settings.enable_websearch and request.web_search:
-            web_search_config = WebSearchConfig(
-                provider=settings.websearch_provider,
-                active=True,
-                api_key=_get_api_key_for_provider(settings.websearch_provider),
-            )
-        else:
-            web_search_config = WebSearchConfig(active=False)
+        with tracer.start_as_current_span("ChatService.ask") as span:
+            span.set_attribute("user.id", request.message.metadata.get("user_id"))
+            span.set_attribute("kb.id", request.message.metadata.get("kb_id"))
+            request = self.sanitize_request(request)
+            if settings.enable_websearch and request.web_search:
+                web_search_config = WebSearchConfig(
+                    provider=settings.websearch_provider,
+                    active=True,
+                    api_key=_get_api_key_for_provider(settings.websearch_provider),
+                )
+            else:
+                web_search_config = WebSearchConfig(active=False)
 
-        metadata = request.message.metadata
-        conversation = await self.sanitize_message(request.message)
+            metadata = request.message.metadata
+            conversation = await self.sanitize_message(request.message)
 
-        if request.agentic:
-            main_agent = MainAgent(kb_id=metadata.get("kb_id"))
-            initial_state: AgentInputState = {
-                "messages": conversation,
-                "web_search": web_search_config,
-            }
-            response = main_agent.generate_response(initial_state)
-        else:
-            response, sources = await self.chat_agent.ask_normal(
-                conversation, web_search_config, metadata
-            )
-        return response, sources
+            if request.agentic:
+                main_agent = MainAgent(kb_id=metadata.get("kb_id"))
+                initial_state: AgentInputState = {
+                    "messages": conversation,
+                    "web_search": web_search_config,
+                }
+                response = main_agent.generate_response(initial_state)
+            else:
+                response, sources = await self.chat_agent.ask_normal(
+                    conversation, web_search_config, metadata
+                )
+            return response, sources
 
     async def ask_sse(
         self, request: ChatRequest
