@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from src.common.types import Message
 from src.services.types import Conversation
 from src.db.repository.conversation import ConversationRepository
@@ -18,25 +18,20 @@ class ConversationService:
         c = await self.conv_repository.create_conversation(app_name, user_id)
         return c
 
-    async def _list_messages(self, conversation_id: str) -> List[Message | None]:
+    async def _list_messages(self, conversation_id: str) -> Optional[List[Message]]:
         conversation = await self.conv_repository.get_conversation(conversation_id)
         if conversation:
             messages = await self.conv_repository.get_messages(conversation_id)
             return messages
-        return []
+        return conversation
 
     async def _list_conversation(self, user_id: str) -> List[Conversation]:
-        result = await self.conv_repository.list_conversations(user_id)
-        return result
+        return await self.conv_repository.list_conversations(user_id)
 
     async def _delete_conversation(self, conversation_id: str) -> str:
         """Delete a conversation and all related data"""
         result = await self.conv_repository.delete_conversation(conversation_id)
-        return (
-            f"Conversation {conversation_id} deleted successfully"
-            if result
-            else f"Conversation {conversation_id} not found"
-        )
+        return result
 
     async def add_message(self, message: Message, conversation_id: str) -> str:
         """Add a message to the conversation"""

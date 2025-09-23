@@ -28,8 +28,7 @@ async def ask(
 ) -> ChatResponse:
     try:
         response, sources = await chat_service.ask(request)
-        result = ChatResponse(message=response, sources=sources)
-        return result
+        return ChatResponse(message=response, sources=sources)
     except Exception as e:
         logger.exception(e)
         raise HTTPException(status_code=500, detail=f"Error creating message: {str(e)}")

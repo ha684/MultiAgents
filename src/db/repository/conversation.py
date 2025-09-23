@@ -4,7 +4,7 @@ Database service layer for handling all database operations
 """
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import desc, select
 from src.db.models.conversation import (
@@ -68,9 +68,9 @@ class ConversationRepository:
                 )
             return result
 
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting conversation: {e.args[0]}")
-            raise e
+        except SQLAlchemyError:
+            logger.error("Error getting conversation")
+            return None
 
     async def update_conversation(self, conversation: Conversation) -> Conversation:
         """Update a conversation"""
@@ -117,13 +117,12 @@ class ConversationRepository:
                             name=conv_model.name,
                         )
                     )
-
             return conversations
-        except SQLAlchemyError as e:
-            logger.error(f"Error listing conversations: {e.args[0]}")
-            raise e
+        except SQLAlchemyError:
+            logger.error("Error listing conversations")
+            return None
 
-    async def add_message(self, message: Message, conversation_id: str) -> str:
+    async def add_message(self, message: Message, conversation_id: str) -> str | None:
         """Add a message to the database"""
         try:
             async with DatabaseSession() as session:
@@ -140,55 +139,12 @@ class ConversationRepository:
                 )
                 session.add(msg_model)
 
-            return msg_model.id
-        except SQLAlchemyError as e:
-            logger.error(f"Error adding message: {e.args[0]}")
-            raise e
+            return str(msg_model.id)
+        except SQLAlchemyError:
+            logger.error("Error adding message")
+            return None
 
-    async def batch_add_messages(
-        self, messages_with_conversations: List[Tuple[Message, str]]
-    ) -> List[str]:
-        """Batch insert multiple messages for better performance"""
-        if not messages_with_conversations:
-            return []
-
-        try:
-            async with DatabaseSession() as session:
-                messages_by_conversation = {}
-                for message, conv_id in messages_with_conversations:
-                    if conv_id not in messages_by_conversation:
-                        messages_by_conversation[conv_id] = []
-                    messages_by_conversation[conv_id].append(message)
-
-                bulk_data = []
-
-                for conv_id, messages in messages_by_conversation.items():
-                    count_result = await session.execute(
-                        select(MessageModel).filter_by(conversation_id=conv_id)
-                    )
-                    max_order = len(count_result.scalars().all())
-
-                    for i, message in enumerate(messages):
-                        bulk_data.append(
-                            {
-                                "conversation_id": conv_id,
-                                "role": message.role,
-                                "parts": self._serialize_parts(message.parts),
-                                "message_metadata": message.metadata,
-                                "message_order": max_order + i + 1,
-                            }
-                        )
-
-                if bulk_data:
-                    await session.execute(MessageModel.__table__.insert(), bulk_data)
-                    logger.info(f"Batch inserted {len(bulk_data)} messages")
-
-            return [message.id for message in bulk_data]
-        except SQLAlchemyError as e:
-            logger.error(f"Error batch adding messages: {e.args[0]}")
-            raise e
-
-    async def get_messages(self, conversation_id: str) -> List[Message | None]:
+    async def get_messages(self, conversation_id: str) -> Optional[List[Message]]:
         """Get all messages for a conversation"""
         try:
             async with DatabaseSession() as session:
@@ -201,40 +157,9 @@ class ConversationRepository:
 
             return [self._model_to_message(msg) for msg in messages]
 
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting messages: {e.args[0]}")
-            raise e
-
-    async def get_conversation_with_messages(
-        self, conversation_id: str
-    ) -> Tuple[Optional[Conversation], List[Message]]:
-        """Get conversation and its messages in a single transaction - reduces DB round trips"""
-        try:
-            async with DatabaseSession() as session:
-                conv_query = select(ConversationModel).filter_by(id=conversation_id)
-
-                conv_result = await session.execute(conv_query)
-                conv_model = conv_result.scalar_one_or_none()
-                if not conv_model:
-                    return None, []
-
-                msg_result = await session.execute(
-                    select(MessageModel)
-                    .filter_by(conversation_id=conversation_id)
-                    .order_by(MessageModel.message_order)
-                )
-                messages = msg_result.scalars().all()
-
-                conversation = Conversation(
-                    conversation_id=conv_model.id,
-                    is_active=conv_model.is_active,
-                    name=conv_model.name,
-                )
-
-            return conversation, [self._model_to_message(msg) for msg in messages]
-        except SQLAlchemyError as e:
-            logger.error(f"Error getting conversation with messages: {e.args[0]}")
-            raise e
+        except SQLAlchemyError:
+            logger.error("Error getting messages")
+            return None
 
     async def delete_conversation(self, conversation_id: str) -> bool:
         """Delete a conversation and all related data"""
@@ -251,9 +176,9 @@ class ConversationRepository:
                 )
             return True
 
-        except SQLAlchemyError as e:
-            logger.error(f"Error deleting conversation {conversation_id}: {e.args[0]}")
-            raise e
+        except SQLAlchemyError:
+            logger.error(f"Error deleting conversation {conversation_id}")
+            return False
 
     def _serialize_parts(self, parts: List[Part]) -> List[Dict[str, Any]]:
         """Serialize message parts to JSON"""

@@ -115,9 +115,7 @@ class ChatService:
             return managed_conversation
 
         except Exception as e:
-            raise HTTPException(
-                status_code=500, detail=f"Error sanitizing message: {e}"
-            )
+            raise e
 
     async def ask(self, request: ChatRequest) -> Tuple[Message, List[Dict]]:
         """Process a chat request and return a response."""

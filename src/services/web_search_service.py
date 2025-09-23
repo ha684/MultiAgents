@@ -18,9 +18,6 @@ class SearchService:
             SearchProvider.TAVILY: TavilyService(),
             SearchProvider.FIRECRAWL: FireCrawlService(),
         }
-        logger.info(
-            f"UnifiedSearchService initialized with providers: {list(self._providers.keys())}",
-        )
 
     async def search(
         self,

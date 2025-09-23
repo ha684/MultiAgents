@@ -49,6 +49,8 @@ class ResponseHandlerMiddleware(BaseHTTPMiddleware):
 
         try:
             original_data = json.loads(response_body.decode())
+
+            # Check if response is already wrapped (has "success" field)
             if isinstance(original_data, dict) and "success" in original_data:
                 headers = {
                     k: v
@@ -61,9 +63,19 @@ class ResponseHandlerMiddleware(BaseHTTPMiddleware):
                     headers=headers,
                 )
 
-            wrapped_data = self._create_envelope(
-                data=original_data, status_code=response.status_code, request=request
-            )
+            # Handle HTTPException responses properly
+            if isinstance(original_data, dict) and "detail" in original_data:
+                wrapped_data = self._create_envelope(
+                    data=original_data,
+                    status_code=response.status_code,
+                    request=request,
+                )
+            else:
+                wrapped_data = self._create_envelope(
+                    data=original_data,
+                    status_code=response.status_code,
+                    request=request,
+                )
 
             headers = {
                 k: v
@@ -90,15 +102,21 @@ class ResponseHandlerMiddleware(BaseHTTPMiddleware):
     def _create_envelope(
         self, data: Any, status_code: int, request: Request
     ) -> Dict[str, Any]:
-        """Create standard response handler"""
+        """Create standard response envelope"""
         is_success = 200 <= status_code < 400
+
+        # Handle HTTPException detail properly
+        if isinstance(data, dict) and "detail" in data and not is_success:
+            error_detail = data["detail"]
+        else:
+            error_detail = data if not is_success else None
 
         envelope = {
             "success": is_success,
             "status_code": status_code,
             "message": self._get_default_message(status_code, is_success),
             "data": data if is_success else None,
-            "error": data if not is_success else None,
+            "error": error_detail,
             "timestamp": self._get_timestamp(),
             "path": request.url.path,
         }
@@ -109,7 +127,7 @@ class ResponseHandlerMiddleware(BaseHTTPMiddleware):
         return envelope
 
     def _get_default_message(self, status_code: int, is_success: bool) -> str:
-        """Create default message based on status code handler"""
+        """Create default message based on status code"""
         if is_success:
             return "Request successful"
 
@@ -124,5 +142,5 @@ class ResponseHandlerMiddleware(BaseHTTPMiddleware):
         return error_messages.get(status_code, "Request failed")
 
     def _get_timestamp(self) -> str:
-        """Create timestamp in ISO format handler"""
+        """Create timestamp in ISO format"""
         return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).isoformat()

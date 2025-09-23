@@ -184,7 +184,7 @@ services:
       # neo4j:
       #   condition: service_healthy
     volumes:
-      - .:/app:cached
+      - ../:/app:cached
     environment:
       - REDIS_URI=redis://redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://kms_user:kms_password@postgres:5432/kms_db
@@ -219,7 +219,7 @@ services:
     ports:
       - "9090:9090"
     volumes:
-      - ./etc/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ../etc/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
     depends_on:
