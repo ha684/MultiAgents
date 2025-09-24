@@ -32,7 +32,6 @@ async def get_current_user_token(
     token_data = jwt_manager.verify_token(credentials.credentials)
     if not token_data:
         raise InvalidTokenException()
-
     return token_data
 
 

@@ -8,7 +8,6 @@ from src.models.document import (
     DocumentUploadResponse,
     DocumentListResponse,
     DocumentProcessingStatusResponse,
-    BatchUploadResponse,
 )
 from src.models.common import PaginationParams, SearchParams
 from src.models.qa import DocumentQAResponse
@@ -114,9 +113,7 @@ async def list_documents(
             knowledge_base_id, pagination, search
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to list documents: {str(e)}"
-        )
+        raise e
 
 
 @router.delete("/{document_id}", response_model=dict)
@@ -126,11 +123,9 @@ async def delete_document(document_id: uuid.UUID) -> dict:
     """
     try:
         await document_service.delete_document(document_id)
+        return {"detail": "Document deleted successfully"}
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to delete document: {str(e)}"
-        )
-    return {"detail": "Document deleted successfully"}
+        raise e
 
 
 @router.patch("/{document_id}/active", response_model=DocumentResponse)
@@ -143,38 +138,7 @@ async def toggle_document_active(
     try:
         return await document_service.toggle_document_active(document_id, active)
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to toggle document active: {str(e)}"
-        )
-
-
-@router.post("/batch/upload_and_process", response_model=BatchUploadResponse)
-async def batch_upload_and_process(
-    knowledge_base_id: uuid.UUID,
-    tenant_id: Optional[str] = None,
-    files: List[UploadFile] = File(...),
-) -> BatchUploadResponse:
-    """
-    Upload and process multiple documents to a knowledge base in a single request.
-    """
-
-    try:
-        successful, failed, results = await document_service.batch_upload_and_process(
-            knowledge_base_id=knowledge_base_id, files=files, tenant_id=tenant_id
-        )
-
-        return BatchUploadResponse(
-            knowledge_base_id=knowledge_base_id,
-            total_documents=len(files),
-            successful=successful,
-            failed=failed,
-            results=results,
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to process batch upload: {str(e)}"
-        )
+        raise e
 
 
 @router.get("/{document_id}/qa")

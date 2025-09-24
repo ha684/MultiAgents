@@ -16,7 +16,6 @@ dependencies = [
     "html-text>=0.7.0",
     "html-to-markdown>=1.4.0",
     "huggingface-hub>=0.32.4",
-    "jwt>=1.4.0",
     "langchain-anthropic>=0.3.15",
     "langchain-community>=0.3.25",
     "langchain-huggingface>=0.3.0",
@@ -64,6 +63,7 @@ dependencies = [
     "opentelemetry-sdk>=1.37.0",
     "opentelemetry-exporter-otlp-proto-http>=1.37.0",
     "opentelemetry-instrumentation-fastapi>=0.58b0",
+    "pyjwt>=2.10.1",
 ]
 
 [tool.ruff]

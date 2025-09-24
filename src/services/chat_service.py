@@ -9,11 +9,12 @@ from src.agents.researcher.main_agent import MainAgent, AgentInputState
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from src.services.conversation_service import ConversationService
 from src.agents.summary_agent import SummaryAgent
-from fastapi import HTTPException
 from src.common.types import Message
 from src.services.utils import get_message_id
 from src.utils.logger_conf import logger
 from src.tracking.observability import tracer
+from src.exceptions.chat_exceptions import ValidationError, ConversationNotFoundError
+import uuid
 
 
 @singleton
@@ -36,19 +37,26 @@ class ChatService:
     def sanitize_request(self, request: ChatRequest):
         """Sanitize the request"""
         if not request.message.metadata:
-            raise HTTPException(status_code=400, detail="Metadata is required")
+            raise ValidationError(message="Metadata is required")
 
-        required_fields = [
-            "conversation_id",
-            "kb_id",
-            "user_id",
-            "app_name",
-        ]
+        required_fields = ["conversation_id", "kb_id", "user_id"]
 
         metadata = request.message.metadata
         for field_name in required_fields:
-            if not metadata.get(field_name):
-                raise HTTPException(status_code=400, detail=f"{field_name} is required")
+            field_value = metadata.get(field_name)
+            if not field_value:
+                raise ValidationError(message=f"{field_name} is required")
+
+            if field_name in ["conversation_id", "kb_id"]:
+                if isinstance(field_value, str):
+                    try:
+                        uuid.UUID(field_value)
+                    except ValueError:
+                        raise ValidationError(
+                            message=f"{field_name} must be a valid UUID"
+                        )
+                elif not isinstance(field_value, uuid.UUID):
+                    raise ValidationError(message=f"{field_name} must be a valid UUID")
 
         return request
 
@@ -95,17 +103,21 @@ class ChatService:
     async def sanitize_message(self, message: Message) -> List[BaseMessage]:
         """Sanitize the message and manage conversation length."""
         conversation_id = message.metadata.get("conversation_id")
+        user_id = message.metadata.get("user_id")
         try:
-            conversation_history = await self.conv_service._list_messages(
-                conversation_id
+            conversation_history = await self.conv_service.list_messages(
+                conversation_id, user_id
             )
-            if conversation_history:
-                last_message_id = get_message_id(conversation_history[-1])
-                if last_message_id:
-                    message.metadata.update({"last_message_id": last_message_id})
 
-            await self.conv_service.add_message(message, conversation_id)
-            conversation_history.append(message)
+            if conversation_history is None:
+                raise ConversationNotFoundError(conversation_id=conversation_id)
+
+            last_message_id = get_message_id(conversation_history[-1])
+            if last_message_id:
+                message.metadata.update({"last_message_id": last_message_id})
+
+            await self.conv_service.add_message(message, conversation_id, user_id)
+            conversation_history.append(message)  # type: ignore
 
             formatted_conversation = self._format_history(conversation_history)
 

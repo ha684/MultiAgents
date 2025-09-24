@@ -23,6 +23,7 @@ from src.services.types import Conversation
 from src.utils.logger_conf import logger
 from src.db.repository.database_session import DatabaseSession
 from src.utils.decorators import singleton
+import uuid
 
 
 @singleton
@@ -50,11 +51,15 @@ class ConversationRepository:
             logger.error(f"Error creating conversation: {e.args[0]}")
             raise e
 
-    async def get_conversation(self, conversation_id: str) -> Optional[Conversation]:
+    async def get_conversation(
+        self, conversation_id: uuid.UUID, user_id: str
+    ) -> Optional[Conversation]:
         """Get a conversation by ID"""
         try:
             async with DatabaseSession() as session:
-                query = select(ConversationModel).filter_by(id=conversation_id)
+                query = select(ConversationModel).filter_by(
+                    id=conversation_id, user_id=user_id
+                )
                 result = await session.execute(query)
                 conv_model = result.scalar_one_or_none()
                 if not conv_model:
@@ -68,16 +73,18 @@ class ConversationRepository:
                 )
             return result
 
-        except SQLAlchemyError:
+        except SQLAlchemyError as e:
             logger.error("Error getting conversation")
-            return None
+            raise e
 
-    async def update_conversation(self, conversation: Conversation) -> Conversation:
+    async def update_conversation(
+        self, conversation: Conversation, user_id: str
+    ) -> Conversation:
         """Update a conversation"""
         try:
             async with DatabaseSession() as session:
                 query = select(ConversationModel).filter_by(
-                    id=conversation.conversation_id
+                    id=conversation.conversation_id, user_id=user_id
                 )
 
                 result = await session.execute(query)
@@ -107,7 +114,6 @@ class ConversationRepository:
                 query = query.order_by(desc(ConversationModel.updated_at))
                 result = await session.execute(query)
                 conv_models = result.scalars().all()
-
                 conversations = []
                 for conv_model in conv_models:
                     conversations.append(
@@ -118,11 +124,13 @@ class ConversationRepository:
                         )
                     )
             return conversations
-        except SQLAlchemyError:
+        except SQLAlchemyError as e:
             logger.error("Error listing conversations")
-            return None
+            raise e
 
-    async def add_message(self, message: Message, conversation_id: str) -> str | None:
+    async def add_message(
+        self, message: Message, conversation_id: uuid.UUID
+    ) -> str | None:
         """Add a message to the database"""
         try:
             async with DatabaseSession() as session:
@@ -140,11 +148,11 @@ class ConversationRepository:
                 session.add(msg_model)
 
             return str(msg_model.id)
-        except SQLAlchemyError:
+        except SQLAlchemyError as e:
             logger.error("Error adding message")
-            return None
+            raise e
 
-    async def get_messages(self, conversation_id: str) -> Optional[List[Message]]:
+    async def get_messages(self, conversation_id: uuid.UUID) -> List[Message]:
         """Get all messages for a conversation"""
         try:
             async with DatabaseSession() as session:
@@ -157,15 +165,19 @@ class ConversationRepository:
 
             return [self._model_to_message(msg) for msg in messages]
 
-        except SQLAlchemyError:
+        except SQLAlchemyError as e:
             logger.error("Error getting messages")
-            return None
+            raise e
 
-    async def delete_conversation(self, conversation_id: str) -> bool:
+    async def delete_conversation(
+        self, conversation_id: uuid.UUID, user_id: str
+    ) -> bool:
         """Delete a conversation and all related data"""
         try:
             async with DatabaseSession() as session:
-                query = select(ConversationModel).filter_by(id=conversation_id)
+                query = select(ConversationModel).filter_by(
+                    id=conversation_id, user_id=user_id
+                )
                 result = await session.execute(query)
                 conversation = result.scalar_one_or_none()
                 if not conversation:
@@ -176,9 +188,9 @@ class ConversationRepository:
                 )
             return True
 
-        except SQLAlchemyError:
+        except SQLAlchemyError as e:
             logger.error(f"Error deleting conversation {conversation_id}")
-            return False
+            raise e
 
     def _serialize_parts(self, parts: List[Part]) -> List[Dict[str, Any]]:
         """Serialize message parts to JSON"""

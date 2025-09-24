@@ -68,11 +68,8 @@ class SummaryAgent:
             conversation_text = self._format_messages_for_summary(messages)
             system_prompt = SystemMessage(content=SUMMARY_PROMPT_TEMPLATE)
             user_prompt = HumanMessage(
-                content=f"""Please analyze and summarize the following conversation history:
-
-{conversation_text}
-
-Extract the key insights, main topics, important context, and recent context that should be preserved."""
+                content=f"""Please analyze and summarize the following conversation history:{conversation_text}
+                        Extract the key insights, main topics, important context, and recent context that should be preserved."""
             )
 
             summary_prompt = ChatPromptTemplate.from_messages(

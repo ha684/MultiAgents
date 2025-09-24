@@ -5,9 +5,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, select
 
-from src.common.gmail_api import GmailAPI
 from src.config.auth_settings import auth_settings
-from src.config.settings import settings
 from src.db.models.user import User, UserStatus
 from src.db.repository.database_session import DatabaseSession
 from src.exceptions.auth_exceptions import (
@@ -36,6 +34,7 @@ from src.services.user_service import (
     RefreshTokenRepository,
     UserRepository,
 )
+from src.services.utils import send_password_reset_email
 from src.utils.logger_conf import logger
 
 
@@ -46,11 +45,6 @@ class AuthenticationService:
         self.user_repo = UserRepository()
         self.refresh_token_repo = RefreshTokenRepository()
         self.login_attempt_repo = LoginAttemptRepository()
-        self.gmail_api = GmailAPI(
-            client_id=settings.google_client_id,
-            client_secret=settings.google_client_secret,
-            refresh_token=settings.google_refresh_token,
-        )
         self.jwt_manager = jwt_manager
         self.security_manager = security_manager
         self.token_manager = token_manager
@@ -63,7 +57,6 @@ class AuthenticationService:
         try:
             logger.info(f"Registering new user: {registration_data.email}")
             new_user = await self.user_repo.create_user(registration_data)
-            await self._send_verification_email(new_user)
             logger.info(f"User registered successfully: {new_user.id}")
             return UserProfileResponse(
                 id=str(new_user.id),
@@ -311,7 +304,6 @@ class AuthenticationService:
                 return True
 
             reset_token, expires_at = self.token_manager.create_verification_token()
-            reset_token, expires_at = self.token_manager.create_verification_token()
 
             await self.user_repo.update_user(
                 str(user.id),
@@ -321,7 +313,7 @@ class AuthenticationService:
                 },
             )
 
-            await self._send_password_reset_email(user, reset_token)
+            await send_password_reset_email(user, reset_token)
 
             logger.info(f"Password reset requested for user: {user.id}")
             return True
@@ -446,73 +438,6 @@ class AuthenticationService:
         except Exception as e:
             logger.error(f"Token validation failed: {str(e)}")
             return None
-
-    async def _send_verification_email(self, user: User) -> None:
-        """Send verification code email to user"""
-        try:
-            subject = "Your Email Verification Code"
-            verification_code = user.email_verification_token
-
-            body = f"""
-Hello {user.full_name},
-
-Thank you for registering with our service!
-
-Your email verification code is: {verification_code}
-
-Please enter this code on the verification page to complete your registration.
-
-This verification code will expire on {user.email_verification_expires.strftime("%Y-%m-%d %H:%M:%S UTC")}.
-
-If you didn't create this account, you can safely ignore this email.
-
-Best regards,
-The Team
-            """.strip()
-
-            await self.gmail_api.send_message(
-                to_email=user.email, subject=subject, body=body
-            )
-        except Exception as e:
-            logger.error(f"Failed to send verification email to {user.email}: {str(e)}")
-            raise e
-
-    async def _send_password_reset_email(self, user: User, reset_token: str) -> None:
-        """Send password reset email to user"""
-        try:
-            subject = "Your Password Reset Code"
-
-            body = f"""
-            Hello {user.full_name},
-
-            Thank you for requesting a password reset!
-
-            Your password reset code is: {reset_token}
-
-            Please enter this code on the password reset page to complete your password reset.
-
-            This password reset code will expire on {user.password_reset_expires.strftime("%Y-%m-%d %H:%M:%S UTC")}.
-
-            If you didn't request a password reset, you can safely ignore this email.
-
-            Best regards,
-            The Team
-            """.strip()
-
-            result = await self.gmail_api.send_message(
-                to_email=user.email, subject=subject, body=body
-            )
-
-            if result:
-                logger.info(f"Password reset email sent to {user.email}")
-            else:
-                logger.error(f"Failed to send password reset email to {user.email}")
-                raise Exception("Failed to send password reset email")
-        except Exception as e:
-            logger.error(
-                f"Failed to send password reset email to {user.email}: {str(e)}"
-            )
-            raise
 
     async def update_user(self, user_id: str, update_data: dict) -> UserProfileResponse:
         """Update user profile"""

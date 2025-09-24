@@ -13,7 +13,6 @@ from src.models.auth import (
 from src.db.models.user import User
 from src.services.auth_service import AuthenticationService
 from src.auth.dependencies import get_current_user, require_admin
-from src.utils.logger_conf import logger
 from src.services.security_services import token_manager
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -35,7 +34,6 @@ async def register(
         }
 
     except Exception as e:
-        logger.error(f"Registration failed: {str(e)}")
         raise e
 
 
@@ -54,8 +52,7 @@ async def login(
         }
 
     except Exception as e:
-        logger.error(f"Login failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.post("/refresh")
@@ -75,8 +72,7 @@ async def refresh_token(
         }
 
     except Exception as e:
-        logger.error(f"Token refresh failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.post("/logout")
@@ -94,8 +90,7 @@ async def logout(
             return "Logout failed - token not found"
 
     except Exception as e:
-        logger.error(f"Logout failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.post("/logout-all")
@@ -110,8 +105,7 @@ async def logout_all_sessions(
         return f"Logged out from {revoked_count} sessions"
 
     except Exception as e:
-        logger.error(f"Logout all sessions failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.get("/profile")
@@ -126,8 +120,7 @@ async def get_profile(
         return profile.model_dump()
 
     except Exception as e:
-        logger.error(f"Get profile failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.put("/profile")
@@ -159,8 +152,7 @@ async def update_profile(
         ).model_dump()
 
     except Exception as e:
-        logger.error(f"Profile update failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.post("/password/change")
@@ -181,8 +173,7 @@ async def change_password(
             return "Password change failed"
 
     except Exception as e:
-        logger.error(f"Password change failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.post("/password/reset")
@@ -197,8 +188,7 @@ async def request_password_reset(
         return "If the email exists, a password reset link has been sent"
 
     except Exception as e:
-        logger.error(f"Password reset request failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.post("/password/reset/confirm")
@@ -216,8 +206,7 @@ async def confirm_password_reset(
             return "Password reset failed"
 
     except Exception as e:
-        logger.error(f"Password reset confirmation failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.post("/email/verify")
@@ -232,8 +221,7 @@ async def verify_email(
         return user.model_dump()
 
     except Exception as e:
-        logger.error(f"Email verification failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.post("/email/resend-verification")
@@ -262,8 +250,7 @@ async def resend_verification_email(
         return "Verification email sent"
 
     except Exception as e:
-        logger.error(f"Resend verification email failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.get("/users")
@@ -299,8 +286,7 @@ async def list_users(
         return users_data
 
     except Exception as e:
-        logger.error(f"List users failed: {str(e)}")
-        raise
+        raise e
 
 
 @router.get("/validate")

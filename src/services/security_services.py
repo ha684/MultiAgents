@@ -1,5 +1,4 @@
 # src/utils/security.py
-from jwt import JWT
 import secrets
 import uuid
 from datetime import datetime, timedelta
@@ -11,6 +10,7 @@ from src.models.auth import TokenData, UserRole
 import hashlib
 import hmac
 import random
+import jwt
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -56,7 +56,6 @@ class JWTManager:
         self.secret_key = auth_settings.jwt_secret_key
         self.algorithm = auth_settings.jwt_algorithm
         self.issuer = auth_settings.jwt_issuer
-        self.jwt = JWT()
 
     def create_access_token(
         self,
@@ -67,25 +66,27 @@ class JWTManager:
         expires_delta: Optional[timedelta] = None,
     ) -> str:
         """Create a JWT access token"""
+        now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+
         if expires_delta:
-            expire = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + expires_delta
+            expire = now + expires_delta
         else:
-            expire = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
+            expire = now + timedelta(
                 minutes=auth_settings.jwt_access_token_expire_minutes
             )
 
         to_encode = {
             "user_id": user_id,
             "email": email,
-            "role": role.value if isinstance(role, UserRole) else role,
+            "role": role.value,
             "session_id": session_id,
-            "exp": expire,
-            "iat": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+            "exp": int(expire.timestamp()),
+            "iat": int(now.timestamp()),
             "iss": self.issuer,
             "jti": str(uuid.uuid4()),
         }
 
-        return self.jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
+        return jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
 
     def create_refresh_token(self) -> str:
         """Create a refresh token (just a secure random string)"""
@@ -94,7 +95,7 @@ class JWTManager:
     def verify_token(self, token: str) -> Optional[TokenData]:
         """Verify and decode a JWT token"""
         try:
-            payload = self.jwt.decode(
+            payload = jwt.decode(
                 token, self.secret_key, algorithms=[self.algorithm], issuer=self.issuer
             )
 
@@ -127,7 +128,7 @@ class JWTManager:
     def get_token_expiry(self, token: str) -> Optional[datetime]:
         """Get the expiry time of a token without full validation"""
         try:
-            payload = self.jwt.decode(
+            payload = jwt.decode(
                 token, options={"verify_signature": False, "verify_exp": False}
             )
             exp_timestamp = payload.get("exp")

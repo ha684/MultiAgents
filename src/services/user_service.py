@@ -27,6 +27,7 @@ from src.exceptions.auth_exceptions import (
 )
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
+from src.services.utils import send_verification_email
 
 
 @singleton
@@ -64,14 +65,15 @@ class UserRepository:
                 session.add(new_user)
                 await session.flush()
                 await session.refresh(new_user)
+                await send_verification_email(new_user)
 
             await self.assign_default_permissions(new_user.id)
 
             return new_user
 
         except Exception as e:
-            logger.error(f"Error creating user: {str(e)}")
-            if isinstance(e, (UserAlreadyExistsException,)):
+            logger.error("Error creating user")
+            if isinstance(e, UserAlreadyExistsException):
                 raise
             raise DatabaseException("Failed to create user")
 

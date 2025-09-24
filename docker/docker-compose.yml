@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:15
-    container_name: kms-postgres
+    container_name: postgres
     environment:
       POSTGRES_USER: kms_user
       POSTGRES_PASSWORD: kms_password
@@ -18,7 +18,7 @@ services:
 
   # neo4j:
   #   image: neo4j:5.26-community
-  #   container_name: kms-neo4j
+  #   container_name: neo4j
   #   ports:
   #     - "${NEO4J_HTTP_PORT:-7474}:7474"
   #     - "${NEO4J_BOLT_PORT:-7687}:7687"
@@ -36,7 +36,7 @@ services:
 
   redis:
     image: redis:7
-    container_name: kms-redis
+    container_name: redis
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
@@ -49,7 +49,7 @@ services:
 
   qdrant:
     image: qdrant/qdrant:latest
-    container_name: kms-qdrant
+    container_name: qdrant
     ports:
       - "${QDRANT_HTTP_PORT:-6333}:6333"
       - "${QDRANT_GRPC_PORT:-6334}:6334"
@@ -60,7 +60,7 @@ services:
 
   minio:
     image: minio/minio:latest
-    container_name: kms-minio
+    container_name: minio
     ports:
       - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
@@ -78,7 +78,7 @@ services:
 
   minio-init:
     image: minio/mc:latest
-    container_name: kms-minio-init
+    container_name: minio-init
     depends_on:
       minio:
         condition: service_healthy
@@ -96,68 +96,9 @@ services:
       exit 0;
       "
 
-  # kms-app:
-  #   image: hapt
-  #   restart: unless-stopped
-  #   ports:
-  #     - "${PORT:-8000}:8000"
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #     redis:
-  #       condition: service_healthy
-  #     qdrant:
-  #       condition: service_started
-  #     minio:
-  #       condition: service_healthy
-  #     minio-init:
-  #       condition: service_completed_successfully
-  #     # neo4j:
-  #     #   condition: service_healthy
-  #   volumes:
-  #     - ./src:/app/src:cached
-  #     - ./logs:/app/logs
-  #     - .:/app:cached
-  #   environment:
-  #     - REDIS_URI=redis://redis:6379/0
-  #     - DATABASE_URL=${DATABASE_URL}
-  #     - SYNC_DATABASE_URL=${SYNC_DATABASE_URL}
-  #     - VECTOR_STORAGE_URL=http://qdrant:6333
-  #     - VECTOR_COLLECTION_NAME=${VECTOR_COLLECTION_NAME}
-  #     - MINIO_ENDPOINT=${MINIO_ENDPOINT}
-  #     - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-  #     - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-  #     - MINIO_BUCKET=${MINIO_BUCKET}
-  #     - MINIO_SECURE=${MINIO_SECURE}
-  #     - RERANK_URL=${RERANK_URL}
-  #     - RERANK_API_KEY=${RERANK_API_KEY}
-  #     - TEXT_EMBEDDING_URL=${TEXT_EMBEDDING_URL}
-  #     - TEXT_EMBEDDING_API_KEY=${TEXT_EMBEDDING_API_KEY}
-  #     - TEXT_EMBEDDING_MODEL=${TEXT_EMBEDDING_MODEL}
-  #     - NTQAI_BASE_URL=${NTQAI_BASE_URL}
-  #     - NTQAI_API_KEY=${NTQAI_API_KEY}
-  #     - OPENAI_API_KEY=${OPENAI_API_KEY}
-  #     - OPENAI_MODEL_NAME=${OPENAI_MODEL_NAME}
-  #     - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-  #     - GOOGLE_API_MODEL=${GOOGLE_API_MODEL}
-  #     - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS}
-  #     - GOOGLE_API_TEMPERATURE=${GOOGLE_API_TEMPERATURE}
-  #     - NTQAI_MODEL=${NTQAI_MODEL}
-  #     - TEMPERATURE=${TEMPERATURE}
-  #     - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-  #     - PYTHONPATH=/app
-  #     - PYTHONDONTWRITEBYTECODE=1
-  #   command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload 
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-  #     interval: 30s
-  #     timeout: 100s
-  #     retries: 3
-  #     start_period: 40s
-
   # nginx:
   #   image: nginx:alpine
-  #   container_name: kms-nginx
+  #   container_name: nginx
   #   ports:
   #     - "8080:80"
   #   volumes:
@@ -165,7 +106,7 @@ services:
   #   depends_on:
   #     - kms-app
 
-  kms-worker:
+  worker:
     image: hapt 
     restart: unless-stopped
     depends_on:
@@ -179,10 +120,6 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
-      # kms-app:
-      #   condition: service_healthy
-      # neo4j:
-      #   condition: service_healthy
     volumes:
       - ../:/app:cached
     environment:
@@ -215,7 +152,7 @@ services:
     
   prometheus:
     image: prom/prometheus:v2.47.1
-    container_name: kms-prometheus
+    container_name: prometheus
     ports:
       - "9090:9090"
     volumes:
@@ -223,11 +160,11 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
     depends_on:
-      - kms-worker
+      - worker
 
   jaeger:
     image: jaegertracing/all-in-one:1.50
-    container_name: kms-jaeger
+    container_name: jaeger
     ports:
       - "16686:16686"
       - "4317:4317"
@@ -237,7 +174,7 @@ services:
 
   grafana:
     image: grafana/grafana-oss:10.1.5
-    container_name: kms-grafana
+    container_name: grafana
     ports:
       - "3000:3000"
     environment:

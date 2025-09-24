@@ -1,15 +1,11 @@
 # src/services/document_service.py
-import os
 import uuid
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple, Dict, Any
-from fastapi import UploadFile, HTTPException
+from fastapi import UploadFile
 from src.db import document_repository, knowledge_base_repository, qa_repository
 from src.models.document import (
-    DocumentProcessingRequest,
     DocumentStatusEnum,
-    BatchProcessingRequest,
-    BatchOperationResult,
     DocumentProcessingStatusResponse,
     DocumentListResponse,
 )
@@ -30,6 +26,11 @@ from src.services.metadata_extractor import (
     combine_filters,
     build_search_query_from_metadata,
     aggregate_related_documents_with_reasons,
+)
+from src.exceptions.chat_exceptions import ValidationError
+from src.exceptions.document_exceptions import (
+    DocumentProcessingError,
+    DocumentNotFoundError,
 )
 
 
@@ -52,9 +53,7 @@ class DocumentService:
     async def _get_file_info(self, file: UploadFile) -> Tuple[str, str]:
         """Extract file information without saving to disk."""
         if not file.filename:
-            raise HTTPException(
-                status_code=400, detail="Invalid file upload. Filename is required."
-            )
+            raise ValidationError(message="Invalid file upload. Filename is required.")
 
         file_extension = Path(file.filename).suffix.lower()
         unique_filename = f"{uuid.uuid4()}{file_extension}"
@@ -122,8 +121,8 @@ class DocumentService:
 
             if not task_id:
                 logger.error(f"Failed to queue document {document.id} for processing")
-                raise HTTPException(
-                    status_code=500, detail="Failed to queue document for processing"
+                raise DocumentProcessingError(
+                    message="Failed to queue document for processing"
                 )
 
             logger.info(
@@ -134,78 +133,15 @@ class DocumentService:
 
         except Exception as e:
             logger.exception(f"Error uploading document: {str(e)}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to upload document: {str(e)}"
+            raise DocumentProcessingError(
+                message=f"Failed to upload document: {str(e)}"
             )
-
-    async def process_existing_document(
-        self, request: DocumentProcessingRequest
-    ) -> Tuple[Document, str]:
-        """Process an existing document that's already uploaded to Minio."""
-        await self._verify_knowledge_base_exists(request.knowledge_base_id)
-
-        document = None
-        if request.id:
-            document = await self.document_repository.get(request.id)
-
-        if not document:
-            document = await self.document_repository.create(
-                id=request.id,
-                knowledge_base_id=request.knowledge_base_id,
-                description=request.description,
-                filename=os.path.basename(request.file_path),
-                original_filename=request.filename,
-                file_path=request.file_path,
-                file_size=None,
-                file_type=Path(request.file_path).suffix.lstrip(".").lower(),
-                mime_type=None,
-                uploaded_by=str(request.tenant_id),
-                doc_metadata=request.metadata,
-            )
-        else:
-            if document.status in [
-                DocumentStatusEnum.PENDING,
-                DocumentStatusEnum.PROCESSING,
-            ]:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Document is already being processed or is pending.",
-                )
-            document = await self.document_repository.update(
-                document_id=document.id,
-                update_data={
-                    "file_path": request.file_path,
-                    "doc_metadata": request.metadata,
-                    "description": request.description,
-                    "original_filename": request.filename,
-                },
-            )
-
-        if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
-        if document.file_path is None:
-            raise HTTPException(
-                status_code=400, detail="Document file path is required for processing"
-            )
-        if document.knowledge_base_id is None:
-            raise HTTPException(
-                status_code=400, detail="Document must belong to a knowledge base"
-            )
-
-        task_id = self.file_processor.process_files(str(document.id))
-
-        if not task_id:
-            raise HTTPException(
-                status_code=500, detail="Failed to queue document for processing"
-            )
-
-        return document, task_id
 
     async def get_document(self, document_id: uuid.UUID) -> Document:
         """Get document details."""
         document = await self.document_repository.get(document_id)
         if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
+            raise DocumentNotFoundError(message="Document not found")
         return document
 
     async def get_document_status(
@@ -214,18 +150,18 @@ class DocumentService:
         """Get document processing status."""
         status = await self.document_repository.get_status(document_id)
         if not status:
-            raise HTTPException(status_code=404, detail="Document not found")
+            raise DocumentNotFoundError(message="Document not found")
         return status
 
     async def get_multiple_document_status(self, document_ids: List[uuid.UUID]):
         """Get processing status for multiple documents."""
         if not document_ids:
-            raise HTTPException(status_code=400, detail="Document IDs are required")
+            raise ValidationError(message="Document IDs are required")
 
         statuses = await self.document_repository.get_multiple_status(document_ids)
         if not statuses:
-            raise HTTPException(
-                status_code=404, detail="No documents found with the provided IDs"
+            raise DocumentNotFoundError(
+                message="No documents found with the provided IDs"
             )
         return statuses
 
@@ -247,7 +183,7 @@ class DocumentService:
         """Delete a document."""
         document = await self.document_repository.get(document_id)
         if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
+            raise DocumentNotFoundError(message="Document not found")
 
         try:
             if document.total_chunks > 0:
@@ -264,27 +200,25 @@ class DocumentService:
         """Activate or deactivate a document."""
         document = await self.document_repository.get(document_id)
         if not document:
-            raise HTTPException(status_code=404, detail="Document not found")
+            raise DocumentNotFoundError(message="Document not found")
 
         try:
             if document.status != DocumentStatusEnum.FINISHED:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Document must be processed before it can be activated/deactivated",
+                raise ValidationError(
+                    message="Document must be processed before it can be activated/deactivated",
                 )
 
             if document.total_chunks == 0:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Document has no chunks, cannot toggle active status",
+                raise ValidationError(
+                    message="Document has no chunks, cannot toggle active status",
                 )
 
             updated_document = await self.document_repository.update(
                 document_id=document_id, update_data={"is_inactive": not active}
             )
             if not updated_document:
-                raise HTTPException(
-                    status_code=500, detail="Failed to update document status"
+                raise DocumentProcessingError(
+                    message="Failed to update document status"
                 )
 
             await vector_storage.update_chunks_status_by_doc_id(
@@ -294,159 +228,7 @@ class DocumentService:
             return updated_document
         except Exception as e:
             logger.exception(f"Error updating document status: {str(e)}")
-            raise HTTPException(
-                status_code=500, detail="Failed to update document status"
-            )
-
-    async def batch_upload_and_process(
-        self,
-        knowledge_base_id: uuid.UUID,
-        files: List[UploadFile],
-        tenant_id: Optional[str] = None,
-    ) -> Tuple[int, int, List[BatchOperationResult]]:
-        """Upload and process multiple documents."""
-        await self._verify_knowledge_base_exists(knowledge_base_id)
-
-        if not files:
-            raise HTTPException(status_code=400, detail="No files provided")
-
-        results = []
-        successful = 0
-        failed = 0
-
-        try:
-            for file in files:
-                result = BatchOperationResult(
-                    id=None,
-                    filename=file.filename or "unknown",
-                    status=DocumentStatusEnum.FAILED,
-                )
-
-                try:
-                    if not file.filename:
-                        result.error = "Invalid file upload. Filename is required."
-                        results.append(result)
-                        failed += 1
-                        continue
-
-                    unique_filename, file_type = await self._get_file_info(file)
-
-                    minio_object_path, file_size = await self._upload_to_minio(
-                        file,
-                        knowledge_base_id,
-                        unique_filename,
-                        file.content_type or "application/octet-stream",
-                    )
-
-                except Exception as e:
-                    logger.exception(f"Error processing file {file.filename}: {str(e)}")
-                    result.error = f"Failed to process file: {str(e)}"
-                    failed += 1
-
-                results.append(result)
-
-            return successful, failed, results
-
-        except Exception as e:
-            logger.exception(f"Error in batch upload: {str(e)}")
-            raise HTTPException(
-                status_code=500, detail=f"Failed to process batch upload: {str(e)}"
-            )
-
-    async def batch_process_documents(
-        self, request: BatchProcessingRequest
-    ) -> Tuple[int, int, List[BatchOperationResult]]:
-        """Process multiple existing documents."""
-        await self._verify_knowledge_base_exists(request.knowledge_base_id)
-
-        if not request.documents:
-            raise HTTPException(status_code=400, detail="No documents provided")
-
-        results = []
-        successful = 0
-        failed = 0
-
-        for doc_item in request.documents:
-            result = BatchOperationResult(
-                id=doc_item.id,
-                filename=doc_item.filename,
-                status=DocumentStatusEnum.FAILED,
-            )
-
-            try:
-                document = None
-                # Create or get the document record
-                if doc_item.id:
-                    document = await self.document_repository.get(doc_item.id)
-
-                if not document:
-                    # Create new document
-                    document = await self.document_repository.create(
-                        id=doc_item.id,
-                        knowledge_base_id=request.knowledge_base_id,
-                        filename=os.path.basename(doc_item.file_path),
-                        description=doc_item.description,
-                        original_filename=doc_item.filename,
-                        file_path=doc_item.file_path,
-                        file_size=None,
-                        file_type=Path(doc_item.file_path).suffix.lstrip(".").lower(),
-                        mime_type=None,
-                        uploaded_by=str(request.tenant_id)
-                        if request.tenant_id
-                        else None,
-                        doc_metadata=doc_item.metadata,
-                    )
-                else:
-                    if document.status in [
-                        DocumentStatusEnum.PENDING,
-                        DocumentStatusEnum.PROCESSING,
-                    ]:
-                        result.error = (
-                            "Document is already being processed or is pending"
-                        )
-                        results.append(result)
-                        failed += 1
-                        continue
-
-                    # Update existing document
-                    document = await self.document_repository.update(
-                        document_id=document.id,
-                        update_data={
-                            "file_path": doc_item.file_path,
-                            "doc_metadata": doc_item.metadata,
-                            "description": doc_item.description,
-                            "original_filename": doc_item.filename,
-                        },
-                    )
-
-                if not document:
-                    result.error = "Failed to create or update document record"
-                    results.append(result)
-                    failed += 1
-                    continue
-
-                # Queue the processing task
-                task_id = self.file_processor.process_files(str(document.id))
-
-                if task_id:
-                    result.id = document.id
-                    result.status = DocumentStatusEnum.PENDING
-                    result.task_id = task_id
-                    successful += 1
-                else:
-                    result.error = "Failed to queue document for processing"
-                    failed += 1
-
-            except Exception as e:
-                logger.exception(
-                    f"Error processing document {doc_item.filename}: {str(e)}"
-                )
-                result.error = f"Failed to process document: {str(e)}"
-                failed += 1
-
-            results.append(result)
-
-        return successful, failed, results
+            raise DocumentProcessingError(message="Failed to update document status")
 
     async def get_document_qa_pairs(
         self, document_id: uuid.UUID
@@ -454,9 +236,7 @@ class DocumentService:
         """Get question-answer pairs for a document."""
         qa_pairs = await self.qa_repository.get_qa_by_doc_id(document_id)
         if not qa_pairs:
-            raise HTTPException(
-                status_code=404, detail="No QA pairs found for this document"
-            )
+            raise DocumentNotFoundError(message="No QA pairs found for this document")
         return qa_pairs
 
     # async def get_related_document_ids(

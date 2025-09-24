@@ -166,4 +166,4 @@ app.include_router(auth_router)
 if __name__ == "__main__":
     host = "0.0.0.0"
     logger.info(f"Starting server on host={host}, port={settings.port}")
-    uvicorn.run("src.main:app", host=host, port=settings.port, reload=True)
+    uvicorn.run("src.main:app", host=host, port=settings.port)
