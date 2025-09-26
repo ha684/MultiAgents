@@ -279,3 +279,19 @@ class DocumentRepository:
         except SQLAlchemyError as e:
             logger.error(f"Error deleting document: {e.args[0]}")
             raise e
+
+    async def find_by_hash(
+        self, kb_id: uuid.UUID, content_hash: str
+    ) -> Optional[Document]:
+        try:
+            async with DatabaseSession() as session:
+                result = await session.execute(
+                    select(Document).where(
+                        Document.knowledge_base_id == kb_id,
+                        Document.content_hash == content_hash,
+                    )
+                )
+            return result.scalars().first()
+        except SQLAlchemyError as e:
+            logger.error(f"Error finding document by hash: {e.args[0]}")
+            raise e

@@ -1,5 +1,5 @@
 # src/api/document.py
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, UploadFile, File
 from typing import List, Optional, Sequence, Dict, Any
 import uuid
 from src.models.document import (
@@ -45,9 +45,7 @@ async def upload_document(
         )
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to upload document: {str(e)}"
-        )
+        raise e
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)
@@ -58,7 +56,7 @@ async def get_document(document_id: uuid.UUID) -> DocumentResponse:
     try:
         return await document_service.get_document(document_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get document: {str(e)}")
+        raise e
 
 
 @router.get("/{document_id}/status", response_model=DocumentProcessingStatusResponse)
@@ -71,9 +69,7 @@ async def get_document_status(
     try:
         return await document_service.get_document_status(document_id)
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get document status: {str(e)}"
-        )
+        raise e
 
 
 @router.post("/status")
@@ -86,9 +82,7 @@ async def get_document_status_by_ids(
     try:
         return await document_service.get_multiple_document_status(document_ids)
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get multiple document status: {str(e)}"
-        )
+        raise e
 
 
 @router.get("", response_model=DocumentListResponse)
@@ -149,9 +143,7 @@ async def get_qa_pairs(document_id: uuid.UUID) -> Sequence[DocumentQAResponse]:
     try:
         return await document_service.get_document_qa_pairs(document_id)
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to get document QA pairs: {str(e)}"
-        )
+        raise e
 
 
 @router.post("/{document_id}/related")
@@ -182,6 +174,4 @@ async def get_related_documents(
         }
 
     except Exception as e:
-        raise HTTPException(
-            status_code=500, detail=f"Failed to find related documents: {str(e)}"
-        )
+        raise e

@@ -2,7 +2,7 @@ from graphiti_core import Graphiti
 from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
 from src.config.settings import settings
-from .custom_reranker import CustomRerankerClient
+from src.rag.graph.custom_reranker import CustomRerankerClient
 
 llm_config = LLMConfig(
     small_model=settings.ntqai_model,

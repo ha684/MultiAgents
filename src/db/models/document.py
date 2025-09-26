@@ -1,6 +1,14 @@
 # src/db/models/document.py
 from src.connector.database_conn import Base
-from sqlalchemy import String, Integer, Boolean, DateTime, ForeignKey, Index
+from sqlalchemy import (
+    String,
+    Integer,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    UniqueConstraint,
+)
 from datetime import datetime
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
@@ -100,11 +108,17 @@ class Document(Base):
         "DocumentQA", back_populates="document", cascade="all, delete-orphan"
     )
 
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
     __table_args__ = (
         Index("idx_doc_kb_status", "knowledge_base_id", "status", "is_inactive"),
         Index("idx_doc_filename", "filename"),
         Index("idx_doc_processing", "status", "created_at"),
         Index("idx_doc_uploader", "uploaded_by", "created_at"),
+        Index("idx_doc_content_hash", "content_hash"),
+        UniqueConstraint(
+            "knowledge_base_id", "content_hash", name="uq_kb_content_hash"
+        ),
     )
 
 

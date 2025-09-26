@@ -1,9 +1,10 @@
 # src/models/auth.py
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
 from zoneinfo import ZoneInfo
+from src.exceptions.auth_exceptions import PasswordValidationException
 
 
 class UserRole(str, Enum):
@@ -25,7 +26,7 @@ class UserRegistrationRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     full_name: Optional[str] = Field(None, max_length=100)
 
-    @model_validator(mode="after")
+    @field_validator("password")
     def validate_password_comprehensive(self):
         """Validate password with all errors at once"""
         password = self.password
@@ -48,7 +49,7 @@ class UserRegistrationRequest(BaseModel):
 
         if errors:
             error_message = ". ".join(errors)
-            raise ValueError(error_message)
+            raise PasswordValidationException(message=error_message)
 
         return self
 
@@ -71,10 +72,10 @@ class PasswordResetConfirmRequest(BaseModel):
     token: str
     new_password: str = Field(..., min_length=8, max_length=128)
 
-    @model_validator(mode="after")
+    @field_validator("new_password")
     def validate_password_comprehensive(self):
         """Validate password with all errors at once"""
-        password = self.password
+        password = self.new_password
         errors = []
 
         if len(password) < 8:
@@ -94,7 +95,7 @@ class PasswordResetConfirmRequest(BaseModel):
 
         if errors:
             error_message = ". ".join(errors)
-            raise ValueError(error_message)
+            raise PasswordValidationException(message=error_message)
 
         return self
 

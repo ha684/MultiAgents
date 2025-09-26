@@ -4,6 +4,15 @@ from src.exceptions.base import BaseException
 from typing import Optional
 
 
+class PasswordValidationException(BaseException):
+    def __init__(self, message: str):
+        super().__init__(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            message=message,
+            error_code="PASSWORD_VALIDATION_ERROR",
+        )
+
+
 # Authentication Exceptions
 class InvalidCredentialsException(BaseException):
     def __init__(self, message: str = "Invalid email or password"):

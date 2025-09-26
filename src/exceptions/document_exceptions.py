@@ -22,3 +22,14 @@ class DocumentNotFoundError(BaseException):
             error_code="DOCUMENT_NOT_FOUND",
             status_code=status.HTTP_404_NOT_FOUND,
         )
+
+
+class DuplicateDocumentError(BaseException):
+    """Raised when a duplicate document is found"""
+
+    def __init__(self, message: str):
+        super().__init__(
+            message=message,
+            error_code="DUPLICATE_DOCUMENT",
+            status_code=status.HTTP_409_CONFLICT,
+        )

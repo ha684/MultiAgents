@@ -18,12 +18,12 @@ from src.config.settings import settings
 from src.utils.logger_conf import logger
 from src.connector import database_connector
 from src.rag.vector import vector_storage_migration
+from src.middleware.endpoint_manager import endpoint_manager
 from src.middleware.response_handler import ResponseHandlerMiddleware
 from src.middleware.exception_handler import exception_handler
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.common.types import HealthCheckResponse
 from zoneinfo import ZoneInfo
-from src.middleware.endpoint_manager import endpoint_manager
 from prometheus_fastapi_instrumentator import Instrumentator
 from src.tracking.observability import setup_tracing
 

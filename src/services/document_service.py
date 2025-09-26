@@ -31,7 +31,9 @@ from src.exceptions.chat_exceptions import ValidationError
 from src.exceptions.document_exceptions import (
     DocumentProcessingError,
     DocumentNotFoundError,
+    DuplicateDocumentError,
 )
+from src.utils.hash_calculator import calculate_hash_from_stream
 
 
 @singleton
@@ -97,10 +99,17 @@ class DocumentService:
     ) -> Tuple[Document, str]:
         """Upload a document and queue it for processing."""
         await self._verify_knowledge_base_exists(knowledge_base_id)
+        content_hash = await calculate_hash_from_stream(file)
+        existing_document = await self.document_repository.find_by_hash(
+            knowledge_base_id, content_hash
+        )
 
+        if existing_document:
+            raise DuplicateDocumentError(
+                message=f"Document with identical content already exists as '{existing_document.original_filename}'."
+            )
         try:
             unique_filename, file_type = await self._get_file_info(file)
-
             minio_object_path, file_size = await self._upload_to_minio(
                 file, knowledge_base_id, unique_filename
             )

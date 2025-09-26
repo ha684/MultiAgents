@@ -9,11 +9,8 @@ import redis
 from src.config.auth_settings import RATE_LIMIT_CONFIG
 from src.services.security_services import jwt_manager
 from src.utils.logger_conf import logger
-from dotenv import load_dotenv
 import os
 from zoneinfo import ZoneInfo
-
-load_dotenv()
 
 
 class RedisRateLimiter:
