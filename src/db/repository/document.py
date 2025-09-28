@@ -35,6 +35,7 @@ class DocumentRepository:
         uploaded_by: Optional[str] = None,
         id: Optional[uuid.UUID] = None,
         doc_metadata: Optional[Dict[str, Any]] = None,
+        content_hash: Optional[str] = None,
     ) -> Document:
         """Create a new document"""
         try:
@@ -51,6 +52,7 @@ class DocumentRepository:
                     uploaded_by=uploaded_by,
                     status="pending",
                     doc_metadata=json.dumps(doc_metadata) if doc_metadata else None,
+                    content_hash=content_hash,
                 )
 
                 session.add(document)

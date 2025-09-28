@@ -39,17 +39,21 @@ class User(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid7, index=True)
     email = Column(String(255), unique=True, index=True, nullable=False)
-    username = Column(String(50), nullable=False)
+    username = Column(String(50), unique=True, index=True, nullable=False)
     full_name = Column(String(100), nullable=True)
-    hashed_password = Column(String(255), nullable=False)
 
-    # Role and permissions
+    hashed_password = Column(String(255), nullable=True)
+
+    auth_provider = Column(String(20), default="local", nullable=False)
+
+    avatar_url = Column(String(500), nullable=True)
+
     role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
+
     status = Column(
         Enum(UserStatus), default=UserStatus.PENDING_VERIFICATION, nullable=False
     )
 
-    # Timestamps
     created_at = Column(
         DateTime(timezone=True),
         default=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
@@ -63,7 +67,6 @@ class User(Base):
     )
     last_login_at = Column(DateTime(timezone=True), nullable=True)
 
-    # Account verification
     email_verified = Column(Boolean, default=False, nullable=False)
     email_verification_token = Column(String(255), nullable=True)
     email_verification_expires = Column(DateTime(timezone=True), nullable=True)
@@ -72,9 +75,7 @@ class User(Base):
     password_reset_token = Column(String(255), nullable=True)
     password_reset_expires = Column(DateTime(timezone=True), nullable=True)
 
-    # OAuth integration
     google_id = Column(String(100), nullable=True, unique=True)
-    github_id = Column(String(100), nullable=True, unique=True)
 
     # Security
     failed_login_attempts = Column(Integer, default=0)
@@ -96,11 +97,21 @@ class User(Base):
         Index("idx_user_role_status", "role", "status"),
         Index("idx_user_last_login", "last_login_at"),
         Index("idx_user_oauth_google", "google_id"),
-        Index("idx_user_oauth_github", "github_id"),
+        Index("idx_user_auth_provider", "auth_provider"),
     )
 
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, role={self.role.value})>"
+
+    @property
+    def is_oauth_user(self):
+        """Check if user is OAuth user"""
+        return self.auth_provider in ["google"]
+
+    @property
+    def can_change_password(self):
+        """Check if user can change password (only local users)"""
+        return self.auth_provider == "local" and self.hashed_password is not None
 
 
 class RefreshToken(Base):

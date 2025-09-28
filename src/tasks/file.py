@@ -27,7 +27,6 @@ from src.utils.logger_conf import logger
 from src.db import document_repository
 from src.db.models.document import Document as DBDocument
 from langchain_core.documents import Document as LangchainDocument
-from src.agents.chunk_contextual_agent import chunk_context_agent
 from src.services.metadata_extractor import extract_metadata_from_text_or_document
 
 _loop = None
@@ -154,15 +153,6 @@ async def _process_document_async(
             if not chunks:
                 logger.warning(f"No chunks extracted from document {document_id}")
             logger.info(f"Extracted {len(chunks)} chunks in {chunk_time:.2f}s")
-
-            contextual_time = time.time()
-            chunks = await chunk_context_agent.contextualize_chunks(
-                chunks, total_context_chunks=8
-            )
-            contextual_time = time.time() - contextual_time
-            logger.info(
-                f"Contextualized {len(chunks)} chunks in {contextual_time:.2f}s"
-            )
 
             doc_metadata = await _get_document_metadata(document)
 

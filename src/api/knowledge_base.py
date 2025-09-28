@@ -1,7 +1,7 @@
 # src/api/knowledge_base.py
 from typing import List, Sequence
 from uuid import UUID
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from langchain_core.documents import Document
 from src.models.knowledge_base import (
     KnowledgeBaseCreateRequest,
@@ -32,7 +32,7 @@ async def get_list_knowledge_bases_for_admin(
     try:
         return await kb_service.list_knowledge_bases_all(skip, limit)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e
 
 
 @router.post("/user")
@@ -48,7 +48,7 @@ async def get_list_knowledge_bases_for_user(
     try:
         return await kb_service.list_knowledge_bases(request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e
 
 
 @router.post("/create")
@@ -58,7 +58,7 @@ async def create_knowledge_base(
     try:
         return await kb_service.create_knowledge_base(knowledge_base)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e
 
 
 @router.get("/{kb_id}")
@@ -75,7 +75,7 @@ async def get_knowledge_base_by_id(kb_id: str) -> KnowledgeBaseResponse:
     try:
         return await kb_service.get_knowledge_base_by_id(kb_id)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e
 
 
 @router.post("/{kb_id}/query")
@@ -93,7 +93,7 @@ async def query_knowledge_base(kb_id: str, query: str) -> List[Document]:
     try:
         return await kb_service.query_knowledge_base(kb_id, query)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e
 
 
 @router.delete("/{kb_id}", response_model=dict)
@@ -116,7 +116,7 @@ async def delete_knowledge_base(request: KnowledgeBaseDeleteRequest) -> dict:
     try:
         return await kb_service.delete_knowledge_base(request)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e
 
 
 @router.get("/{kb_id}/qa")
@@ -135,7 +135,7 @@ async def get_qa_pairs_by_kb_id(
     try:
         return await kb_service.get_qa_pairs_by_kb_id(kb_id, limit)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e
 
 
 @router.put("/{kb_id}/update")
@@ -154,4 +154,4 @@ async def update_knowledge_base(
     try:
         return await kb_service.update_knowledge_base(knowledge_base)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise e

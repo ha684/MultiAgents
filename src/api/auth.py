@@ -1,5 +1,5 @@
 # src/api/auth.py
-from fastapi import APIRouter, Depends, Request, Body
+from fastapi import APIRouter, Depends, Body
 from src.models.auth import (
     UserRegistrationRequest,
     UserLoginRequest,
@@ -10,20 +10,29 @@ from src.models.auth import (
     EmailVerificationRequest,
     UserProfileResponse,
 )
+from src.exceptions.auth_exceptions import WrongIssuerException
 from src.db.models.user import User
 from src.services.auth_service import AuthenticationService
 from src.auth.dependencies import get_current_user, require_admin
 from src.services.security_services import token_manager
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from datetime import datetime
+from zoneinfo import ZoneInfo
+from pydantic import BaseModel
+from src.config.settings import settings
+
+
+class GoogleOAuthRequest(BaseModel):
+    id_token: str
+
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 auth_service = AuthenticationService()
 
 
 @router.post("/register")
-async def register(
-    request: Request,
-    registration_data: UserRegistrationRequest,
-):
+async def register(registration_data: UserRegistrationRequest):
     """Register a new user"""
     try:
         user = await auth_service.register_user(registration_data)
@@ -37,27 +46,97 @@ async def register(
         raise e
 
 
-@router.post("/login")
-async def login(
-    request: Request,
-    login_data: UserLoginRequest,
-):
-    """Authenticate user and return JWT tokens"""
+@router.post("/google")
+async def google_oauth_login(oauth_data: GoogleOAuthRequest):
+    """Login/Register with Google OAuth"""
     try:
-        token_response = await auth_service.authenticate_user(login_data)
+        idinfo = id_token.verify_oauth2_token(
+            oauth_data.id_token, google_requests.Request(), settings.google_client_id
+        )
+
+        if idinfo["iss"] not in ["accounts.google.com", "https://accounts.google.com"]:
+            raise ValueError("Wrong issuer.")
+
+        google_user_id = idinfo["sub"]
+        email = idinfo["email"]
+        full_name = idinfo.get("name", "")
+        email_verified = idinfo.get("email_verified", False)
+        picture = idinfo.get("picture", "")
+
+        existing_user = await auth_service.get_user_by_email(email)
+
+        if existing_user:
+            if existing_user.auth_provider == "local":
+                await auth_service.link_google_account(
+                    existing_user.id, google_user_id, picture
+                )
+                user = existing_user
+            elif existing_user.auth_provider == "google":
+                if existing_user.google_id != google_user_id:
+                    raise WrongIssuerException()
+                user = existing_user
+            else:
+                raise WrongIssuerException(
+                    message=f"Email already exists with {existing_user.auth_provider} provider"
+                )
+        else:
+            user_data = {
+                "email": email,
+                "username": email.split("@")[0],
+                "full_name": full_name,
+                "auth_provider": "google",
+                "google_id": google_user_id,
+                "avatar_url": picture,
+                "email_verified": email_verified,
+                "status": "active" if email_verified else "pending_verification",
+            }
+
+            user = await auth_service.create_oauth_user(user_data)
+
+        await auth_service.update_user(
+            str(user.id), {"last_login_at": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))}
+        )
+        token_response = await auth_service.generate_tokens(user)
 
         return {
             "data": token_response.model_dump(),
-            "message": "Login successful",
+            "message": "Google OAuth login successful",
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "username": user.username,
+                "full_name": user.full_name,
+                "avatar_url": user.avatar_url,
+                "auth_provider": user.auth_provider,
+            },
         }
+    except Exception as e:
+        raise e
 
+
+@router.post("/login")
+async def login(login_data: UserLoginRequest):
+    """Authenticate user and return JWT tokens"""
+    try:
+        user, token_response = await auth_service.authenticate_user(login_data)
+        return {
+            "data": token_response.model_dump(),
+            "message": "Google OAuth login successful",
+            "user": {
+                "id": str(user.id),
+                "email": user.email,
+                "username": user.username,
+                "full_name": user.full_name,
+                "avatar_url": user.avatar_url,
+                "auth_provider": user.auth_provider,
+            },
+        }
     except Exception as e:
         raise e
 
 
 @router.post("/refresh")
 async def refresh_token(
-    request: Request,
     refresh_data: TokenRefreshRequest,
 ):
     """Refresh access token using refresh token"""
@@ -76,10 +155,7 @@ async def refresh_token(
 
 
 @router.post("/logout")
-async def logout(
-    request: Request,
-    refresh_token: str = Body(..., embed=True),
-):
+async def logout(refresh_token: str = Body(..., embed=True)):
     """Logout user by revoking refresh token"""
     try:
         success = await auth_service.logout_user(refresh_token)
@@ -95,7 +171,6 @@ async def logout(
 
 @router.post("/logout-all")
 async def logout_all_sessions(
-    request: Request,
     current_user: User = Depends(get_current_user),
 ):
     """Logout user from all sessions"""
@@ -110,7 +185,6 @@ async def logout_all_sessions(
 
 @router.get("/profile")
 async def get_profile(
-    request: Request,
     current_user: User = Depends(get_current_user),
 ):
     """Get current user profile with permissions"""
@@ -125,7 +199,6 @@ async def get_profile(
 
 @router.put("/profile")
 async def update_profile(
-    request: Request,
     profile_data: dict = Body(...),
     current_user: User = Depends(get_current_user),
 ):
@@ -157,7 +230,6 @@ async def update_profile(
 
 @router.post("/password/change")
 async def change_password(
-    request: Request,
     password_data: PasswordChangeRequest,
     current_user: User = Depends(get_current_user),
 ):
@@ -178,7 +250,6 @@ async def change_password(
 
 @router.post("/password/reset")
 async def request_password_reset(
-    request: Request,
     reset_data: PasswordResetRequest,
 ):
     """Request password reset"""
@@ -193,7 +264,6 @@ async def request_password_reset(
 
 @router.post("/password/reset/confirm")
 async def confirm_password_reset(
-    request: Request,
     reset_data: PasswordResetConfirmRequest,
 ):
     """Confirm password reset with token"""
@@ -211,7 +281,6 @@ async def confirm_password_reset(
 
 @router.post("/email/verify")
 async def verify_email(
-    request: Request,
     verification_data: EmailVerificationRequest,
 ):
     """Verify user email with token"""
@@ -226,7 +295,6 @@ async def verify_email(
 
 @router.post("/email/resend-verification")
 async def resend_verification_email(
-    request: Request,
     current_user: User = Depends(get_current_user),
 ):
     """Resend email verification"""
@@ -255,7 +323,6 @@ async def resend_verification_email(
 
 @router.get("/users")
 async def list_users(
-    request: Request,
     page: int = 1,
     size: int = 10,
     admin_user: User = Depends(require_admin),
@@ -290,9 +357,7 @@ async def list_users(
 
 
 @router.get("/validate")
-async def validate_token(
-    request: Request, current_user: User = Depends(get_current_user)
-):
+async def validate_token(current_user: User = Depends(get_current_user)):
     """Validate current token and return user info"""
     return {
         "data": {

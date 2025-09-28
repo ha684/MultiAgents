@@ -1,5 +1,5 @@
 # src/api/document.py
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Request, HTTPException
 from typing import List, Optional, Sequence, Dict, Any
 import uuid
 from src.models.document import (
@@ -12,6 +12,7 @@ from src.models.document import (
 from src.models.common import PaginationParams, SearchParams
 from src.models.qa import DocumentQAResponse
 from src.services.document_service import DocumentService
+from src.utils.logger_conf import logger
 
 router = APIRouter(prefix="/documents", tags=["Document"])
 document_service = DocumentService()
@@ -19,6 +20,7 @@ document_service = DocumentService()
 
 @router.post("/upload_and_process", response_model=DocumentUploadResponse)
 async def upload_document(
+    request: Request,
     knowledge_base_id: uuid.UUID,
     tenant_id: Optional[str] = None,
     file: UploadFile = File(...),
@@ -27,6 +29,15 @@ async def upload_document(
     """
     Upload a document to a knowledge base.
     """
+    MAX_FILE_SIZE = 100 * 1024 * 1024
+
+    content_length = request.headers.get("content-length")
+    logger.info(f"Content length: {content_length}")
+    if content_length and int(content_length) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size allowed is {MAX_FILE_SIZE // (1024 * 1024)}MB",
+        )
 
     try:
         document, task_id = await document_service.upload_and_process_document(

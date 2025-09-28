@@ -124,6 +124,7 @@ class DocumentService:
                 mime_type=file.content_type,
                 uploaded_by=tenant_id,
                 doc_metadata=metadata,
+                content_hash=content_hash,
             )
 
             task_id = self.file_processor.process_files(str(document.id))

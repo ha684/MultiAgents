@@ -2,9 +2,7 @@
 from datetime import datetime, timedelta
 from typing import Any, List, Optional
 from zoneinfo import ZoneInfo
-
 from sqlalchemy import and_, select
-
 from src.config.auth_settings import auth_settings
 from src.db.models.user import User, UserStatus
 from src.db.repository.database_session import DatabaseSession
@@ -15,6 +13,7 @@ from src.exceptions.auth_exceptions import (
     InvalidCredentialsException,
     InvalidTokenException,
     RefreshTokenException,
+    UserAlreadyExistsException,
     UserNotFoundException,
 )
 from src.models.auth import (
@@ -55,9 +54,10 @@ class AuthenticationService:
     ) -> UserProfileResponse:
         """Register a new user"""
         try:
-            logger.info(f"Registering new user: {registration_data.email}")
+            existing_user = await self.get_user_by_email(registration_data.email)
+            if existing_user:
+                raise UserAlreadyExistsException("User with this email already exists")
             new_user = await self.user_repo.create_user(registration_data)
-            logger.info(f"User registered successfully: {new_user.id}")
             return UserProfileResponse(
                 id=str(new_user.id),
                 email=new_user.email,
@@ -74,10 +74,49 @@ class AuthenticationService:
             logger.error(f"Registration failed for {registration_data.email}: {str(e)}")
             raise e
 
+    async def generate_tokens(self, user: User) -> TokenResponse:
+        """Generate tokens for user"""
+        await self.user_repo.update_last_login(str(user.id))
+
+        session_id = self.security_manager.generate_session_id()
+        access_token = self.jwt_manager.create_access_token(
+            user_id=str(user.id),
+            email=user.email,
+            role=user.role,
+            session_id=session_id,
+        )
+
+        refresh_token = self.jwt_manager.create_refresh_token()
+        refresh_token_hash = self.security_manager.hash_token(refresh_token)
+
+        expires_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
+            days=auth_settings.jwt_refresh_token_expire_days
+        )
+
+        await self.refresh_token_repo.create_refresh_token(
+            user_id=str(user.id),
+            token_hash=refresh_token_hash,
+            expires_at=expires_at,
+        )
+
+        await self.login_attempt_repo.record_login_attempt(
+            email=user.email,
+            success=True,
+        )
+
+        logger.info(f"Tokens generated for user: {user.id}")
+
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            expires_in=auth_settings.jwt_access_token_expire_minutes * 60,
+        )
+
     async def authenticate_user(
         self,
         login_data: UserLoginRequest,
-    ) -> TokenResponse:
+    ) -> tuple[User, TokenResponse]:
         """Authenticate user and return tokens"""
         try:
             logger.info(f"Authentication attempt for: {login_data.email}")
@@ -136,45 +175,8 @@ class AuthenticationService:
                 raise AccountNotVerifiedException()
 
             await self.user_repo.reset_failed_login_attempts(str(user.id))
-
-            await self.user_repo.update_last_login(str(user.id))
-
-            session_id = self.security_manager.generate_session_id()
-            access_token = self.jwt_manager.create_access_token(
-                user_id=str(user.id),
-                email=user.email,
-                role=user.role,
-                session_id=session_id,
-            )
-
-            refresh_token = self.jwt_manager.create_refresh_token()
-            refresh_token_hash = self.security_manager.hash_token(refresh_token)
-
-            expires_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
-                days=auth_settings.jwt_refresh_token_expire_days
-            )
-
-            await self.refresh_token_repo.create_refresh_token(
-                user_id=str(user.id),
-                token_hash=refresh_token_hash,
-                expires_at=expires_at,
-            )
-
-            await self.login_attempt_repo.record_login_attempt(
-                email=login_data.email,
-                success=True,
-            )
-
-            logger.info(f"Authentication successful for user: {user.id}")
-
-            return TokenResponse(
-                access_token=access_token,
-                refresh_token=refresh_token,
-                token_type="bearer",
-                expires_in=auth_settings.jwt_access_token_expire_minutes * 60,
-                user_id=str(user.id),
-                role=user.role,
-            )
+            token_response = await self.generate_tokens(user)
+            return user, token_response
 
         except Exception as e:
             logger.error(f"Authentication failed for {login_data.email}: {str(e)}")
@@ -234,8 +236,6 @@ class AuthenticationService:
                 refresh_token=new_refresh_token,
                 token_type="bearer",
                 expires_in=auth_settings.jwt_access_token_expire_minutes * 60,
-                user_id=str(user.id),
-                role=user.role,
             )
 
         except Exception as e:
@@ -465,3 +465,24 @@ class AuthenticationService:
     async def get_users(self, offset: int, limit: int, order_by: Any) -> List[User]:
         """Get users with pagination"""
         return await self.user_repo.get_users(offset, limit, order_by)
+
+    async def get_user_by_email(self, email: str) -> User:
+        """Get user by email"""
+        return await self.user_repo.get_user_by_email(email)
+
+    async def link_google_account(
+        self, user_id: str, google_id: str, avatar_url: str = None
+    ):
+        """Link Google account to existing user"""
+        update_data = {
+            "google_id": google_id,
+            "auth_provider": "google",
+        }
+        if avatar_url:
+            update_data["avatar_url"] = avatar_url
+
+        await self.update_user(user_id, update_data)
+
+    async def create_oauth_user(self, user_data: dict) -> User:
+        """Create user from OAuth data"""
+        return await self.user_repo.create_oauth_user(user_data)

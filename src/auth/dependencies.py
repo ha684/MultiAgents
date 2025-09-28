@@ -16,10 +16,10 @@ from src.exceptions.auth_exceptions import (
     SessionExpiredException,
 )
 from src.config.auth_settings import ROLE_PERMISSIONS
-from src.utils.logger_conf import logger
 from zoneinfo import ZoneInfo
 
 security = HTTPBearer(auto_error=False)
+user_repo = UserRepository()
 
 
 async def get_current_user_token(
@@ -39,7 +39,6 @@ async def get_current_user(
     token_data: TokenData = Depends(get_current_user_token),
 ) -> User:
     """Get current authenticated user"""
-    user_repo = UserRepository()
     user = await user_repo.get_user_by_id(token_data.user_id)
 
     if not user:
@@ -51,39 +50,6 @@ async def get_current_user(
     return user
 
 
-async def get_current_active_user(
-    current_user: User = Depends(get_current_user),
-) -> User:
-    """Get current active user (same as get_current_user but more explicit)"""
-    return current_user
-
-
-async def get_optional_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
-) -> Optional[User]:
-    """Get current user if token is provided (optional authentication)"""
-    if not credentials:
-        return None
-
-    try:
-        token_data = jwt_manager.verify_token(credentials.credentials)
-        if not token_data:
-            return None
-
-        user_repo = UserRepository()
-        user = await user_repo.get_user_by_id(token_data.user_id)
-
-        if not user or user.status != UserStatus.ACTIVE:
-            return None
-
-        return user
-
-    except Exception as e:
-        logger.warning(f"Optional authentication failed: {str(e)}")
-        return None
-
-
-# Role-based dependencies
 def require_role(required_role: UserRole):
     """Dependency factory for role-based access control"""
 

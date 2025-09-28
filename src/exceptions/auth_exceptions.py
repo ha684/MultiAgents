@@ -7,9 +7,27 @@ from typing import Optional
 class PasswordValidationException(BaseException):
     def __init__(self, message: str):
         super().__init__(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             message=message,
             error_code="PASSWORD_VALIDATION_ERROR",
+        )
+
+
+class UsernameValidationException(BaseException):
+    def __init__(self, message: str):
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            message=message,
+            error_code="USERNAME_VALIDATION_ERROR",
+        )
+
+
+class FullNameValidationException(BaseException):
+    def __init__(self, message: str):
+        super().__init__(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            message=message,
+            error_code="FULL_NAME_VALIDATION_ERROR",
         )
 
 
@@ -245,4 +263,13 @@ class ConfigurationException(BaseException):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             message=message,
             error_code="CONFIGURATION_ERROR",
+        )
+
+
+class WrongIssuerException(BaseException):
+    def __init__(self, message: str = "Wrong issuer"):
+        super().__init__(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            message=message,
+            error_code="WRONG_ISSUER",
         )

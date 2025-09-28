@@ -3,10 +3,18 @@ from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from src.exceptions.base import BaseException
 import json
+import os
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from src.utils.logger_conf import logger
 from typing import Dict, Any
+
+ENABLE_EXCEPTION_LOGGING = (
+    os.getenv("ENABLE_EXCEPTION_LOGGING", "true").lower() == "true"
+)
+LOG_CLIENT_ERRORS = os.getenv("LOG_CLIENT_ERRORS", "false").lower() == "true"
+LOG_SERVER_ERRORS = os.getenv("LOG_SERVER_ERRORS", "true").lower() == "true"
+LOG_LEVEL = os.getenv("EXCEPTION_LOG_LEVEL", "error").lower()
 
 
 async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -27,12 +35,13 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         }
         error_type = exc.__class__.__name__
 
-        if status_code >= 500:
-            logger.error(f"Server error: {exc.message}")
-        elif status_code >= 400:
-            logger.warning(f"Client error: {exc.message}")
-        else:
-            logger.info(f"Service exception: {exc.message}")
+        if ENABLE_EXCEPTION_LOGGING:
+            if status_code >= 500 and LOG_SERVER_ERRORS:
+                _log_message(f"Server error: {exc.message}", "error")
+            elif status_code >= 400 and LOG_CLIENT_ERRORS:
+                _log_message(f"Client error: {exc.message}", "warning")
+            elif status_code < 400:
+                _log_message(f"Service exception: {exc.message}", "info")
 
     elif isinstance(exc, HTTPException):
         status_code = exc.status_code
@@ -42,10 +51,12 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         }
         error_type = "HTTPException"
 
-        logger.warning(
-            f"HTTP exception: {exc.detail}",
-            extra={"path": request.url.path, "status_code": status_code},
-        )
+        if ENABLE_EXCEPTION_LOGGING and LOG_CLIENT_ERRORS and status_code >= 400:
+            _log_message(
+                f"HTTP exception: {exc.detail}",
+                "warning",
+                extra={"path": request.url.path, "status_code": status_code},
+            )
 
     elif isinstance(exc, ValueError):
         status_code = 400
@@ -55,10 +66,12 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         }
         error_type = "ValueError"
 
-        logger.warning(
-            f"ValueError: {exc}",
-            extra={"path": request.url.path, "exception_str": str(exc)},
-        )
+        if ENABLE_EXCEPTION_LOGGING and LOG_CLIENT_ERRORS:
+            _log_message(
+                f"ValueError: {exc}",
+                "warning",
+                extra={"path": request.url.path, "exception_str": str(exc)},
+            )
 
     elif isinstance(exc, TypeError):
         status_code = 400
@@ -67,7 +80,9 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
             "code": "INVALID_TYPE",
         }
         error_type = "TypeError"
-        logger.warning(f"TypeError: {exc}")
+
+        if ENABLE_EXCEPTION_LOGGING and LOG_CLIENT_ERRORS:
+            _log_message(f"TypeError: {exc}", "warning")
 
     elif isinstance(exc, KeyError):
         missing_key = str(exc).strip("'\"")
@@ -77,7 +92,9 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
             "code": "MISSING_FIELD",
         }
         error_type = "KeyError"
-        logger.warning(f"KeyError: {exc}")
+
+        if ENABLE_EXCEPTION_LOGGING and LOG_CLIENT_ERRORS:
+            _log_message(f"KeyError: {exc}", "warning")
 
     elif isinstance(exc, AttributeError):
         status_code = 500
@@ -87,7 +104,8 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         }
         error_type = "AttributeError"
 
-        logger.error(f"AttributeError: {exc}")
+        if ENABLE_EXCEPTION_LOGGING and LOG_SERVER_ERRORS:
+            _log_message(f"AttributeError: {exc}", "error")
 
     elif isinstance(exc, PermissionError):
         status_code = 403
@@ -97,7 +115,8 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         }
         error_type = "PermissionError"
 
-        logger.warning(f"PermissionError: {exc}")
+        if ENABLE_EXCEPTION_LOGGING and LOG_CLIENT_ERRORS:
+            _log_message(f"PermissionError: {exc}", "warning")
 
     elif isinstance(exc, FileNotFoundError):
         status_code = 404
@@ -107,7 +126,8 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         }
         error_type = "FileNotFoundError"
 
-        logger.warning(f"FileNotFoundError: {exc}")
+        if ENABLE_EXCEPTION_LOGGING and LOG_CLIENT_ERRORS:
+            _log_message(f"FileNotFoundError: {exc}", "warning")
 
     else:
         status_code = 500
@@ -117,7 +137,8 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         }
         error_type = type(exc).__name__
 
-        logger.exception(f"Unhandled exception: {exc}")
+        if ENABLE_EXCEPTION_LOGGING and LOG_SERVER_ERRORS:
+            _log_exception(f"Unhandled exception: {exc}", exc)
 
     is_streaming_request = _is_streaming_request(request)
 
@@ -142,6 +163,35 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
         error_envelope["correlation_id"] = correlation_id
 
     return JSONResponse(status_code=status_code, content=error_envelope)
+
+
+def _log_message(message: str, level: str, extra: Dict[str, Any] = None):
+    """Log message based on environment configuration"""
+    if not ENABLE_EXCEPTION_LOGGING:
+        return
+
+    # Check if current log level should be logged
+    level_priority = {"debug": 0, "info": 1, "warning": 2, "error": 3}
+
+    if level_priority.get(level, 3) < level_priority.get(LOG_LEVEL, 3):
+        return
+
+    log_func = getattr(logger, level, logger.error)
+    if extra:
+        log_func(message, extra=extra)
+    else:
+        log_func(message)
+
+
+def _log_exception(message: str, exc: Exception):
+    """Log exception with full traceback based on environment configuration"""
+    if not ENABLE_EXCEPTION_LOGGING or not LOG_SERVER_ERRORS:
+        return
+
+    if LOG_LEVEL in ["debug", "error"]:
+        logger.exception(message)
+    else:
+        logger.error(f"{message}: {str(exc)}")
 
 
 def _format_validation_errors(errors: list) -> list:

@@ -1,10 +1,15 @@
 # src/models/auth.py
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from enum import Enum
 from zoneinfo import ZoneInfo
-from src.exceptions.auth_exceptions import PasswordValidationException
+from src.exceptions.auth_exceptions import (
+    PasswordValidationException,
+    UsernameValidationException,
+    FullNameValidationException,
+)
+import re
 
 
 class UserRole(str, Enum):
@@ -22,36 +27,64 @@ class UserStatus(str, Enum):
 
 class UserRegistrationRequest(BaseModel):
     email: EmailStr
-    username: str = Field(..., min_length=3, max_length=50, pattern="^[a-zA-Z0-9_-]+$")
-    password: str = Field(..., min_length=8, max_length=128)
-    full_name: Optional[str] = Field(None, max_length=100)
+    username: str
+    password: str
+    full_name: Optional[str] = None
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, v: str) -> str:
+        """Validate the username with all errors at once."""
+        errors = []
+        if len(v) < 3:
+            errors.append("Username must be at least 3 characters long")
+        if len(v) > 50:
+            errors.append("Username must be no more than 50 characters long")
+        if not re.match("^[a-zA-Z0-9_-]+$", v):
+            errors.append(
+                "Username can only contain letters, numbers, underscores, and hyphens"
+            )
+
+        if errors:
+            raise UsernameValidationException(message=". ".join(errors))
+        return v
 
     @field_validator("password")
-    def validate_password_comprehensive(self):
-        """Validate password with all errors at once"""
-        password = self.password
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        """Validate the password with all errors at once."""
         errors = []
-
-        if len(password) < 8:
+        if len(v) < 8:
             errors.append("Password must be at least 8 characters long")
-
-        if not any(c.isupper() for c in password):
+        if len(v) > 128:
+            errors.append("Password must be no more than 128 characters long")
+        if not any(c.isupper() for c in v):
             errors.append("Password must contain at least one uppercase letter")
-
-        if not any(c.islower() for c in password):
+        if not any(c.islower() for c in v):
             errors.append("Password must contain at least one lowercase letter")
-
-        if not any(c.isdigit() for c in password):
+        if not any(c.isdigit() for c in v):
             errors.append("Password must contain at least one digit")
-
-        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
+        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in v):
             errors.append("Password must contain at least one special character")
 
         if errors:
-            error_message = ". ".join(errors)
-            raise PasswordValidationException(message=error_message)
+            raise PasswordValidationException(message=". ".join(errors))
+        return v
 
-        return self
+    @field_validator("full_name")
+    @classmethod
+    def validate_full_name(cls, v: Optional[str]) -> Optional[str]:
+        """Validate the full_name if it's provided."""
+        if v is not None:
+            errors = []
+            if len(v.strip()) == 0:
+                errors.append("Full name cannot be empty or just spaces")
+            if len(v) > 100:
+                errors.append("Full name must be no more than 100 characters long")
+
+            if errors:
+                raise FullNameValidationException(message=". ".join(errors))
+        return v
 
 
 class UserLoginRequest(BaseModel):
@@ -72,7 +105,7 @@ class PasswordResetConfirmRequest(BaseModel):
     token: str
     new_password: str = Field(..., min_length=8, max_length=128)
 
-    @field_validator("new_password")
+    @model_validator(mode="after")
     def validate_password_comprehensive(self):
         """Validate password with all errors at once"""
         password = self.new_password
@@ -120,8 +153,6 @@ class TokenResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     expires_in: int
-    user_id: str
-    role: UserRole
 
 
 class UserProfileResponse(BaseModel):

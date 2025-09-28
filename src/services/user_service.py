@@ -37,18 +37,12 @@ class UserRepository:
     async def create_user(self, user_data: UserRegistrationRequest) -> User:
         """Create a new user"""
         try:
-            existing_user = await self.get_user_by_email(user_data.email)
-            if existing_user:
-                raise UserAlreadyExistsException("User with this email already exists")
-
             hashed_password = security_manager.hash_password(user_data.password)
-
             verification_token, verification_expires = (
                 token_manager.create_verification_token()
             )
 
             new_user = User(
-                id=uuid.uuid4(),
                 email=user_data.email,
                 username=user_data.username,
                 full_name=user_data.full_name,
@@ -126,7 +120,6 @@ class UserRepository:
             if not user:
                 raise UserNotFoundException()
 
-            # Update fields
             for field, value in update_data.items():
                 if hasattr(user, field):
                     setattr(user, field, value)
@@ -258,7 +251,6 @@ class UserRepository:
 
                     if permission:
                         user_permission = UserPermission(
-                            id=uuid.uuid4(),
                             user_id=user_id,
                             permission_id=permission.id,
                             granted_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
@@ -292,6 +284,41 @@ class UserRepository:
             logger.error(f"Error getting users: {str(e)}")
             raise DatabaseException("Failed to get users")
 
+    async def username_exists(self, username: str) -> bool:
+        """Check if username exists"""
+        try:
+            async with DatabaseSession() as session:
+                result = await session.execute(
+                    select(User).where(User.username == username)
+                )
+                return result.scalars().first() is not None
+        except Exception as e:
+            logger.error(f"Error checking username exists: {str(e)}")
+            raise DatabaseException("Failed to check username exists")
+
+    async def create_oauth_user(self, user_data: dict) -> User:
+        """Create user from OAuth data"""
+        try:
+            async with DatabaseSession() as session:
+                original_username = user_data["username"]
+                username = original_username
+                counter = 1
+
+                while await self.username_exists(username):
+                    username = f"{original_username}{counter}"
+                    counter += 1
+
+                user_data["username"] = username
+
+                user = User(**user_data)
+                session.add(user)
+                await session.commit()
+                await session.refresh(user)
+                return user
+        except Exception as e:
+            logger.error(f"Error creating OAuth user: {str(e)}")
+            raise DatabaseException("Failed to create OAuth user")
+
 
 class RefreshTokenRepository:
     """Refresh token database operations"""
@@ -305,7 +332,6 @@ class RefreshTokenRepository:
         """Create a new refresh token"""
         try:
             refresh_token = RefreshToken(
-                id=uuid.uuid4(),
                 user_id=uuid.UUID(user_id),
                 token_hash=token_hash,
                 expires_at=expires_at,
@@ -405,7 +431,6 @@ class LoginAttemptRepository:
         """Record a login attempt"""
         try:
             attempt = LoginAttempt(
-                id=uuid.uuid4(),
                 email=email.lower(),
                 success=success,
                 failure_reason=failure_reason,
