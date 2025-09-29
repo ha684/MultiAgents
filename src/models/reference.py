@@ -37,11 +37,19 @@ class Reference(BaseModel):
         ...,
         description="The name of the source.",
     )
-    quote: str = Field(
-        ...,
-        description="The verbatim quote from the source that supports the answer.",
-    )
     page_content: str = Field(
         ...,
         description="The content of the source, which may include text, images, or other media.",
+    )
+    start_index: int = Field(
+        ...,
+        description="The start index of the source in the document.",
+    )
+    end_index: int = Field(
+        ...,
+        description="The end index of the source in the document.",
+    )
+    llm_received_index: int = Field(
+        ...,
+        description="The index of the source in the list of sources received from the LLM.",
     )

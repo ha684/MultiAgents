@@ -51,22 +51,17 @@ class ImageStrategy(BaseStrategy):
         logger.info(f"Processing file {file_path} with naive strategy")
 
         try:
-            # Validate file type
             valid = self.check_file_type(file_path)
             if not valid:
                 raise ValueError(f"Unsupported file type: {document.file_type}")
-            # Get the appropriate loader based on file type
             loader = self._get_loader(file_path, document)
             if not loader:
                 raise ValueError(f"Unsupported file type: {file_path}")
 
-            # Load documents
             logger.info(
                 f"Loading documents from {file_path} using {loader.__class__.__name__}"
             )
             docs = loader.load()
-
-            # Add file path and strategy metadata to each document
             for doc in docs:
                 if "source" not in doc.metadata:
                     doc.metadata["source"] = file_path

@@ -165,7 +165,7 @@ class MarkdownTableChunker:
         Processes a list of LangChain Document objects.
         - Splits individual large Markdown tables into smaller chunks (row by row, repeating headers).
         - Merges multiple *distinct* smaller documents (which can be tables or other text)
-          into a single output chunk, respecting chunk_size and metadata conditions.
+        into a single output chunk, respecting chunk_size and metadata conditions.
         Metadata is NOT merged; the output chunk inherits metadata from its *first* contributing document.
 
         Args:
@@ -396,7 +396,6 @@ class SpreadsheetStrategy(BaseStrategy):
         logger.info(f"Processing file {file_path} with spreadsheet strategy")
 
         try:
-            # Validate file type
             valid = self.check_file_type(file_path)
             if not valid:
                 raise ValueError(f"Unsupported file type: {document.file_type}")

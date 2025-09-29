@@ -5,24 +5,90 @@ from langchain_core.messages import BaseMessage
 from src.config.llm_config import SupportedLLMProviders
 from src.llm.factory import get_llm
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from pydantic import BaseModel, Field
-from src.nlp.language_detector import language_detection
-from src.prompts.get_prompt_template import load_prompt_template
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
 
+HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are an expert research assistant with access to a collection of documents. Your task is to provide accurate, well-cited answers based solely on the information contained in the provided documents.
 
-class CitedAnswer(BaseModel):
-    """Answer the user question based only on the given sources, and cite the sources used."""
+# Core Instructions
 
-    answer: str = Field(
-        ...,
-        description="The answer to the user question, which is based only on the given sources.",
-    )
-    citations: List[int] = Field(
-        ...,
-        description="The integer IDs of the SPECIFIC sources which justify the answer.",
-    )
+1. **Answer in the same language as the user's query**: If the user asks in Vietnamese, respond in Vietnamese. If they ask in English, respond in English.
+
+2. **Ground all responses in the provided documents**: 
+   - Only use information explicitly stated in the documents
+   - Do NOT use your general knowledge or make assumptions
+   - If the documents don't contain enough information to answer fully, clearly state: "Based on the provided documents, I don't have enough information to answer [specific aspect]."
+
+3. **Use inline citations consistently**:
+   - Format: `([Descriptive name][index])` immediately after each factual claim
+   - The index must match the document index from the <documents> section
+   - Example: "Revenue increased by 15% ([Annual Report 2023][1])"
+   - Multiple sources: "Sales grew across regions ([Q1 Report][1], [Market Analysis][3])"
+
+4. **Structure your response clearly**:
+   - Use markdown formatting (headers ##, lists, bold, etc.) for readability
+   - Break complex information into sections with ## headers
+   - Use bullet points (*) or numbered lists for multiple items
+   - Highlight key numbers, dates, or facts with **bold**
+
+5. **Quality standards**:
+   - Be concise but complete - avoid unnecessary verbosity
+   - Maintain accuracy - never misrepresent document contents
+   - If multiple documents conflict, acknowledge both viewpoints and cite each
+   - Use direct quotes for critical facts, placing them in quotation marks with citations
+
+# Special Cases
+
+- **No relevant information found**: Politely explain what information is missing
+- **Partial information**: Answer what you can from the documents and clearly note what's missing  
+- **Conflicting information**: Present both perspectives with proper citations
+
+# Important Reminders
+
+- Focus on providing well-structured content with accurate inline citations
+- Always cite your sources using the [index] format from the provided documents
+- When in doubt about information, acknowledge uncertainty rather than speculate
+
+Remember: Accuracy and proper inline citation are paramount. The reference list will be generated automatically from your citations."""
+
+NO_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a helpful AI assistant. The user has submitted a query, but no relevant documents were found in the knowledge base to answer their question.
+
+# Core Instructions
+
+1. **Answer in the same language as the user's query**: Match the user's language (Vietnamese, English, etc.)
+
+2. **Be transparent about the limitation**:
+   - Politely acknowledge that no relevant documents were found
+   - Explain that you can provide general information but cannot cite specific sources
+   - Suggest what type of documents might be helpful if they were available
+
+3. **Provide helpful general guidance**:
+   - Offer what general knowledge you have on the topic
+   - Be clear that this is general information, not sourced from their documents
+   - Keep responses concise and relevant
+
+4. **Suggest next steps**:
+   - Recommend uploading relevant documents if applicable
+   - Suggest refining the search query
+   - Offer to help with related questions
+
+# Response Format
+
+Your response should follow this structure:
+
+```
+I couldn't find any relevant documents in the knowledge base to answer your question about [topic].
+
+However, I can provide some general information:
+
+[Your general knowledge response here]
+
+To get more specific information, you might consider:
+* [Suggestion 1]
+* [Suggestion 2]
+```
+
+Remember: Be honest about the absence of documents while still being helpful with general knowledge when appropriate."""
 
 
 @singleton
@@ -33,78 +99,20 @@ class ResponseAgent:
         logger.info("Response Agent initialized successfully.")
         self.llm = get_llm(provider)
 
-    def _get_language_and_prompts(self, query: str):
-        """Detect language and load appropriate prompts."""
-        # Detect language
-        detected_language, confidence = language_detection(query, type="query")
-
-        # Map language codes to supported languages
-        language_map = {"vi": "vi", "ja": "ja", "ko": "ko", "en": "en"}
-
-        # Default to English if language not supported or confidence is low
-        language_code = language_map.get(detected_language, "en")
-
-        logger.info(
-            f"Detected language: {detected_language} (confidence: {confidence}), using: {language_code}"
-        )
-
-        try:
-            # Load response prompt
-            response_prompt_template = load_prompt_template(
-                task_name="response_generation", language_code=language_code
-            )
-
-            # Load no answer prompt
-            no_answer_prompt_template = load_prompt_template(
-                task_name="no_answer_response", language_code=language_code
-            )
-
-            return response_prompt_template, no_answer_prompt_template, language_code
-
-        except Exception as e:
-            logger.exception(f"Error loading prompts for language {language_code}: {e}")
-            # Fallback to English
-            response_prompt_template = load_prompt_template(
-                task_name="response_generation", language_code="en"
-            )
-            no_answer_prompt_template = load_prompt_template(
-                task_name="no_answer_response", language_code="en"
-            )
-            return response_prompt_template, no_answer_prompt_template, "en"
-
     def _format_context_for_response(self, documents: List[Document]) -> str:
         """Formats documents for the response prompt."""
         if not documents:
             return "<documents>No relevant documents found.</documents>"
-
         xml_output = "<documents>\n"
-
-        if not documents:
-            return "<documents>No relevant documents found.</documents>"
-
-        xml_output = "<documents>\n"
-
         for i, doc in enumerate(documents):
             xml_output += f'  <document index="{i + 1}">\n'
-            metadata = getattr(doc, "metadata", {})
-            source = metadata.get("original_filename", f"Document {i + 1}")
-            folder_path = metadata.get("folder_path", "")
-            sheet_name = metadata.get("sheet_name", "")
-            sheet_name = metadata.get("sheet_name", "")
-            xml_output += f"<source>{source}</source>\n"
-            if folder_path:
-                xml_output += f"<folder_path>{folder_path}</folder_path>\n"
-            if sheet_name:
-                xml_output += f"<sheet_name>{sheet_name}</sheet_name>\n"
-            if sheet_name:
-                xml_output += f"<sheet_name>{sheet_name}</sheet_name>\n"
             content = getattr(doc, "page_content", "")
-            xml_output += "<document_content>\n"
+            xml_output += "    <document_content>\n"
             xml_output += f"{content}\n"
-            xml_output += "</document_content>\n"
-            xml_output += "</document>\n"
-        xml_output += "</documents>"
+            xml_output += "    </document_content>\n"
+            xml_output += "  </document>\n"
 
+        xml_output += "</documents>"
         return xml_output
 
     def _prepare_messages(
@@ -113,25 +121,19 @@ class ResponseAgent:
         """Prepare messages for both streaming and non-streaming responses."""
         current_query = history[-1].content
 
-        response_prompt_template, no_answer_prompt_template, language_code = (
-            self._get_language_and_prompts(current_query)
-        )
-
         if contexts:
-            logger.info(
-                f'Response Agent: Preparing response for query: "{current_query}" with {len(contexts)} contexts.'
-            )
             formatted_context = self._format_context_for_response(contexts)
-            system_message = SystemMessage(content=response_prompt_template)
+            system_message = SystemMessage(
+                content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
+            )
             new_query = HumanMessage(
                 content=f"{formatted_context}\n---\n{current_query}"
             )
             messages = [system_message] + history[:-1] + [new_query]
         else:
-            logger.warning(
-                f"Response Agent: Preparing 'information not found' response in {language_code}."
+            system_message = SystemMessage(
+                content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE
             )
-            system_message = SystemMessage(content=no_answer_prompt_template)
             new_query = HumanMessage(
                 content=f"User query: {current_query}\n\nRemember this is the case that no document found."
             )

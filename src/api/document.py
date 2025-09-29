@@ -12,7 +12,6 @@ from src.models.document import (
 from src.models.common import PaginationParams, SearchParams
 from src.models.qa import DocumentQAResponse
 from src.services.document_service import DocumentService
-from src.utils.logger_conf import logger
 
 router = APIRouter(prefix="/documents", tags=["Document"])
 document_service = DocumentService()
@@ -32,7 +31,6 @@ async def upload_document(
     MAX_FILE_SIZE = 100 * 1024 * 1024
 
     content_length = request.headers.get("content-length")
-    logger.info(f"Content length: {content_length}")
     if content_length and int(content_length) > MAX_FILE_SIZE:
         raise HTTPException(
             status_code=413,

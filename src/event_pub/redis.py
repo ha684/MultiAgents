@@ -55,16 +55,13 @@ class RedisEventPublisher(BaseEventPublisher):
                 self.redis_client = redis.StrictRedis(
                     host=self.host, port=self.port, db=self.db, decode_responses=True
                 )
-                # Ping to check connection
                 self.redis_client.ping()
                 logger.info("RedisEventPublisher: Successfully connected to Redis.")
-            except Exception as e:
-                logger.exception(
-                    f"RedisEventPublisher: Could not connect to Redis at {self.host}:{self.port} - {e}"
+            except Exception:
+                self.redis_client = None
+                raise ConnectionError(
+                    f"Could not connect to Redis at {self.host}:{self.port}, Run docker compose first"
                 )
-                self.redis_client = None  # Ensure client is None on failure
-                # Re-raise the exception so the caller knows connection failed
-                raise
         else:
             logger.warning("RedisEventPublisher: Already connected.")
 
@@ -83,10 +80,8 @@ class RedisEventPublisher(BaseEventPublisher):
                 logger.info(
                     "RedisEventPublisher: Disconnected from Redis (client nulled)."
                 )
-            except Exception as e:
-                logger.exception(
-                    f"RedisEventPublisher: Error during disconnection: {e}"
-                )
+            except Exception:
+                logger.warning("RedisEventPublisher: Error during disconnection.")
         else:
             logger.warning("RedisEventPublisher: Not connected.")
 

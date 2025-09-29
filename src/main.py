@@ -40,8 +40,9 @@ async def lifespan(app: FastAPI):
         await vector_storage_migration.run_migrations()
         logger.info("Vector storage migration completed successfully")
     except Exception as e:
-        logger.error(f"Failed to initialize database: {e}")
-        raise e
+        raise ConnectionError(
+            f"Failed to initialize database: {e}, Run docker compose first"
+        )
 
     yield
 

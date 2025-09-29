@@ -55,8 +55,6 @@ class DatabaseSession:
                 logger.error(f"Database session rolled back due to error: {exc_val}")
             else:
                 await self.session.commit()
-                logger.debug("Database session committed successfully")
-
         except SQLAlchemyError as e:
             logger.error(
                 f"Database transaction error during {'rollback' if exc_type else 'commit'}: {e}"
@@ -78,6 +76,5 @@ class DatabaseSession:
         finally:
             try:
                 await self.session.close()
-                logger.debug("Database session closed")
             except Exception as e:
                 logger.error(f"Error closing database session: {e}")

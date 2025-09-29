@@ -66,7 +66,6 @@ class ChatAgent:
                             history=conversation
                         )
                     )
-                    logger.info(f"Contextualized query: {contextualized_query}")
                 span.set_attribute("contextualized_query", contextualized_query)
             if web_search_config.active:
                 with tracer.start_as_current_span("search_service.search"):
@@ -426,10 +425,12 @@ def create_reference(retrieved_docs: List[Document]) -> List[Dict]:
     for i, doc in enumerate(formated_docs):
         reference = Reference(
             source_id=str(doc.metadata.get("_id")),
-            source_index=doc.metadata.get("original_index", i),
+            source_index=doc.metadata.get("original_index"),
             source=str(doc.metadata.get("original_filename")),
-            quote="",
             page_content=doc.page_content,
+            start_index=doc.metadata.get("start_index", 0),
+            end_index=doc.metadata.get("end_index", 0),
+            llm_received_index=i + 1,
         )
         references.append(reference.model_dump())
 

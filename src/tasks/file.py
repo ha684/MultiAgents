@@ -1,8 +1,8 @@
 # src/tasks/file.py
 import asyncio
-import json
 import os
 import random
+import json
 import uuid
 import time
 from datetime import datetime
@@ -27,7 +27,8 @@ from src.utils.logger_conf import logger
 from src.db import document_repository
 from src.db.models.document import Document as DBDocument
 from langchain_core.documents import Document as LangchainDocument
-from src.services.metadata_extractor import extract_metadata_from_text_or_document
+from celery import Task
+
 
 _loop = None
 _temp_files_cache = set()
@@ -99,18 +100,6 @@ async def temp_file_manager(document_id: uuid.UUID, filename: str):
             _temp_files_cache.discard(str(temp_file_path))
 
 
-def get_file_size_category(file_size: int) -> str:
-    """Categorize file by size for routing decisions"""
-    if file_size < 1024 * 1024:  # < 1MB
-        return "small"
-    elif file_size < 50 * 1024 * 1024:  # < 50MB
-        return "medium"
-    elif file_size < 200 * 1024 * 1024:  # < 200MB
-        return "large"
-    else:
-        return "xlarge"
-
-
 async def _process_document_async(
     document_id: uuid.UUID, retry_count: int = 0
 ) -> Dict[str, Any]:
@@ -143,9 +132,7 @@ async def _process_document_async(
             file_size = temp_file_path.stat().st_size
             logger.info(f"Downloaded file ({file_size} bytes) in {download_time:.2f}s")
 
-            kb_config = await _get_kb_config(document.knowledge_base_id)
-            strategy = get_strategy(document=document, config=kb_config)
-
+            strategy = get_strategy(config={})
             chunk_start = time.time()
             chunks = strategy.chunk(file_path=str(temp_file_path), document=document)
             chunk_time = time.time() - chunk_start
@@ -153,11 +140,8 @@ async def _process_document_async(
             if not chunks:
                 logger.warning(f"No chunks extracted from document {document_id}")
             logger.info(f"Extracted {len(chunks)} chunks in {chunk_time:.2f}s")
-
-            doc_metadata = await _get_document_metadata(document)
-
             metadata_start = time.time()
-            chunks = await _prepare_chunks_with_metadata(chunks, document, doc_metadata)
+            chunks = await _prepare_chunks_with_metadata(chunks, document)
             metadata_time = time.time() - metadata_start
             logger.info(
                 f"Extracted metadata for {len(chunks)} chunks in {metadata_time:.2f}s"
@@ -211,7 +195,9 @@ async def _process_document_async(
 
     except SoftTimeLimitExceeded:
         logger.warning(f"Processing of document {document_id} exceeded time limit")
-        await _handle_timeout(document_id)
+        await _update_document_status(
+            document_id, DocumentStatusEnum.FAILED, "Time limit exceeded"
+        )
         return {
             "status": "timeout",
             "document_id": str(document_id),
@@ -220,7 +206,7 @@ async def _process_document_async(
 
     except Exception as e:
         logger.exception(f"Error processing document {document_id}: {str(e)}")
-        await _handle_processing_error(document_id, str(e))
+        await _update_document_status(document_id, DocumentStatusEnum.FAILED, str(e))
         return {
             "status": "failed",
             "document_id": str(document_id),
@@ -228,47 +214,34 @@ async def _process_document_async(
         }
 
 
-async def _get_kb_config(kb_id: uuid.UUID) -> Dict[str, Any]:
-    """Get knowledge base configuration (implement caching if needed)"""
-    # TODO: Implement KB config retrieval with caching
-    return {}
-
-
-async def _get_document_metadata(document: DBDocument) -> Dict[str, Any]:
-    """Parse and return document metadata"""
-    try:
-        return json.loads(document.doc_metadata or "{}") or {}
-    except json.JSONDecodeError as e:
-        logger.error(
-            f"Error decoding document metadata for document {document.id}: {str(e)}"
-        )
-        return {}
-
-
 async def _prepare_chunks_with_metadata(
-    chunks: List[LangchainDocument], document: DBDocument, doc_metadata: Dict[str, Any]
+    chunks: List[LangchainDocument], document: DBDocument
 ) -> List[LangchainDocument]:
     """Process chunks and extract metadata for the document"""
-    try:
-        extracted_metadata = extract_metadata_from_text_or_document(chunks)
-    except Exception as e:
-        logger.error(f"Error extracting metadata {e}")
-        extracted_metadata = {}
+    # try:
+    #     extracted_metadata = extract_metadata_from_text_or_document(chunks)
+    #     logger.info(f"Extracted metadata: {extracted_metadata}")
+    # except Exception as e:
+    #     logger.error(f"Error extracting metadata {e}")
+    #     extracted_metadata = {}
 
+    doc_metadata = json.loads(document.doc_metadata) if document.doc_metadata else {}
     for i, chunk in enumerate(chunks):
-        sheet_name = chunk.metadata.get("sheet_name")
-        chunk.metadata = {
+        start_index = chunk.metadata.get("start_index", 0)
+        end_index = chunk.metadata.get("end_index", 0)
+        metadata = {
             "chunk_index": i,
             "filename": document.filename,
-            "images": chunk.metadata.get("images", []),
             "kb_id": str(document.knowledge_base_id),
             "document_id": str(document.id),
             "original_filename": document.original_filename,
-            **extracted_metadata,
+            # **extracted_metadata,
+            "start_index": start_index,
+            "end_index": end_index,
             **doc_metadata,
         }
-        if sheet_name is not None:
-            chunk.metadata["sheet_name"] = sheet_name
+
+        chunk.metadata = metadata
 
     return chunks
 
@@ -317,32 +290,28 @@ async def _publish_status_event(
         logger.error(f"Failed to publish status event: {e}")
 
 
-async def _handle_timeout(document_id: uuid.UUID):
-    """Handle timeout scenario"""
-    try:
-        document = await document_repository.update_status(
-            document_id=document_id,
-            status=DocumentStatusEnum.TIMEOUT,
-            error="Processing exceeded time limit",
-        )
-        if document:
-            await _publish_status_event(document, DocumentStatusEnum.TIMEOUT, 0)
-    except Exception as e:
-        logger.error(f"Error handling timeout for document {document_id}: {e}")
+async def _update_document_status(
+    document_id: uuid.UUID,
+    status: DocumentStatusEnum,
+    error: str = None,
+    total_chunks: int = 0,
+) -> DBDocument:
+    """Update document status and publish event"""
+    update_data = {"status": status}
 
+    if error:
+        update_data["processing_error"] = error
 
-async def _handle_processing_error(document_id: uuid.UUID, error_msg: str):
-    """Handle processing error scenario"""
-    try:
-        document = await document_repository.update_status(
-            document_id=document_id,
-            status=DocumentStatusEnum.FAILED,
-            error=error_msg,
-        )
-        if document:
-            await _publish_status_event(document, DocumentStatusEnum.FAILED, 0)
-    except Exception as e:
-        logger.error(f"Error handling processing error for document {document_id}: {e}")
+    if status == DocumentStatusEnum.FINISHED:
+        update_data["total_chunks"] = total_chunks
+        update_data["processed_at"] = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+
+    document = await document_repository.update(
+        document_id=document_id, update_data=update_data
+    )
+
+    await _publish_status_event(document, status, total_chunks)
+    return document
 
 
 @shared_task(
@@ -365,7 +334,7 @@ async def _handle_processing_error(document_id: uuid.UUID, error_msg: str):
     max_retries=3,
     queue="document_processing",
 )
-def process_document(self, document_id: str) -> Dict[str, Any]:
+def process_document(self: Task, document_id: str) -> Dict[str, Any]:
     """
     Process a document using the specified strategy.
 
@@ -401,7 +370,9 @@ def process_document(self, document_id: str) -> Dict[str, Any]:
             raise self.retry(exc=SoftTimeLimitExceeded, countdown=countdown)
         else:
             loop = get_or_create_eventloop()
-            loop.run_until_complete(_handle_timeout(doc_uuid))
+            loop.run_until_complete(
+                _update_document_status(doc_uuid, DocumentStatusEnum.TIMEOUT)
+            )
             raise
 
     except Exception as e:
@@ -409,7 +380,9 @@ def process_document(self, document_id: str) -> Dict[str, Any]:
 
         if isinstance(e, (ValueError, FileNotFoundError)):
             loop = get_or_create_eventloop()
-            loop.run_until_complete(_handle_processing_error(doc_uuid, str(e)))
+            loop.run_until_complete(
+                _update_document_status(doc_uuid, DocumentStatusEnum.FAILED, str(e))
+            )
             return {
                 "status": "failed",
                 "document_id": str(doc_uuid),
@@ -431,7 +404,7 @@ def cleanup_temp_files():
         return {"cleaned": 0}
 
     cleaned = 0
-    cutoff_time = time.time() - 3600  # 1 hour ago
+    cutoff_time = time.time() - 3600
 
     for temp_file in temp_dir.glob("*"):
         try:
