@@ -1,16 +1,17 @@
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, Literal, Self
+from typing import Annotated, Any, Literal, Self, Optional, List
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from pydantic import (
     BaseModel,
-    ConfigDict,
     Field,
-    TypeAdapter,
-    field_serializer,
     model_validator,
+    field_serializer,
 )
+from uuid_extensions import uuid7
+from langchain_core.documents import Document
 
 
 class TaskState(str, Enum):
@@ -61,92 +62,40 @@ class DataPart(BaseModel):
 Part = Annotated[TextPart | FilePart | DataPart, Field(discriminator="type")]
 
 
-class Message(BaseModel):
-    role: Literal["user", "agent"]
-    parts: list[Part]
-    metadata: dict[str, Any] | None = None
+class RetrievalContext(BaseModel):
+    """Save all context retrieved for a message"""
 
+    original_query: str
+    contextualized_query: str
+    retrieved_at: datetime = Field(
+        default_factory=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+    )
+    total_retrieved: int
+    total_cited: int
+    cited_chunks: List[Document]
 
-class TaskStatus(BaseModel):
-    state: TaskState
-    message: Message | None = None
-    timestamp: datetime = Field(default_factory=datetime.now)
+    model_config = {"arbitrary_types_allowed": True}
 
-    @field_serializer("timestamp")
-    def serialize_dt(self, dt: datetime, _info):
+    @field_serializer("cited_chunks")
+    def serialize_documents(self, documents: List[Document]) -> List[dict]:
+        """Serialize LangChain Document objects to dicts"""
+        return [
+            {"page_content": doc.page_content, "metadata": doc.metadata}
+            for doc in documents
+        ]
+
+    @field_serializer("retrieved_at")
+    def serialize_datetime(self, dt: datetime) -> str:
+        """Serialize datetime to ISO format string"""
         return dt.isoformat()
 
 
-class Artifact(BaseModel):
-    name: str | None = None
-    description: str | None = None
+class Message(BaseModel):
+    id: str = Field(default_factory=lambda: uuid7().hex)
+    role: Literal["user", "agent"]
     parts: list[Part]
     metadata: dict[str, Any] | None = None
-    index: int = 0
-    append: bool | None = None
-    lastChunk: bool | None = None
-
-
-class Task(BaseModel):
-    id: str
-    sessionId: str | None = None
-    status: TaskStatus
-    artifacts: list[Artifact] | None = None
-    history: list[Message] | None = None
-    metadata: dict[str, Any] | None = None
-
-
-class TaskStatusUpdateEvent(BaseModel):
-    id: str
-    status: TaskStatus
-    final: bool = False
-    metadata: dict[str, Any] | None = None
-
-
-class TaskArtifactUpdateEvent(BaseModel):
-    id: str
-    artifact: Artifact
-    metadata: dict[str, Any] | None = None
-
-
-class AuthenticationInfo(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
-    schemes: list[str]
-    credentials: str | None = None
-
-
-class PushNotificationConfig(BaseModel):
-    url: str
-    token: str | None = None
-    authentication: AuthenticationInfo | None = None
-
-
-class TaskIdParams(BaseModel):
-    id: str
-    metadata: dict[str, Any] | None = None
-
-
-class TaskQueryParams(TaskIdParams):
-    historyLength: int | None = None
-
-
-class TaskSendParams(BaseModel):
-    id: str
-    sessionId: str = Field(default_factory=lambda: uuid4().hex)
-    message: Message
-    acceptedOutputModes: list[str] | None = None
-    pushNotification: PushNotificationConfig | None = None
-    historyLength: int | None = None
-    metadata: dict[str, Any] | None = None
-
-
-class TaskPushNotificationConfig(BaseModel):
-    id: str
-    pushNotificationConfig: PushNotificationConfig
-
-
-## RPC Messages
+    retrieval_context: Optional[RetrievalContext] = None
 
 
 class JSONRPCMessage(BaseModel):
@@ -168,81 +117,6 @@ class JSONRPCError(BaseModel):
 class JSONRPCResponse(JSONRPCMessage):
     result: Any | None = None
     error: JSONRPCError | None = None
-
-
-class SendTaskRequest(JSONRPCRequest):
-    method: Literal["tasks/send"] = "tasks/send"
-    params: TaskSendParams
-
-
-class SendTaskResponse(JSONRPCResponse):
-    result: Task | None = None
-
-
-class SendTaskStreamingRequest(JSONRPCRequest):
-    method: Literal["tasks/sendSubscribe"] = "tasks/sendSubscribe"
-    params: TaskSendParams
-
-
-class SendTaskStreamingResponse(JSONRPCResponse):
-    result: TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None = None
-
-
-class GetTaskRequest(JSONRPCRequest):
-    method: Literal["tasks/get"] = "tasks/get"
-    params: TaskQueryParams
-
-
-class GetTaskResponse(JSONRPCResponse):
-    result: Task | None = None
-
-
-class CancelTaskRequest(JSONRPCRequest):
-    method: Literal["tasks/cancel",] = "tasks/cancel"
-    params: TaskIdParams
-
-
-class CancelTaskResponse(JSONRPCResponse):
-    result: Task | None = None
-
-
-class SetTaskPushNotificationRequest(JSONRPCRequest):
-    method: Literal["tasks/pushNotification/set",] = "tasks/pushNotification/set"
-    params: TaskPushNotificationConfig
-
-
-class SetTaskPushNotificationResponse(JSONRPCResponse):
-    result: TaskPushNotificationConfig | None = None
-
-
-class GetTaskPushNotificationRequest(JSONRPCRequest):
-    method: Literal["tasks/pushNotification/get",] = "tasks/pushNotification/get"
-    params: TaskIdParams
-
-
-class GetTaskPushNotificationResponse(JSONRPCResponse):
-    result: TaskPushNotificationConfig | None = None
-
-
-class TaskResubscriptionRequest(JSONRPCRequest):
-    method: Literal["tasks/resubscribe",] = "tasks/resubscribe"
-    params: TaskIdParams
-
-
-A2ARequest = TypeAdapter(
-    Annotated[
-        SendTaskRequest
-        | GetTaskRequest
-        | CancelTaskRequest
-        | SetTaskPushNotificationRequest
-        | GetTaskPushNotificationRequest
-        | TaskResubscriptionRequest
-        | SendTaskStreamingRequest,
-        Field(discriminator="method"),
-    ]
-)
-
-## Error types
 
 
 class JSONParseError(JSONRPCError):

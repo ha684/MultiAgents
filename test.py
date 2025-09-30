@@ -15,7 +15,7 @@
 #     }
 #   },
 #   "agentic": false,
-#   "web_search": true
+#   "web_search": false
 # }
 
 # from langchain_community.document_loaders import UnstructuredExcelLoader

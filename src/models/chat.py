@@ -1,5 +1,4 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict, Any
 from enum import Enum
 from src.common.types import Message
 
@@ -24,8 +23,3 @@ class ChatRequest(BaseModel):
         default=False, description="Whether to use agentic capabilities"
     )
     web_search: bool = Field(default=False)
-
-
-class ChatResponse(BaseModel):
-    message: Message
-    sources: Optional[List[Dict[str, Any]]] = None

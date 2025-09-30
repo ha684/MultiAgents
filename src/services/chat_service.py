@@ -146,10 +146,10 @@ class ChatService:
                 }
                 response = main_agent.generate_response(initial_state)
             else:
-                response, sources = await self.chat_agent.ask_normal(
+                response = await self.chat_agent.ask_normal(
                     conversation, web_search_config, metadata
                 )
-            return response, sources
+            return response
 
     async def ask_sse(
         self, request: ChatRequest

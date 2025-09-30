@@ -1,6 +1,7 @@
 # src/api/chat.py
+from src.common.types import Message
 from fastapi import APIRouter, HTTPException
-from src.models.chat import ChatRequest, ChatResponse
+from src.models.chat import ChatRequest
 from src.services.chat_service import ChatService
 from fastapi.responses import StreamingResponse
 from src.middleware.endpoint_manager import endpoint_protection
@@ -19,7 +20,7 @@ chat_service = ChatService()
 )
 async def ask(
     request: ChatRequest,
-) -> ChatResponse:
+) -> Message:
     if len(request.message.parts[0].text) == 0 or request.message.parts[0].text is None:
         raise HTTPException(status_code=400, detail="Message is required")
 
@@ -27,8 +28,8 @@ async def ask(
         raise HTTPException(status_code=400, detail="Message is too long")
 
     try:
-        response, sources = await chat_service.ask(request)
-        return ChatResponse(message=response, sources=sources)
+        response = await chat_service.ask(request)
+        return response
     except Exception as e:
         raise e
 

@@ -18,6 +18,7 @@ from src.common.types import (
     DataPart,
     FilePart,
     FileContent,
+    RetrievalContext,
 )
 from src.services.types import Conversation
 from src.utils.logger_conf import logger
@@ -144,6 +145,9 @@ class ConversationRepository:
                     parts=self._serialize_parts(message.parts),
                     message_metadata=message.metadata,
                     message_order=max_order + 1,
+                    retrieval_context=message.retrieval_context.model_dump()
+                    if message.retrieval_context
+                    else None,
                 )
                 session.add(msg_model)
 
@@ -245,9 +249,13 @@ class ConversationRepository:
     def _serialize_message(self, message: Message) -> Dict[str, Any]:
         """Serialize a message to JSON"""
         return {
+            "id": message.id,
             "role": message.role,
             "parts": self._serialize_parts(message.parts),
             "metadata": message.metadata,
+            "retrieval_context": message.retrieval_context.model_dump()
+            if message.retrieval_context
+            else None,
         }
 
     def _deserialize_message(self, message_data: Optional[Dict[str, Any]]) -> Message:
@@ -255,15 +263,23 @@ class ConversationRepository:
         if message_data is None:
             return {}
         return Message(
+            id=message_data["id"],
             role=message_data["role"],
             parts=self._deserialize_parts(message_data["parts"]),
             metadata=message_data.get("metadata"),
+            retrieval_context=RetrievalContext(**message_data.get("retrieval_context"))
+            if message_data.get("retrieval_context")
+            else None,
         )
 
     def _model_to_message(self, msg_model: MessageModel) -> Message:
         """Convert MessageModel to Message"""
         return Message(
+            id=str(msg_model.id),
             role=msg_model.role,
             parts=self._deserialize_parts(msg_model.parts),
             metadata=msg_model.message_metadata,
+            retrieval_context=RetrievalContext(**msg_model.retrieval_context)
+            if msg_model.retrieval_context
+            else None,
         )

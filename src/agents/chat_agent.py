@@ -9,17 +9,14 @@ from src.agents.folder_categorization_agent import FolderCategorizationAgent
 from src.agents.query_context_agent import QueryContextAgent
 from langchain_core.messages import BaseMessage
 from src.utils.logger_conf import logger
-from langchain_core.documents import Document
 from src.utils.decorators import singleton
 from src.common.streaming import StreamEventBuilder
 from src.models.streaming import StreamPhase
-from src.utils.reference import normalize_ref
-from src.models.reference import Reference
 import tiktoken
 from src.services.web_search_service import search_service
 from src.models.chat import WebSearchConfig
 from src.services.conversation_service import ConversationService
-from src.common.types import Message
+from src.common.types import Message, RetrievalContext
 from src.common.types import TextPart
 from src.tracking.observability import tracer
 
@@ -42,7 +39,7 @@ class ChatAgent:
         conversation: List[BaseMessage],
         web_search_config: WebSearchConfig,
         metadata: Dict[str, Any],
-    ) -> List[Document]:
+    ) -> RetrievalContext:
         """Retrieves relevant documents based on the query and knowledge base ID."""
         embed_top = 50
         rerank_top = 20
@@ -154,14 +151,22 @@ class ChatAgent:
                     f"Extracted {len(cited_docs)} citations for query: {original_query} in knowledgebase: {kb_id}"
                 )
 
-            return cited_docs
+            retrieval_context = RetrievalContext(
+                original_query=original_query,
+                contextualized_query=contextualized_query,
+                total_retrieved=len(retrieved_docs),
+                total_cited=len(cited_docs),
+                cited_chunks=cited_docs,
+            )
+
+            return retrieval_context
 
     async def _retrieve_stream(
         self,
         conversation: List[BaseMessage],
         web_search_config: WebSearchConfig,
         metadata: Dict[str, Any],
-    ) -> Generator[Union[str, List[Document]], None, None]:
+    ) -> Generator[Union[str, RetrievalContext], None, None]:
         """Retrieves relevant documents based on the query and knowledge base ID."""
         embed_top = 50
         rerank_top = 20
@@ -296,8 +301,14 @@ class ChatAgent:
                 progress=1.0,
                 metadata={"sources_count": len(cited_docs)},
             )
-
-        yield cited_docs
+        retrieval_context = RetrievalContext(
+            original_query=original_query,
+            contextualized_query=contextualized_query,
+            total_retrieved=len(retrieved_docs),
+            total_cited=len(cited_docs),
+            cited_chunks=cited_docs,
+        )
+        yield retrieval_context
 
     async def ask_normal(
         self,
@@ -306,10 +317,12 @@ class ChatAgent:
         metadata: Dict[str, Any],
     ) -> Tuple[Message, List[Dict]]:
         """Handles non-streaming (full text) response."""
-        citations = await self._retrieve(conversation, web_search_config, metadata)
+        retrieval_context = await self._retrieve(
+            conversation, web_search_config, metadata
+        )
         with tracer.start_as_current_span("ResponseAgent.generate_response"):
             response = await self.response_agent.generate_response(
-                contexts=citations,
+                contexts=retrieval_context.cited_chunks,
                 history=conversation,
             )
             response_dict = response.model_dump()
@@ -318,17 +331,16 @@ class ChatAgent:
         else:
             response_dict["response_metadata"]["search_method"] = "database_search"
         response_dict["response_metadata"].update(metadata)
+
         message = Message(
             role="agent",
             parts=[TextPart(type="text", text=response_dict["content"])],
             metadata=response_dict["response_metadata"],
+            retrieval_context=retrieval_context,
         )
-        if citations:
-            sources = create_reference(citations)
-        else:
-            sources = []
+
         await self.conv_service.add_message(message, metadata.get("conversation_id"))
-        return message, sources
+        return message
 
     async def ask_stream(
         self,
@@ -343,11 +355,11 @@ class ChatAgent:
             retrieve_generator = self._retrieve_stream(
                 conversation, web_search_config, metadata
             )
-            citations = []
+            retrieval_context = None
 
             async for event in retrieve_generator:
-                if isinstance(event, list):
-                    citations = event
+                if isinstance(event, RetrievalContext):
+                    retrieval_context = event
                 else:
                     yield event
 
@@ -356,7 +368,7 @@ class ChatAgent:
             )
 
             response_generator = self.response_agent.generate_streaming_response(
-                contexts=citations,
+                contexts=retrieval_context.cited_chunks,
                 history=conversation,
             )
 
@@ -378,7 +390,7 @@ class ChatAgent:
                 StreamPhase.COMPLETE, "Response generation complete", progress=1.0
             )
 
-            references = create_reference(citations) if citations else None
+            references = [doc.model_dump() for doc in retrieval_context.cited_chunks]
 
             if web_search_config.active:
                 final_metadata = {"search_method": "web_search"}
@@ -395,6 +407,7 @@ class ChatAgent:
                 role="agent",
                 parts=[TextPart(type="text", text=final_response.get("content"))],
                 metadata=final_metadata,
+                retrieval_context=retrieval_context,
             )
 
             await self.conv_service.add_message(
@@ -415,23 +428,3 @@ class ChatAgent:
                 message=f"An internal error occurred: {str(e)}",
                 code=500,
             )
-
-
-def create_reference(retrieved_docs: List[Document]) -> List[Dict]:
-    """Create reference objects from retrieved documents."""
-    references = []
-    formated_docs = normalize_ref(retrieved_docs)
-
-    for i, doc in enumerate(formated_docs):
-        reference = Reference(
-            source_id=str(doc.metadata.get("_id")),
-            source_index=doc.metadata.get("original_index"),
-            source=str(doc.metadata.get("original_filename")),
-            page_content=doc.page_content,
-            start_index=doc.metadata.get("start_index", 0),
-            end_index=doc.metadata.get("end_index", 0),
-            llm_received_index=i + 1,
-        )
-        references.append(reference.model_dump())
-
-    return references

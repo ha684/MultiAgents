@@ -25,9 +25,13 @@ class CitationIndexes(BaseModel):
 
 
 class Reference(BaseModel):
+    id: str = Field(
+        ...,
+        description="The integer ID of the chunk.",
+    )
     source_id: str = Field(
         ...,
-        description="The integer ID of the source.",
+        description="The integer ID of the document.",
     )
     source_index: int = Field(
         ...,
