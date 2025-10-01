@@ -99,6 +99,7 @@ class Document(Base):
     )  # Number of chunks created from this document
     processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
+    full_text_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Relationships
     knowledge_base: Mapped["KnowledgeBase"] = relationship(
         "KnowledgeBase", back_populates="documents"

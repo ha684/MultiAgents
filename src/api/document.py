@@ -68,6 +68,36 @@ async def get_document(document_id: uuid.UUID) -> DocumentResponse:
         raise e
 
 
+@router.get("/documents/{document_id}/content")
+async def get_document_content(document_id: uuid.UUID) -> Dict[str, Any]:
+    """
+    Get full text content of a processed document.
+    Only available after document processing is complete.
+    """
+    try:
+        document = await document_service.get_document(document_id)
+
+        if document.status != DocumentStatusEnum.FINISHED:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Document is not ready. Current status: {document.status}",
+            )
+
+        if not document.full_text_content:
+            raise HTTPException(
+                status_code=404, detail="Document content not available"
+            )
+
+        return {
+            "document_id": str(document.id),
+            "filename": document.filename,
+            "content": document.full_text_content,
+            "processed_at": document.processed_at,
+        }
+    except Exception as e:
+        raise e
+
+
 @router.get("/{document_id}/status", response_model=DocumentProcessingStatusResponse)
 async def get_document_status(
     document_id: uuid.UUID,
