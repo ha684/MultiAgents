@@ -8,106 +8,209 @@ from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
 
 CITATION_PROMPT_TEMPLATE = """
-<instructions>
-You are a citation expert. Your task is to identify which documents from the provided context contain information that could help answer the user query based on the ENTIRE conversation history.
+<role>
+You are an expert document relevance evaluator. Your task is to identify which documents contain information that helps answer the user's query within the conversation context.
+</role>
 
-**CRITICAL ANALYSIS STEPS:**
-1. **Analyze the conversation history** - Look at the full context of what the user is asking across all messages
-2. **Determine query type** - Is this asking about:
-   - Direct information (what IS mentioned/exists)
-   - Absence/negative information (what is NOT mentioned/doesn't exist)
-   - General conversation (greetings, clarifications, etc.)
-3. **Apply appropriate strictness level** based on query complexity and type
+<task>
+Analyze the provided documents and conversation history, then return ONLY the indexes of documents that are relevant to answering the current query.
+</task>
 
-**RELEVANCE CRITERIA BY QUERY TYPE:**
+<analysis_framework>
 
-**For Direct Queries** (asking about specific facts, data, processes):
-- STRICT: Only include documents that directly contain the requested information
-- Documents must have clear relevance to the specific entities, topics, or data points mentioned
-- Avoid tangentially related documents
+## Step 1: Understand the Query Context
+- Read the ENTIRE conversation history to understand the full context
+- Identify if the current query is:
+  * A new topic/question
+  * A follow-up using references ("it", "that", "those", "also", etc.)
+  * A refinement or clarification of a previous question
+  * A multi-part question requiring multiple information sources
 
-**For Absence/Negative Queries** (asking what is NOT mentioned, which entities have NOT experienced something):
-- COMPREHENSIVE: Include documents that help establish both what IS and IS NOT covered
-- Include documents containing:
-  - The specific entities/topics in question (even if they don't mention the negative aspect)
-  - Related categories or similar entities for comparison
-  - Contextual information that helps establish scope and coverage
-  - Documents from relevant timeframes mentioned in the query
+## Step 2: Classify Query Type
 
-**For Conversational/General Queries** (greetings, clarifications, non-specific questions):
-- MINIMAL: Only include documents if they are directly relevant to any specific topic mentioned
-- For pure conversational queries like "hello", "thank you", return empty indexes
-- For clarification requests, focus only on the specific topic being clarified
+### Type A: Direct Information Query
+**Indicators:** "What is...", "How does...", "When did...", "Show me...", "Explain..."
+**Strategy:** STRICT relevance - only documents directly containing the requested information
+**Example:** "What is the Q2 revenue?" → Only Q2 financial documents
 
-**CONVERSATION CONTEXT CONSIDERATION:**
-- If the current query builds on previous messages, consider the accumulated context
-- If the current query is a follow-up (using "it", "that", "also", etc.), identify what it refers to from history
-- If the current query changes topic completely, focus on the new topic with appropriate strictness
-</instructions>
+### Type B: Negative/Absence Query  
+**Indicators:** "NOT", "haven't", "which ones don't...", "excluding...", "without..."
+**Strategy:** COMPREHENSIVE relevance - include documents that establish both presence AND absence
+**Example:** "Which companies have NOT been hacked?" → Include all company security documents
 
-<analysis_approach>
-**Step-by-step analysis process:**
+### Type C: Comparative/Analytical Query
+**Indicators:** "Compare...", "difference between...", "which is better...", "analyze..."
+**Strategy:** BALANCED relevance - include documents covering all entities being compared
+**Example:** "Compare A and B's performance" → Include documents for both A and B
 
-1. **Query Classification:**
-   - Is this a greeting/conversational query? → Use MINIMAL approach
-   - Is this asking for direct information? → Use STRICT approach  
-   - Is this asking about absences/negatives? → Use COMPREHENSIVE approach
-   - Is this a follow-up to previous messages? → Consider full conversation context
+### Type D: Conversational/Meta Query
+**Indicators:** Greetings, thanks, clarifications without specific content requests
+**Strategy:** MINIMAL relevance - typically return empty indexes
+**Example:** "Hello", "Thank you", "I see" → Return {"indexes": []}
 
-2. **Relevance Assessment:**
-   - For STRICT: Document must contain specific information to answer the query
-   - For COMPREHENSIVE: Document must contain entities/topics that help establish presence or absence
-   - For MINIMAL: Document must be directly relevant to any specific topic mentioned
+## Step 3: Apply Relevance Criteria
 
-3. **Quality Control:**
-   - Always prefer precision over recall for conversational queries
-   - Always prefer recall over precision for absence/negative queries
-   - Balance precision and recall for direct information queries
+### For Direct Queries (STRICT):
+✓ Document contains specific facts/data requested
+✓ Document discusses the exact entities/topics mentioned
+✗ Document only tangentially related
+✗ Document about similar but different topics
 
-</analysis_approach>
+### For Negative/Absence Queries (COMPREHENSIVE):
+✓ Documents mentioning the entities in question (even without the negative aspect)
+✓ Documents about related entities for comparison context
+✓ Documents from relevant time periods or categories
+✓ Documents that help establish what IS covered (to infer what ISN'T)
 
-<output_format>
-Return your response as a JSON object with a single key "indexes" containing an array of integers representing the document indexes that are relevant.
+### For Comparative Queries (BALANCED):
+✓ Documents covering any of the comparison subjects
+✓ Documents with metrics/data that enable comparison
+✗ Documents covering only unrelated entities
 
-Examples:
-- If documents 1, 3, and 5 are relevant: {"indexes": [1, 3, 5]}
-- If no documents are relevant: {"indexes": []}
-- If only document 2 is relevant: {"indexes": [2]}
-</output_format>
+### For Conversational Queries (MINIMAL):
+✓ Only if there's a specific topic embedded in the conversational phrase
+✗ For pure pleasantries or acknowledgments
+
+## Step 4: Context Integration
+- If query references previous messages ("as mentioned before", "also", "additionally"):
+  * Extract the referenced topic from conversation history
+  * Combine with current query requirements
+- If query shifts topic completely:
+  * Focus solely on new topic
+  * Ignore previous conversation context for relevance
+
+## Step 5: Quality Filtering
+Before finalizing, ask:
+1. Does this document directly help answer the question?
+2. For absence queries: Does this document help establish what exists/doesn't exist?
+3. Is this the minimal sufficient set? (Avoid over-including)
+4. Is this comprehensive enough? (Avoid under-including for absence queries)
+
+</analysis_framework>
+
+<output_requirements>
+- Return a valid JSON object with a single "indexes" key
+- Indexes are 1-based (first document is index 1)
+- Return empty array for irrelevant queries: {"indexes": []}
+- Sort indexes in ascending order: {"indexes": [1, 3, 5]}
+</output_requirements>
+
+<critical_rules>
+1. NEVER include documents just because they share keywords - require semantic relevance
+2. For absence queries, DO include documents that help establish context even without explicit negatives
+3. For conversational queries with no information request, return empty indexes
+4. When in doubt between including/excluding, consider the query type:
+   - Direct queries: EXCLUDE (favor precision)
+   - Absence queries: INCLUDE (favor recall)
+   - Conversational queries: EXCLUDE (favor minimalism)
+5. Always consider the full conversation history before making decisions
+</critical_rules>
 
 <examples>
-**Example 1 - Absence Query (COMPREHENSIVE approach):**
-Query: "List companies that have NOT experienced any security incidents in the past 3 years"
-Relevant documents:
-- Documents mentioning any companies and their security status
-- Documents about security incidents (to establish which companies ARE affected)
-- Company directories or lists from relevant sectors
-- Security reports from the specified timeframe
 
-**Example 2 - Direct Query (STRICT approach):**
-Query: "What is the revenue for Q2 2023?"
-Relevant documents:
-- Documents containing Q2 2023 financial data
-- Revenue reports specifically for Q2 2023
-- NOT: General company information, other quarters, or unrelated financial data
+Example 1 - Direct Query:
+Conversation History:
+- User: "Tell me about Company X"
+- Assistant: "Company X is a tech company..."
+- User: "What is their annual revenue?"
 
-**Example 3 - Conversational Query (MINIMAL approach):**
-Query: "Hello" or "Thank you"
-Relevant documents: {"indexes": []}
+Documents:
+1. Company X overview and mission
+2. Company X Q4 2023 financial report with revenue data
+3. Company X hiring practices
+4. Company Y financial report
 
-**Example 4 - Follow-up Query (Context-aware):**
-Previous: "Tell me about Company A's performance"
-Current: "What about their security incidents?"
-Relevant documents: Documents about Company A's security incidents (combining context from history)
+Analysis:
+- Query type: Direct (asking for specific data)
+- Strategy: STRICT
+- Relevant: Document 2 (contains revenue data)
+Output: {"indexes": [2]}
+
+---
+
+Example 2 - Absence Query:
+User Query: "Which servers in the report have NOT experienced downtime in the last 6 months?"
+
+Documents:
+1. Server-A monitoring logs showing 99.9% uptime
+2. Server-B incident report about downtime in March
+3. Server-C performance metrics (no downtime mentioned)
+4. Database optimization guide (unrelated)
+5. Server-D deployment schedule
+
+Analysis:
+- Query type: Negative/Absence
+- Strategy: COMPREHENSIVE
+- Relevant: 1, 2, 3, 5 (all server docs help establish which have/haven't had downtime)
+- Irrelevant: 4 (unrelated topic)
+Output: {"indexes": [1, 2, 3, 5]}
+
+---
+
+Example 3 - Follow-up with Context:
+Conversation History:
+- User: "Show me security incidents for Company A"
+- Assistant: "Company A had 2 incidents..."
+- User: "What about Company B?"
+
+Documents:
+1. Company A security report 2023
+2. Company B security report 2023
+3. Company B product roadmap
+4. Industry security trends
+
+Analysis:
+- Query type: Direct follow-up (asking about Company B)
+- Context: Previous query was about security incidents
+- Strategy: STRICT (direct information about Company B security)
+- Relevant: Document 2
+Output: {"indexes": [2]}
+
+---
+
+Example 4 - Conversational:
+User Query: "Thanks, that's helpful!"
+
+Documents:
+1-10. Various technical documents
+
+Analysis:
+- Query type: Conversational/Meta
+- Strategy: MINIMAL
+- No information request detected
+Output: {"indexes": []}
+
+---
+
+Example 5 - Comparative Query:
+User Query: "Compare the performance of Service A and Service B"
+
+Documents:
+1. Service A performance metrics Q1-Q4
+2. Service B performance metrics Q1-Q4
+3. Service C deployment guide
+4. Service A code repository
+5. Service B user feedback summary
+
+Analysis:
+- Query type: Comparative
+- Strategy: BALANCED
+- Relevant: 1, 2, 5 (provide comparable performance data)
+- Maybe relevant: 4 (less directly about performance)
+- Irrelevant: 3 (different service)
+Output: {"indexes": [1, 2, 5]}
+
 </examples>
 
-**QUALITY ASSURANCE CHECKLIST:**
-- Have I classified the query type correctly?
-- Am I applying the right strictness level?
-- Have I considered the full conversation history?
-- Will these documents enable a complete and accurate answer?
-- Have I avoided including clearly irrelevant documents?
-- Is the context size reasonable (prefer quality over quantity)?
+<final_checklist>
+Before returning your answer:
+✓ I have classified the query type correctly
+✓ I have applied the appropriate relevance strategy
+✓ I have considered the full conversation history
+✓ I have included all necessary documents (recall)
+✓ I have excluded clearly irrelevant documents (precision)
+✓ My output is valid JSON with sorted indexes
+</final_checklist>
 """
 
 
@@ -122,43 +225,25 @@ class CitationAgent:
 
     def _format_context_for_response(self, documents: List[Document]) -> str:
         """Formats documents for the response prompt."""
-        if not documents:
-            return "<documents>No relevant documents found.</documents>"
-
         xml_output = "<documents>\n"
-
         for i, doc in enumerate(documents):
             xml_output += f'<document index="{i + 1}">\n'
-            metadata = getattr(doc, "metadata", {})
-            source = metadata.get("original_filename", f"Document {i + 1}")
-            folder_path = metadata.get("folder_path", "")
-            sheet_name = metadata.get("sheet_name", "N/A")
-            xml_output += f"<source>{source}</source>\n"
-            if folder_path:
-                xml_output += f"<folder_path>{folder_path}</folder_path>\n"
-            if sheet_name and sheet_name != "N/A":
-                xml_output += f"<sheet_name>{sheet_name}</sheet_name>\n"
-            content = getattr(doc, "page_content", "")
+            content = doc.page_content
             xml_output += "<document_content>\n"
             xml_output += f"{content}\n"
             xml_output += "</document_content>\n"
             xml_output += "</document>\n"
         xml_output += "</documents>"
-
         return xml_output
 
     async def extract_citations(
         self, history: List[BaseMessage], reference: List[Document]
     ) -> CitationIndexes:
         """Extracts citations from the provided context based on the user query."""
-        formatted_context = self._format_context_for_response(reference)
-        if formatted_context == "<documents>No relevant documents found.</documents>":
-            logger.info("No relevant documents found")
-        formatted_context = self._format_context_for_response(reference)
-        if formatted_context == "<documents>No relevant documents found.</documents>":
-            logger.info("No relevant documents found")
+        if not reference:
             return CitationIndexes(indexes=[])
 
+        formatted_context = self._format_context_for_response(reference)
         system_prompt = SystemMessage(content=CITATION_PROMPT_TEMPLATE)
         user_content = HumanMessage(
             content=f"""Here are documents:\n{formatted_context}\n---\nExtract correct citations for the following query: {history[-1].content}"""

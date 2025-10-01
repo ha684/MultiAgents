@@ -10,7 +10,6 @@ from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
 from src.services.conversation_service import ConversationService
 from src.agents.summary_agent import SummaryAgent
 from src.common.types import Message
-from src.services.utils import get_message_id
 from src.utils.logger_conf import logger
 from src.tracking.observability import tracer
 from src.exceptions.chat_exceptions import ValidationError, ConversationNotFoundError
@@ -108,19 +107,11 @@ class ChatService:
             conversation_history = await self.conv_service.list_messages(
                 conversation_id, user_id
             )
-
             if conversation_history is None:
                 raise ConversationNotFoundError(conversation_id=conversation_id)
-
-            last_message_id = get_message_id(conversation_history[-1])
-            if last_message_id:
-                message.metadata.update({"last_message_id": last_message_id})
-
-            await self.conv_service.add_message(message, conversation_id, user_id)
+            await self.conv_service.add_message(message, conversation_id)
             conversation_history.append(message)  # type: ignore
-
             formatted_conversation = self._format_history(conversation_history)
-
             managed_conversation = await self._manage_conversation_length(
                 formatted_conversation
             )
@@ -155,10 +146,10 @@ class ChatService:
                 }
                 response = main_agent.generate_response(initial_state)
             else:
-                response, sources = await self.chat_agent.ask_normal(
+                response = await self.chat_agent.ask_normal(
                     conversation, web_search_config, metadata
                 )
-            return response, sources
+            return response
 
     async def ask_sse(
         self, request: ChatRequest

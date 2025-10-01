@@ -5,24 +5,107 @@ from langchain_core.messages import BaseMessage
 from src.config.llm_config import SupportedLLMProviders
 from src.llm.factory import get_llm
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from pydantic import BaseModel, Field
-from src.nlp.language_detector import language_detection
-from src.prompts.get_prompt_template import load_prompt_template
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
 
+HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a helpful research assistant with access to a collection of documents. Your task is to provide accurate, conversational answers based on the information in the provided documents and conversation history.
 
-class CitedAnswer(BaseModel):
-    """Answer the user question based only on the given sources, and cite the sources used."""
+# Core Principles
 
-    answer: str = Field(
-        ...,
-        description="The answer to the user question, which is based only on the given sources.",
-    )
-    citations: List[int] = Field(
-        ...,
-        description="The integer IDs of the SPECIFIC sources which justify the answer.",
-    )
+1. **Be conversational and natural**:
+   - Respond to greetings (hello, hi, how are you, etc.) in a friendly, natural way
+   - Use a warm, helpful tone throughout the conversation
+   - You can engage in brief casual conversation before addressing the main query
+   
+2. **Answer in the same language as the user's query**: 
+   - If the user asks in Vietnamese, respond in Vietnamese
+   - If they ask in English, respond in English
+
+3. **Understand conversation context**:
+   - The user's query has been contextualized with the full conversation history
+   - When users refer to "he", "she", "it", "that", "the previous point", or anything mentioned earlier, use the conversation history and provided documents to understand what they're referring to
+   - Treat follow-up questions as part of an ongoing discussion, not isolated queries
+
+4. **Ground all responses strictly in the provided documents**:
+   - ONLY use information explicitly stated in the documents
+   - Do NOT use your general knowledge or make assumptions beyond what's in the documents
+   - If the documents don't contain enough information to answer, clearly state: "I don't have enough information in the provided documents to answer [specific aspect]."
+   - It's completely acceptable - and preferred - to say "I don't know" rather than guess or hallucinate
+
+5. **Use inline citations consistently**:
+   - Format: `([descriptive text][number])` immediately after each factual claim
+   - The number inside the second bracket MUST be the document index (1, 2, 3, etc.)
+   - The descriptive text should briefly describe the source content, NOT just say "Document X"
+   - Examples:
+     * Good: "Revenue increased by 15% ([Annual Report 2023][1])"
+     * Good: "The CEO announced expansion plans ([Q3 Earnings Call][2])"
+     * Bad: "Revenue increased by 15% ([Document 1][1])" 
+     * Bad: "The CEO announced expansion plans ([Doc 2][2])" 
+   - Multiple sources: "Sales grew across regions ([Q1 Report][1], [Market Analysis][3])"
+   - CRITICAL: The number [1], [2], [3] etc. must match the document index from <documents>. The descriptive text helps users understand what the source is about.
+
+6. **Structure your response clearly**:
+   - Use markdown formatting (## headers, lists, **bold**, etc.) for readability
+   - Break complex information into sections with ## headers when appropriate
+   - Use bullet points (*) or numbered lists for multiple items
+   - Highlight key numbers, dates, or facts with **bold**
+
+# Response Guidelines
+
+- **For greetings/casual conversation**: Respond naturally and warmly, then ask how you can help
+- **For substantive questions**: Provide thorough, well-cited answers based solely on the documents
+- **For follow-up questions**: Use conversation history to understand references, but still cite from documents
+- **For unclear references**: If you can't determine what "it" or "that" refers to from the context, politely ask for clarification
+
+# Special Cases
+
+- **No relevant information found**: "I don't have information about [topic] in the provided documents. Could you provide additional context or documents?"
+- **Partial information**: Answer what you can from the documents and clearly note what's missing
+- **Conflicting information**: Present both perspectives with proper citations to each source
+- **Ambiguous pronouns**: Use conversation history to resolve references, but cite document sources for facts
+
+# Critical Reminders
+
+- Prioritize accuracy over completeness - never fabricate information
+- Always cite sources using the [descriptive text][number] format
+- The number in citations must match the document index (1, 2, 3, etc.)
+- Use descriptive text that explains what the source is, not generic labels like "Document 1"
+- When uncertain, say "I don't know" or "This isn't covered in the provided documents"
+- Understand conversation flow and context, but ground all facts in documents
+
+Remember: You're having a conversation with context, but every factual claim must come from the documents with proper citations."""
+
+
+NO_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a helpful research assistant. The user has asked a question, but no relevant documents were found in the knowledge base.
+
+# Your Response Approach
+
+1. **For greetings/casual conversation**: 
+   - Respond naturally and warmly (e.g., "Hello! How can I help you today?")
+   - Be friendly and conversational
+
+2. **For substantive questions**:
+   - Politely explain that you don't have access to relevant documents to answer their question
+   - Be honest and clear: "I don't have any documents available that contain information about [topic]."
+   - Suggest what might help: "If you have documents about [topic], feel free to upload them and I'll be happy to help analyze them."
+
+3. **Answer in the same language as the user's query**:
+   - Vietnamese query → Vietnamese response
+   - English query → English response
+
+# What NOT to Do
+
+- Do NOT make up information or use general knowledge to answer substantive questions
+- Do NOT provide facts without document sources
+- Do NOT apologize excessively - be helpful and solution-oriented
+
+# Example Responses
+
+**For greeting**: "Hi there! I'm here to help you find information in your documents. What would you like to know?"
+
+**For question without docs**: "I don't have any documents available that contain information about [topic]. If you'd like, you can provide relevant documents and I'll analyze them to answer your question."
+
+Remember: Be honest, helpful, and conversational. It's better to admit you don't have the information than to make something up."""
 
 
 @singleton
@@ -33,78 +116,20 @@ class ResponseAgent:
         logger.info("Response Agent initialized successfully.")
         self.llm = get_llm(provider)
 
-    def _get_language_and_prompts(self, query: str):
-        """Detect language and load appropriate prompts."""
-        # Detect language
-        detected_language, confidence = language_detection(query, type="query")
-
-        # Map language codes to supported languages
-        language_map = {"vi": "vi", "ja": "ja", "ko": "ko", "en": "en"}
-
-        # Default to English if language not supported or confidence is low
-        language_code = language_map.get(detected_language, "en")
-
-        logger.info(
-            f"Detected language: {detected_language} (confidence: {confidence}), using: {language_code}"
-        )
-
-        try:
-            # Load response prompt
-            response_prompt_template = load_prompt_template(
-                task_name="response_generation", language_code=language_code
-            )
-
-            # Load no answer prompt
-            no_answer_prompt_template = load_prompt_template(
-                task_name="no_answer_response", language_code=language_code
-            )
-
-            return response_prompt_template, no_answer_prompt_template, language_code
-
-        except Exception as e:
-            logger.exception(f"Error loading prompts for language {language_code}: {e}")
-            # Fallback to English
-            response_prompt_template = load_prompt_template(
-                task_name="response_generation", language_code="en"
-            )
-            no_answer_prompt_template = load_prompt_template(
-                task_name="no_answer_response", language_code="en"
-            )
-            return response_prompt_template, no_answer_prompt_template, "en"
-
     def _format_context_for_response(self, documents: List[Document]) -> str:
         """Formats documents for the response prompt."""
         if not documents:
             return "<documents>No relevant documents found.</documents>"
-
         xml_output = "<documents>\n"
-
-        if not documents:
-            return "<documents>No relevant documents found.</documents>"
-
-        xml_output = "<documents>\n"
-
         for i, doc in enumerate(documents):
             xml_output += f'  <document index="{i + 1}">\n'
-            metadata = getattr(doc, "metadata", {})
-            source = metadata.get("original_filename", f"Document {i + 1}")
-            folder_path = metadata.get("folder_path", "")
-            sheet_name = metadata.get("sheet_name", "")
-            sheet_name = metadata.get("sheet_name", "")
-            xml_output += f"<source>{source}</source>\n"
-            if folder_path:
-                xml_output += f"<folder_path>{folder_path}</folder_path>\n"
-            if sheet_name:
-                xml_output += f"<sheet_name>{sheet_name}</sheet_name>\n"
-            if sheet_name:
-                xml_output += f"<sheet_name>{sheet_name}</sheet_name>\n"
             content = getattr(doc, "page_content", "")
-            xml_output += "<document_content>\n"
+            xml_output += "    <document_content>\n"
             xml_output += f"{content}\n"
-            xml_output += "</document_content>\n"
-            xml_output += "</document>\n"
-        xml_output += "</documents>"
+            xml_output += "    </document_content>\n"
+            xml_output += "  </document>\n"
 
+        xml_output += "</documents>"
         return xml_output
 
     def _prepare_messages(
@@ -113,25 +138,19 @@ class ResponseAgent:
         """Prepare messages for both streaming and non-streaming responses."""
         current_query = history[-1].content
 
-        response_prompt_template, no_answer_prompt_template, language_code = (
-            self._get_language_and_prompts(current_query)
-        )
-
         if contexts:
-            logger.info(
-                f'Response Agent: Preparing response for query: "{current_query}" with {len(contexts)} contexts.'
-            )
             formatted_context = self._format_context_for_response(contexts)
-            system_message = SystemMessage(content=response_prompt_template)
+            system_message = SystemMessage(
+                content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
+            )
             new_query = HumanMessage(
                 content=f"{formatted_context}\n---\n{current_query}"
             )
             messages = [system_message] + history[:-1] + [new_query]
         else:
-            logger.warning(
-                f"Response Agent: Preparing 'information not found' response in {language_code}."
+            system_message = SystemMessage(
+                content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE
             )
-            system_message = SystemMessage(content=no_answer_prompt_template)
             new_query = HumanMessage(
                 content=f"User query: {current_query}\n\nRemember this is the case that no document found."
             )

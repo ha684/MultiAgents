@@ -1,3 +1,4 @@
+# src/db/models/conversation.py
 from src.connector.database_conn import Base
 from sqlalchemy import Column, String, Integer, Boolean, DateTime, Index, ForeignKey
 from datetime import datetime
@@ -56,7 +57,7 @@ class MessageModel(Base):
         default=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
     )
     message_order = Column(Integer, nullable=False)
-
+    retrieval_context = Column(JSONB, nullable=True)
     conversation = relationship("ConversationModel", back_populates="messages")
 
     __table_args__ = (

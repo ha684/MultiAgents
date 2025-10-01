@@ -10,10 +10,10 @@ from src.utils.logger_conf import logger
 from typing import Dict, Any
 
 ENABLE_EXCEPTION_LOGGING = (
-    os.getenv("ENABLE_EXCEPTION_LOGGING", "true").lower() == "true"
+    os.getenv("ENABLE_EXCEPTION_LOGGING", "false").lower() == "true"
 )
 LOG_CLIENT_ERRORS = os.getenv("LOG_CLIENT_ERRORS", "false").lower() == "true"
-LOG_SERVER_ERRORS = os.getenv("LOG_SERVER_ERRORS", "true").lower() == "true"
+LOG_SERVER_ERRORS = os.getenv("LOG_SERVER_ERRORS", "false").lower() == "true"
 LOG_LEVEL = os.getenv("EXCEPTION_LOG_LEVEL", "error").lower()
 
 

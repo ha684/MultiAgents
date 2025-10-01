@@ -5,7 +5,6 @@ from uuid import uuid4
 
 from src.common.types import (
     Message,
-    Task,
 )
 
 
@@ -176,10 +175,6 @@ class CreateConversationResponse(JSONRPCResponse):
 
 class ListTaskRequest(JSONRPCRequest):
     method: Literal["task/list"] = "task/list"
-
-
-class ListTaskResponse(JSONRPCResponse):
-    result: list[Task] | None = None
 
 
 class RegisterAgentRequest(JSONRPCRequest):

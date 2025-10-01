@@ -3,10 +3,11 @@ from typing import cast
 from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.messages.utils import filter_messages
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 def get_current_date():
-    return datetime.now().strftime("%Y-%m-%d")
+    return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).strftime("%Y-%m-%d")
 
 
 def get_notes_from_tool_calls(messages: list[BaseMessage]) -> list[str]:
