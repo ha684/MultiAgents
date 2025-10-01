@@ -14,6 +14,9 @@ from src.llm.factory import get_llm
 from src.agents.researcher.utils import get_current_date
 from src.agents.researcher.supervisor_agent import SupervisorAgent
 from src.utils.logger_conf import logger
+from src.common.streaming import StreamEventBuilder, StreamPhase
+from src.config import settings
+from src.models.chat import WebSearchConfig
 
 
 class AgentState(MessagesState):
@@ -75,7 +78,6 @@ class MainAgent:
             input=AgentInputState,
         )
         self.supervisor = SupervisorAgent(kb_id, config).compile()
-
         self.graph.add_node("supervisor", self.supervisor)
         self.graph.add_node("final_report_generation", self.final_report_generation)
         self.graph.add_node("research_failure_handler", self.research_failure_handler)
@@ -195,40 +197,46 @@ class MainAgent:
             "token_usage": final_state.get("token_usage", 0),
         }
 
-    async def generate_streaming_response(self, initial_state: AgentInputState):
+    def generate_streaming_response(self, initial_state: AgentInputState):
         """
         Generate a streaming response similar to response_agent format.
         This method provides a more focused streaming interface for the final report generation.
         """
         logger.info("Starting streaming response generation")
-        end = "\n"
 
         try:
+            compiled_graph = self.compile()
             final_state = {}
 
-            yield "agent:Starting research process..." + end
+            yield StreamEventBuilder.message_start()
 
-            async for chunk in self.main_agent.astream(initial_state):
+            yield StreamEventBuilder.status_update(
+                StreamPhase.CONTEXT_ANALYSIS,
+                "Starting research process...",
+                progress=0.1,
+            )
+
+            for chunk in compiled_graph.stream(initial_state):
                 for node_name, node_output in chunk.items():
                     if node_name == "write_research_brief":
-                        yield (
-                            "agent:Research brief completed. Starting research phase..."
-                            + end
+                        yield StreamEventBuilder.status_update(
+                            StreamPhase.CONTEXT_ANALYSIS,
+                            "Research brief completed. Starting research phase...",
+                            progress=0.3,
                         )
 
                     elif node_name == "supervisor":
-                        yield (
-                            "agent:Conducting research and gathering information..."
-                            + end
+                        yield StreamEventBuilder.status_update(
+                            StreamPhase.DOCUMENT_RETRIEVAL,
+                            "Conducting research and gathering information...",
+                            progress=0.6,
                         )
 
                     elif node_name == "final_report_generation":
-                        yield "agent:Generating final report..." + end
-
-                    elif node_name == "research_failure_handler":
-                        yield (
-                            "agent:Research encountered issues, providing alternative response..."
-                            + end
+                        yield StreamEventBuilder.status_update(
+                            StreamPhase.RESPONSE_GENERATION,
+                            "Generating final report...",
+                            progress=0.8,
                         )
 
                 final_state = node_output
@@ -238,13 +246,14 @@ class MainAgent:
                     clarification_message = final_state.get("messages", [])
                     if clarification_message:
                         message_content = clarification_message[-1].content
-                        for chunk in message_content.split(" "):
-                            yield f"data:{chunk} " + end
+                        words = message_content.split(" ")
+                        for i, word in enumerate(words):
+                            yield StreamEventBuilder.content_delta(f"{word} ", index=i)
 
-                yield "stop"
+                yield StreamEventBuilder.message_stop()
                 return
 
-            async for chunk in self.llm.astream(
+            response_model = self.llm.stream(
                 [
                     HumanMessage(
                         content=prompts.response_agent_instructions.format(
@@ -257,34 +266,58 @@ class MainAgent:
                         )
                     )
                 ]
-            ):
-                if hasattr(chunk, "content"):
-                    yield f"data:{chunk.content}" + end
+            )
 
+            index = 0
+            for chunk in response_model:
+                if hasattr(chunk, "content"):
+                    yield StreamEventBuilder.content_delta(chunk.content, index=index)
+                    index += 1
+
+            yield StreamEventBuilder.status_update(
+                StreamPhase.COMPLETE, "Response generation complete", progress=1.0
+            )
+
+            references = []
             if final_state:
                 chunk_references = final_state.get("chunk_references", [])
                 file_references = final_state.get("file_references", [])
 
                 logger.info(
-                    f"Streaming {len(chunk_references)} chunk references and {len(file_references)} file references"
+                    f"Processing {len(chunk_references)} chunk references and {len(file_references)} file references"
                 )
 
                 for chunk_ref in chunk_references:
-                    yield f"reference:{chunk_ref}" + end
+                    references.append({"type": "chunk", "data": chunk_ref})
 
                 for file_ref in file_references:
-                    yield f"file:{file_ref}" + end
+                    references.append({"type": "file", "data": file_ref})
             else:
-                logger.warning("No final state found, skipping reference streaming")
-                yield "data:No report was generated." + end
+                logger.warning("No final state found, no references to include")
 
-            yield "stop"
+            metadata = {"search_method": "database_search"}
+            if (
+                settings.enable_websearch
+                and initial_state.get(
+                    "web_search", WebSearchConfig(active=False)
+                ).active
+            ):
+                metadata = {"search_method": "web_search"}
+
+            yield StreamEventBuilder.message_stop(
+                references=references if references else None,
+                metadata=metadata,
+            )
+
             logger.info("Streaming response generation completed successfully")
 
         except Exception as e:
             logger.exception(f"Error during streaming response generation: {e}")
-            yield f"data:An error occurred while generating the response: {e}" + end
-            yield "stop"
+            yield StreamEventBuilder.error(
+                error_type="generation_error",
+                message=f"An error occurred while generating the response: {e}",
+                code=500,
+            )
 
     async def assess_research_need(self, state: AgentState):
         """
@@ -415,56 +448,3 @@ class MainAgent:
                 "file_references": file_references,
                 "token_usage": token_usage,
             }
-
-
-if __name__ == "__main__":
-    # Example usage
-    logger.info("Starting agent example execution")
-    kb_id = uuid.UUID(
-        "c69ee74f-91de-46f4-8276-1a416372eb92"
-    )  # Replace with actual KB ID
-    logger.info(f"Using knowledge base ID: {kb_id}")
-
-    agent = MainAgent(kb_id)
-
-    # Compile the agents
-    logger.debug("Compiling supervisor agent")
-    compiled_agent = agent.compile()
-
-    query = (
-        "I am dumb I don't know what to ask, please help me to find a research topic."
-    )
-    # query = "Vui lòng đưa ra các công ty phát triển hệ thống chủ yếu ở khu vực Kansai."
-    # query = "Liệt kê các file excel (.xlsx) trong project này, và cho biết các entity có loại là “リソース” nhưng không thuộc nhóm “ユーザー” trong các file đó."
-    # query = "Liệt kê các file excel (.xlsx) trong project này"
-
-    initial_state: AgentInputState = {
-        "messages": [
-            HumanMessage(content=query),
-        ],
-        "folder_context": None,
-    }
-
-    print("\n\n=== TESTING STREAMING RESPONSE MODE ===")
-    logger.info("Testing streaming response mode")
-    try:
-        for chunk in agent.generate_streaming_response(initial_state):
-            chunk_pair = chunk.split(":", 1)
-            if chunk_pair and len(chunk_pair) == 1 and chunk_pair[0].strip() == "stop":
-                print("\n\n=== STREAMING RESPONSE COMPLETED ===")
-                break
-            chunk_type = chunk_pair[0].strip()
-            chunk_content = chunk_pair[1] if len(chunk_pair) > 1 else ""
-
-            if chunk_type == "agent":
-                print(f"\nAgent: {chunk_content.strip()}")
-            elif chunk_type == "data":
-                print(f"{chunk_content.removesuffix('\n')}", end="")
-            elif chunk_type == "reference":
-                print(f"\nReference: {chunk_content.strip()}")
-            elif chunk_type == "file":
-                print(f"\nFile Reference: {chunk_content.strip()}")
-
-    except Exception as e:
-        logger.error(f"Error in streaming response mode: {e}")
-        print(f"\nError in streaming response mode: {e}")
