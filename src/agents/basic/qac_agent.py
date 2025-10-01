@@ -6,6 +6,7 @@ from src.llm.factory import get_llm
 from src.prompts.get_prompt_template import load_prompt_template
 from src.nlp.language_detector import language_detection
 
+
 class QACAgent:
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):
         self.llm = get_llm(provider)
@@ -29,17 +30,17 @@ class QACAgent:
             prompt = PromptTemplate(template=prompt_template, input_variables=["input"])
 
             chain = prompt | self.llm | JsonOutputParser()
-            
+
             inputs = [{"input": context} for context in contexts]
-            
+
             results = await chain.with_retry().abatch(inputs=inputs)
-            
+
             if not results:
                 raise ValueError("No content returned from LLM response")
 
             unique_qa_pairs = []
             seen_questions = set()
-            
+
             for content in results:
                 question = content.get("question", "").strip()
                 answer = content.get("answer", "").strip()

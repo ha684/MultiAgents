@@ -7,7 +7,7 @@ from src.models.chat import SearchProvider
 from src.utils.logger_conf import logger
 
 
-class SearchService:
+class WebSearchService:
     """
     Search service that routes requests to appropriate search providers.
     """
@@ -49,4 +49,4 @@ class SearchService:
         return list(self._providers.keys())
 
 
-search_service = SearchService()
+web_search_service = WebSearchService()
