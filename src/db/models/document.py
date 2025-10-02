@@ -1,21 +1,24 @@
 # src/db/models/document.py
-from src.connector.database_conn import Base
+import uuid
+from datetime import datetime
+from typing import List, Optional
+
 from sqlalchemy import (
-    String,
-    Integer,
     Boolean,
     DateTime,
     ForeignKey,
     Index,
+    Integer,
+    String,
+    Text,
     UniqueConstraint,
+    func,
 )
-from datetime import datetime
-from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
-from typing import List, Optional
-from sqlalchemy import func, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from uuid_extensions import uuid7
-import uuid
+
+from src.connector.database_conn import Base
 
 
 class KnowledgeBase(Base):
@@ -99,6 +102,7 @@ class Document(Base):
     )  # Number of chunks created from this document
     processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     # Relationships
     knowledge_base: Mapped["KnowledgeBase"] = relationship(
         "KnowledgeBase", back_populates="documents"
@@ -107,8 +111,6 @@ class Document(Base):
     qa_pairs: Mapped[List["DocumentQA"]] = relationship(
         "DocumentQA", back_populates="document", cascade="all, delete-orphan"
     )
-
-    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
         Index("idx_doc_kb_status", "knowledge_base_id", "status", "is_inactive"),

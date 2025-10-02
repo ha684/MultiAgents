@@ -3,6 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
+from langchain_core.messages import AIMessage
 
 EXTRACT_FILENAME_PROMPT = """
 You are an AI assistant that extracts the filename from a given arbitrary query. If
@@ -66,7 +67,7 @@ class FilenameAgent:
             ]
         )
 
-    async def extract_filename(self, query: str) -> str | None:
+    async def ainvoke(self, query: str) -> str | None:
         """
         Extract the filename from a given query.
 
@@ -80,11 +81,11 @@ class FilenameAgent:
         try:
             chain = self.prompt | self.llm | output_parsers.JsonOutputParser()
             chain = chain.with_retry()
-            content = await chain.ainvoke({"query": query})
-            if not content:
+            response: AIMessage = await chain.ainvoke({"query": query})
+            if not response.content:
                 logger.warning("No content returned from LLM response")
                 return None
-            filename = content.get("filename")
+            filename = response.content.get("filename")
             logger.info(f"Extracted filename: {filename}")
 
             return filename.strip() if filename else None

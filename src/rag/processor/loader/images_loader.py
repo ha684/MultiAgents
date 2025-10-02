@@ -3,7 +3,7 @@ from typing import List
 from langchain_core.document_loaders.base import BaseLoader
 from langchain_core.documents import Document
 
-from src.agents.image_agent import ImageExtractionAgent
+from src.agents.basic.image_agent import ImageExtractionAgent
 from src.config.settings import settings
 from src.connector import minio_client
 from src.db.models.document import Document as DBDocument

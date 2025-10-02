@@ -7,6 +7,7 @@ from .response_agent import ResponseAgent
 from .verification_agent import VerificationAgent
 from .qac_agent import QACAgent
 from .summary_agent import SummaryAgent
+from .chunk_contextual_agent import ChunkContextualAgent
 
 citation_agent = CitationAgent()
 summary_agent = SummaryAgent()
@@ -16,3 +17,4 @@ folder_categorization_agent = FolderCategorizationAgent()
 verification_agent = VerificationAgent()
 qac_agent = QACAgent()
 filename_agent = FilenameAgent()
+chunk_contextual_agent = ChunkContextualAgent()

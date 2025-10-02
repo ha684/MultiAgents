@@ -9,10 +9,6 @@ class PromptTemplates:
     ROUTER_PROMPT = textwrap.dedent("""\
         {instructions}
 
-        Conversation history:
-        {conversation}
-
-        Current query: {query}
 
         Classify into: chitchat, simple_search, or deep_research
     """)

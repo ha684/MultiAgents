@@ -7,6 +7,7 @@ from src.llm.factory import get_llm
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
+from src.agents.basic.base import AgentBase
 
 HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a helpful research assistant with access to a collection of documents. Your task is to provide accurate, conversational answers based on the information in the provided documents and conversation history.
 
@@ -109,7 +110,7 @@ Remember: Be honest, helpful, and conversational. It's better to admit you don't
 
 
 @singleton
-class ResponseAgent:
+class ResponseAgent(AgentBase):
     """Agent responsible for generating the final response based on verified context, citations, and history."""
 
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):
@@ -134,10 +135,10 @@ class ResponseAgent:
 
     def _prepare_messages(
         self, contexts: List[Document], history: List[BaseMessage]
-    ) -> ChatPromptTemplate:
+    ) -> List[BaseMessage]:
         """Prepare messages for both streaming and non-streaming responses."""
         current_query = history[-1].content
-
+        messages = None
         if contexts:
             formatted_context = self._format_context_for_response(contexts)
             system_message = SystemMessage(
@@ -156,33 +157,27 @@ class ResponseAgent:
             )
             messages = [system_message] + history[:-1] + [new_query]
 
-        messages_prompt = ChatPromptTemplate.from_messages(messages)
-        return messages_prompt
+        return messages
 
-    async def generate_response(
+    async def ainvoke(
         self,
         contexts: List[Document],
         history: List[BaseMessage],
     ) -> AIMessage:
         """Generates a full response (non-streaming) based on verification results and history."""
-        try:
-            messages_prompt = self._prepare_messages(contexts, history)
-            response_chain = messages_prompt | self.llm
-            response = await response_chain.ainvoke({})
-            return response
+        messages = self._prepare_messages(contexts, history)
+        response = await self.simple_llm_call(messages, self.llm)
+        return response
 
-        except Exception as e:
-            logger.exception(f"Error during response generation: {e}")
-            raise e
-
-    async def generate_streaming_response(
+    async def astream(
         self,
         contexts: List[Document],
         history: List[BaseMessage],
     ) -> AsyncGenerator[Union[str, Dict[str, Any]], None]:
         """Streams response content chunks and final complete message from the LLM."""
         try:
-            messages_prompt = self._prepare_messages(contexts, history)
+            messages = self._prepare_messages(contexts, history)
+            messages_prompt = ChatPromptTemplate.from_messages(messages)
             response_chain = messages_prompt | self.llm
 
             accumulated_content = ""

@@ -90,7 +90,9 @@ class NaiveStrategy(BaseStrategy):
         if file_extension in [".txt", ".md"]:
             return UnstructuredMarkdownLoader(file_path, max_characters=1000000)
         if file_extension in [".xlsx", ".xls"]:
-            return SpreadsheetStrategy(config=self.config)
+            return SpreadsheetStrategy(config=self.config)._get_loader(
+                file_path, document
+            )
         if os.path.isdir(file_path):
             return DirectoryLoader(file_path)
         return UnstructuredFileLoader(

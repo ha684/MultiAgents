@@ -1,10 +1,10 @@
-from langchain_core import output_parsers
-from langchain_core.prompts import ChatPromptTemplate
 from typing import List
 from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
-from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
+from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
 from src.utils.decorators import singleton
+from src.agents.tools.server.mcp_retrieve_tools import think
+from src.agents.basic.base import AgentBase
 
 EXTRACT_CONTEXTUALIZED_QUERY_PROMPT = """
 <instructions>
@@ -22,6 +22,16 @@ Transform the user's latest query into a self-contained search query that includ
 The output should be a single, comprehensive query that can retrieve relevant documents without any conversation context.
 </core_task>
 
+<optional_thinking>
+You have access to a 'think' tool that you MAY use if you need to reason through complex reformulation cases. Use it when:
+- The conversation history is long and complex with multiple interrelated topics
+- There are ambiguous references that require careful analysis to resolve
+- The query requires synthesizing information from multiple parts of the conversation
+- You need to distinguish between similar entities or concepts mentioned at different times
+
+For straightforward queries where the context and references are clear, you can skip the thinking step and respond directly with the reformulated query.
+</optional_thinking>
+
 <reformulation_process>
 1. **Identify the user's latest query** - This is what needs to be reformulated
 2. **Extract relevant context** from conversation history:
@@ -32,39 +42,58 @@ The output should be a single, comprehensive query that can retrieve relevant do
 3. **Resolve references** in the latest query:
    - Replace pronouns (it, they, this, that) with specific entities
    - Replace vague references ("what else", "other ways") with specific context
+   - Disambiguate between similar entities if multiple were discussed
 4. **Combine** the resolved query with relevant context into one comprehensive search query
+5. **Verify** the reformulated query is self-contained and preserves original intent
 
 </reformulation_process>
 
 <examples>
-**Example 1:**
-Conversation Context: Discussion about noise in SFT data for LLMs, challenges of overfitting to noise, mitigation strategies like careful data selection and noise injection strategies.
+
+**Example 1 - Simple Reference (No Thinking Needed):**
+Conversation Context: Discussion about Tesla's Q4 2023 revenue and stock performance.
+User's Latest Query: "What about their market share?"
+Reformulated Query: "What is Tesla's electric vehicle market share in Q4 2023?"
+
+**Example 2 - Complex Multi-Topic (Thinking Helpful):**
+Conversation Context: 
+- Discussed noise in SFT data for LLMs
+- Talked about overfitting challenges
+- Mentioned data selection strategies
+- Covered noise injection techniques
+- Discussed language-specific considerations
 User's Latest Query: "what else can we do?"
+
+[May use think tool to analyze: "Need to identify all mitigation strategies already discussed and ensure 'what else' refers to additional strategies beyond those specific ones"]
+
 Reformulated Query: "What additional strategies and methods can be used to mitigate the impact of noise in SFT supervised fine-tuning data for LLMs beyond careful data selection, noise injection strategies, language-specific considerations, and larger training sets?"
 
-**Example 2:**
-Conversation Context: Discussion about Tesla's financial performance, Elon Musk's leadership decisions, stock price volatility.
-User's Latest Query: "How did this affect their market share?"
-Reformulated Query: "How did Tesla's financial performance and Elon Musk's leadership decisions affect Tesla's electric vehicle market share?"
+**Example 3 - Ambiguous Reference (Thinking Helpful):**
+Conversation Context: 
+- Discussed Microsoft's AI initiatives and Azure
+- Then talked about Google's AI products and cloud
+- Then discussed Amazon's AWS services
+User's Latest Query: "How did this affect their market position?"
 
-**Example 3:**
-Conversation Context: Analysis of Microsoft's AI initiatives, Azure cloud platform, recent partnerships.
-User's Latest Query: "What about their competitors?"
-Reformulated Query: "What are the AI initiatives and cloud platform strategies of Microsoft's competitors in response to Microsoft's Azure platform and AI partnerships?"
+[May use think tool to determine: "Need to identify which company 'their' refers to - likely the most recently discussed one (Amazon) or need to check for context clues"]
 
-**Example 4:**
-Conversation Context: Discussion about renewable energy adoption in Europe vs Asia, solar power growth trends.
-User's Latest Query: "Compare the investment levels"
-Reformulated Query: "Compare the investment levels in renewable energy between Europe and Asia, particularly focusing on solar power infrastructure and growth trends"
+Reformulated Query: "How did Amazon's AWS services and AI initiatives affect Amazon's cloud computing market position?"
+
+**Example 4 - Straightforward Context (No Thinking Needed):**
+Conversation Context: Analysis of renewable energy adoption in Europe, focusing on solar power growth.
+User's Latest Query: "What about wind energy?"
+Reformulated Query: "What is the status of wind energy adoption and growth in Europe compared to solar power?"
+
 </examples>
 
 <critical_rules>
 **YOU MUST:**
-- Output ONLY the reformulated query as a single sentence or phrase
+- Output ONLY the reformulated query as a single sentence or phrase (no other text)
 - Include specific entities, topics, and technical terms from the conversation
 - Make the query completely self-contained
 - Preserve the user's original question intent
 - Create a query optimized for document retrieval
+- You MAY use the 'think' tool for complex cases, but it's optional
 
 **YOU MUST NOT:**
 - Provide answers, explanations, or solutions
@@ -73,9 +102,19 @@ Reformulated Query: "Compare the investment levels in renewable energy between E
 - Generate multiple queries or options
 - Add introductory or concluding statements
 - Use markdown formatting or special characters
+- Wrap your response in quotes or any other delimiters
 
 **OUTPUT FORMAT:**
 Return only a single, comprehensive query string with no additional text, formatting, or explanations.
+
+Example correct outputs:
+✓ "What are the key features of Python 3.12 compared to Python 3.11?"
+✓ "How does Tesla's Autopilot technology compare to Waymo's autonomous driving system?"
+
+Example incorrect outputs:
+✗ "Here's the reformulated query: What are the key features..."
+✗ "**Reformulated Query:** What are the key features..."
+✗ Query: "What are the key features..."
 </critical_rules>
 
 Remember: You are reformulating queries for retrieval systems, NOT answering questions. The reformulated query will be used to find relevant documents that can answer the user's question.
@@ -83,94 +122,41 @@ Remember: You are reformulating queries for retrieval systems, NOT answering que
 
 
 @singleton
-class QueryContextAgent:
+class QueryContextAgent(AgentBase):
     def __init__(self):
-        self.llm = get_llm("nxchat")
+        llm = get_llm("nxchat")
+        self.llm_with_tools = llm.bind_tools([think])
+        self.max_iterations = 5
         logger.info("Query Context Agent initialized successfully.")
 
-    async def contextualize_query(self, history: List[BaseMessage]) -> str:
+    async def ainvoke(self, history: List[BaseMessage]) -> AIMessage:
         """
         Contextualizes the current query by using the user conversation history.
-
-        Args:
-            query (str): The current input query from the user.
-            conversation_history (List[MessageCreateRequest]): A list of MessageCreateRequest
-                                                    representing the conversation history.
-                                                    Each dictionary should have 'role' (e.g., "user", "assistant")
-                                                    and 'content' keys.
-                                                    representing the conversation history.
-                                                    Each dictionary should have 'role' (e.g., "user", "assistant")
-                                                    and 'content' keys.
-
-        Returns:
-            str: The contextualized query containing all important information.
-            str: The contextualized query containing all important information.
+        Optionally uses the think tool for complex reformulations.
         """
+        if not history:
+            logger.warning("Empty history provided. Cannot contextualize query.")
+            return AIMessage(content="")
+
         system_prompt = SystemMessage(content=EXTRACT_CONTEXTUALIZED_QUERY_PROMPT)
         user_content = HumanMessage(
             content=f"Reformulate the following query: {history[-1].content}"
         )
-        messages = [system_prompt] + history[:-1] + [user_content]
-        prompt = ChatPromptTemplate.from_messages(messages)
-        response_chain = prompt | self.llm | output_parsers.StrOutputParser()
+        messages: List[BaseMessage] = [system_prompt] + history[:-1] + [user_content]
+
         try:
-            contextualized_query = await response_chain.ainvoke({})
+            response = await self.iterative_llm_call_text(
+                messages=messages,
+                llm_with_tools=self.llm_with_tools,
+                available_tools={"think": think},
+                max_iterations=self.max_iterations,
+                retry_prompt="Please provide the reformulated query now.",
+                fallback_value=history[-1].content,
+            )
+            return response
 
-            if not contextualized_query:
-                logger.warning(
-                    "No contextualized query returned from LLM response. Returning original query."
-                )
-                return history[-1].content
-                return history[-1].content
-
-            contextualized_query = contextualized_query.strip()
-
-            return contextualized_query
         except Exception as e:
             logger.exception(
                 f"Error contextualizing query: {str(e)}. Returning original query."
             )
-            return history[-1].content
-            return history[-1].content
-
-
-# Example Usage:
-if __name__ == "__main__":
-    context_agent = QueryContextAgent()
-
-    # --- Test Case 1: Query needs contextualization ---
-    history_1 = [
-        {"role": "user", "content": "What is the capital of France?"},
-        {"role": "assistant", "content": "The capital of France is Paris."},
-    ]
-    query_1 = "And what about Germany?"
-    print(f"Original Query 1: '{query_1}'")
-    print("History 1:")
-    for h in history_1:
-        print(f"  {h['role']}: {h['content']}")
-    contextualized_1 = context_agent.contextualize_query(query_1, history_1)
-    print(f"Contextualized Query 1: '{contextualized_1}'\n")
-
-    # --- Test Case 2: Query is self-contained ---
-    history_2 = [
-        {"role": "user", "content": "Tell me a joke."},
-        {
-            "role": "assistant",
-            "content": "Why don't scientists trust atoms? Because they make up everything!",
-        },
-    ]
-    query_2 = "What is the tallest mountain in the world?"
-    print(f"Original Query 2: '{query_2}'")
-    print("History 2:")
-    for h in history_2:
-        print(f"  {h['role']}: {h['content']}")
-    contextualized_2 = context_agent.contextualize_query(query_2, history_2)
-    print(f"Contextualized Query 2: '{contextualized_2}'\n")
-
-    # --- Test Case 3: Empty history ---
-    history_3 = []
-    query_3 = "How much does a polar bear weigh?"
-    print(f"Original Query 3: '{query_3}'")
-    print("History 3: (Empty)")
-    contextualized_3 = context_agent.contextualize_query(query_3, history_3)
-    print(f"Contextualized Query 3: '{contextualized_3}'\n")
+            return AIMessage(content=history[-1].content if history else "")

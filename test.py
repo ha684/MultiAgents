@@ -1,21 +1,21 @@
 # {
-#   "message": {
-#     "role": "user",
-#     "parts": [
-#       {
-#         "type": "text",
-#         "text": "i want to know about the recent storm coming to viet nam"
-#       }
-#     ],
-#     "metadata": {
-#       "conversation_id": "068d35e5-9423-716b-8000-5cd0aeb06bdc",
-#       "kb_id": "068da9ca-5467-713d-8000-edc609d6fcfb",
-#       "user_id": "123",
-#       "app_name": "test"
-#     }
-#   },
-#   "agentic": false,
-#   "web_search": false
+#     "message": {
+#         "role": "user",
+#         "parts": [
+#             {
+#                 "type": "text",
+#                 "text": "i want to know about the recent storm coming to viet nam",
+#             }
+#         ],
+#         "metadata": {
+#             "conversation_id": "068d35e5-9423-716b-8000-5cd0aeb06bdc",
+#             "kb_id": "068da9ca-5467-713d-8000-edc609d6fcfb",
+#             "user_id": "123",
+#             "app_name": "test",
+#         },
+#     },
+#     "agentic": false,
+#     "web_search": false,
 # }
 
 # from langchain_community.document_loaders import UnstructuredExcelLoader
@@ -35,7 +35,7 @@
 #     file_size=os.path.getsize(r"C:\workspace\data\サンプル_QMSシステム開発_RD_エンティティ一覧.xlsx"),
 #     filename="サンプル_QMSシスム開発_RD_エンティティ一覧.xlsx",
 # )
-# loader = SpreadsheetStrategy({})
+# loader = sheetStrategy({})
 # docs = loader.chunk(r"C:\workspace\data\サンプル_QMSシステム開発_RD_エンティティ一覧.xlsx", db_document)
 
 # for doc in docs:

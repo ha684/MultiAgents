@@ -1,7 +1,7 @@
 # src/tasks/qac.py
 from uuid import UUID
 from src.db.models.document import DocumentQA
-from src.agents import qa_agent
+from src.agents.basic import qac_agent
 from src.db import knowledge_base_repository, document_repository, qa_repository
 from src.utils.logger_conf import logger
 from typing import List
@@ -32,7 +32,7 @@ async def _generate_qa_pairs_async(
 
     await qa_repository.delete_qa_by_doc_id(document_id)
 
-    qa_pairs = await qa_agent.generate_qa(contexts)
+    qa_pairs = await qac_agent.generate_qa(contexts)
 
     if not qa_pairs:
         raise ValueError(f"No QA pairs generated for document {document_id}")

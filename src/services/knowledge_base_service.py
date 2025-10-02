@@ -2,7 +2,6 @@ from typing import List, Sequence
 from uuid import UUID
 from fastapi import HTTPException
 from langchain_core.documents import Document
-from src.agents.filename_agent import FilenameAgent
 from src.models.knowledge_base import (
     KnowledgeBaseCreateRequest,
     KnowledgeBaseListRequest,
@@ -25,7 +24,6 @@ class KnowledgeBaseService:
         self.kb_repository = knowledge_base_repository
         self.document_repository = document_repository
         self.qa_repository = qa_repository
-        self.filename_agent = FilenameAgent()
 
     async def list_knowledge_bases(
         self, request: KnowledgeBaseListRequest
@@ -58,22 +56,8 @@ class KnowledgeBaseService:
         """Query a knowledge base by its ID."""
         logger.info(f"Querying knowledge base {kb_id} with query: {query}")
 
-        # requested_filename = await self.filename_agent.extract_filename(query=query)
-        filters = None
-
-        # if requested_filename:
-        #     logger.info(f"Requested filename: {requested_filename}")
-        #     filters = models.Filter(
-        #         must=[
-        #             models.FieldCondition(
-        #                 key="metadata.original_filename",
-        #                 match=models.MatchText(text=requested_filename),
-        #             )
-        #         ]
-        #     )
-
         documents = await vector_retrieval.retrieve(
-            kb_id=str(kb_id), query=query, filters=filters, top_n=20, top_k=50
+            kb_id=str(kb_id), query=query, filters=None, top_n=20, top_k=50
         )
         if not documents:
             logger.warning(f"No documents found for query: {query} in KB {kb_id}")

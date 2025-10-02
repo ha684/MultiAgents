@@ -3,8 +3,10 @@ from src.rag.vector import vector_retrieval
 from google.adk.tools.tool_context import ToolContext
 from src.utils.logger_conf import logger
 from typing import Tuple, List
+from langchain_core.tools import tool
 
 
+@tool
 async def rag_search(
     query: str, top_k: int, top_n: int, tool_context: ToolContext
 ) -> str:
@@ -76,6 +78,7 @@ async def rag_search(
         return error_output, []
 
 
+@tool
 async def web_search(
     query: str, top_k: int, top_n: int, tool_context: ToolContext
 ) -> Tuple[str, List[str]]:
@@ -88,6 +91,7 @@ async def web_search(
     return "Formatted contents here", ["List of urls here"]
 
 
+@tool
 async def think(thought: str) -> str:
     """Use this tool for strategic reasoning, planning, and verification throughout your task execution process.
     This tool serves as your thinking workspace to analyze problems, plan tool usage, evaluate results,
@@ -114,4 +118,5 @@ async def think(thought: str) -> str:
                 - Self-reflection on reasoning quality and potential improvements
                 - Final completeness assessment before task completion
     """
+    logger.info(f"Think tool: {thought}")
     return thought

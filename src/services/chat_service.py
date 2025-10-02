@@ -19,7 +19,7 @@ from src.exceptions.chat_exceptions import ConversationNotFoundError, Validation
 from src.models.chat import ChatRequest, SearchProvider, WebSearchConfig
 from src.rag.vector import vector_retrieval
 from src.services.conversation_service import ConversationService
-from src.services.web_search_service import search_service
+from src.services.web_search_service import web_search_service
 from src.tracking.observability import tracer
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
@@ -161,7 +161,7 @@ class ChatService:
                 span.set_attribute("contextualized_query", contextualized_query)
             if web_search_config.active:
                 with tracer.start_as_current_span("search_service.search"):
-                    retrieved_docs = await search_service.search(
+                    retrieved_docs = await web_search_service.search(
                         query=contextualized_query,
                         provider=web_search_config.provider,
                         api_key=web_search_config.api_key,
@@ -294,7 +294,7 @@ class ChatService:
                 progress=0.3,
                 metadata={"provider": web_search_config.provider.value},
             )
-            retrieved_docs = await search_service.search(
+            retrieved_docs = await web_search_service.search(
                 query=contextualized_query,
                 provider=web_search_config.provider,
                 api_key=web_search_config.api_key,

@@ -1,33 +1,32 @@
 # src/agents/main.py
-from typing import Dict, Any, List
-from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import BaseMessage, HumanMessage
+from typing import Dict, Any, List, Optional
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
 from src.agents.basic import response_agent, query_context_agent
+from src.agents.basic.base import AgentBase
+from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
 from src.agents.graph.state import AgentState
 from src.agents.graph.prompts import PromptTemplates
 from src.agents.graph.schemas import RouteDecision
 from src.agents.graph.simple_search_graph import SimpleSearchGraph
 from src.agents.graph.research_graph import ResearchGraph
+from src.agents.tools.server.mcp_retrieve_tools import think
+from src.utils import parse_response
 import tiktoken
 
 
-class OrchestratorGraph:
+class OrchestratorGraph(AgentBase):
     """
     Main Orchestrator - Coordinates entire workflow with full conversation context
     """
 
     def __init__(self):
-        self.haiku = ChatAnthropic(model="claude-3-5-haiku-20241022", temperature=0)
-        self.sonnet = ChatAnthropic(model="claude-3-5-sonnet-20241022", temperature=0)
-        self.opus = ChatAnthropic(model="claude-opus-4-20250514", temperature=0)
-
+        self.llm = get_llm("nxchat")
         tokenizer = tiktoken.encoding_for_model("gpt-4o")
         self.simple_search_graph = SimpleSearchGraph(tokenizer)
         self.research_graph = ResearchGraph()
-
         self.graph = self._build_graph()
 
     # =========================================================================
@@ -48,12 +47,11 @@ class OrchestratorGraph:
 
     async def contextualize_query_node(self, state: AgentState) -> Dict[str, Any]:
         """Contextualize query before routing"""
-        logger.info("Orchestrator - Contextualizing query")
 
         original_query = state["original_query"]
 
         if len(state["conversation"]) > 2:
-            contextualized = await query_context_agent.contextualize_query(
+            contextualized = await query_context_agent.ainvoke(
                 history=state["conversation"]
             )
             logger.info(f"Contextualized: '{original_query}' → '{contextualized}'")
@@ -65,29 +63,33 @@ class OrchestratorGraph:
 
     async def router_node(self, state: AgentState) -> Dict[str, Any]:
         """Route with structured output"""
-        conversation_text = self._format_conversation(state["conversation"])
 
-        prompt = PromptTemplates.ROUTER_PROMPT.format(
-            conversation=conversation_text, query=state["contextualized_query"]
+        max_iterations = 3
+        conversation = state["conversation"]
+
+        system_prompt = SystemMessage(content=PromptTemplates.ROUTER_PROMPT)
+        messages: List[BaseMessage] = [system_prompt] + conversation
+        router_llm = self.llm.bind_tools([think])
+
+        response = await self.iterative_llm_call_structured(
+            messages=messages,
+            llm_with_tools=router_llm,
+            available_tools={"think": think},
+            max_iterations=max_iterations,
+            parse_fn=parse_route_decision,
+            retry_prompt="Please provide the route decision in correct JSON format.",
         )
 
-        router_llm = self.haiku.with_structured_output(RouteDecision).with_retry(
-            stop_after_attempt=3
-        )
+        if response.content:
+            logger.warning("No route decision provided")
+            return {"route_decision": "chitchat"}
 
-        decision = await router_llm.ainvoke(prompt)
-        decision_dict = decision.model_dump()
-
-        logger.info(f"Route: {decision_dict['route']}")
-        logger.info(f"Reasoning: {decision_dict['reasoning']}")
-
-        return {"route_decision": decision_dict["route"]}
+        return {"route_decision": response.content.route}
 
     async def simple_search_node(
         self, state: AgentState, tool_context: Any
     ) -> Dict[str, Any]:
         """Execute simple search graph"""
-        logger.info("Orchestrator - Simple Search")
 
         result = await self.simple_search_graph.run(state, tool_context)
 
@@ -102,7 +104,6 @@ class OrchestratorGraph:
         self, state: AgentState, tool_context: Any
     ) -> Dict[str, Any]:
         """Execute research graph"""
-        logger.info("Orchestrator - Research Subgraph")
 
         result = await self.research_graph.run(state, tool_context)
 
@@ -116,7 +117,6 @@ class OrchestratorGraph:
 
     async def fact_checker_node(self, state: AgentState) -> Dict[str, Any]:
         """Fact check accumulated knowledge"""
-        logger.info("Orchestrator - Fact Checker")
 
         if not state.get("accumulated_knowledge"):
             logger.warning("No knowledge to fact check")
@@ -127,7 +127,7 @@ class OrchestratorGraph:
             accumulated_knowledge=state["accumulated_knowledge"],
         )
 
-        response = await self.sonnet.ainvoke(prompt)
+        response = await self.llm.ainvoke(prompt)
         verified = response.content
 
         logger.info("Fact checking complete")
@@ -136,14 +136,13 @@ class OrchestratorGraph:
 
     async def final_synthesizer_node(self, state: AgentState) -> Dict[str, Any]:
         """Generate final response"""
-        logger.info("Orchestrator - Final Synthesizer")
 
         route = state.get("route_decision")
 
         # Chitchat - direct response
         if route == "chitchat":
             logger.info("Synthesizing chitchat response")
-            response = await response_agent.generate_response(
+            response = await response_agent.ainvoke(
                 contexts=[], history=state["conversation"]
             )
 
@@ -169,7 +168,7 @@ class OrchestratorGraph:
             accumulated_knowledge=state.get("accumulated_knowledge", ""),
         )
 
-        response = await self.opus.ainvoke(prompt)
+        response = await self.llm.ainvoke(prompt)
 
         # Collect cited sources
         cited_sources = []
@@ -179,12 +178,6 @@ class OrchestratorGraph:
             )
         if state.get("used_web_urls"):
             cited_sources.extend([f"Web:{url}" for url in state["used_web_urls"][:10]])
-
-        logger.info("=" * 80)
-        logger.info("ORCHESTRATOR COMPLETE - Deep Research")
-        logger.info(f"Sources: {len(cited_sources)}")
-        logger.info(f"Iterations: {state.get('iteration_count', 0)}")
-        logger.info("=" * 80)
 
         return {
             "final_answer": response.content,
@@ -310,3 +303,15 @@ class OrchestratorGraph:
             "cited_documents": result.get("cited_documents", []),
             "iterations": result.get("iteration_count", 0),
         }
+
+
+def parse_route_decision(content: str) -> Optional[RouteDecision]:
+    """Parse route decision from content"""
+    try:
+        parsed = parse_response(content)
+        if parsed is None:
+            return None
+        return RouteDecision(route=parsed["route"])
+    except Exception as e:
+        logger.error(f"Error parsing route decision: {e}")
+        return None

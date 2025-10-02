@@ -9,7 +9,6 @@ class RouteDecision(BaseModel):
     route: Literal["chitchat", "simple_search", "deep_research"] = Field(
         description="The route to take based on query complexity"
     )
-    reasoning: str = Field(description="Explanation for the routing decision")
 
 
 class SearchPlanSchema(BaseModel):

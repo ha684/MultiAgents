@@ -201,6 +201,3 @@ class ChunkContextualAgent:
 
         logger.info(f"Successfully contextualized {len(contextualized_chunks)} chunks")
         return contextualized_chunks
-
-
-chunk_context_agent = ChunkContextualAgent()

@@ -8,6 +8,7 @@ from src.rag.vector import vector_retrieval
 from src.services.web_search_service import web_search_service
 from src.utils.logger_conf import logger
 from src.agents.graph.state import AgentState
+from src.models.chat import WebSearchConfig
 import tiktoken
 
 
@@ -31,9 +32,7 @@ class SimpleSearchGraph:
         """Extract filename from query if mentioned"""
         logger.info("Simple Search - Extracting filename")
 
-        requested_filename = await filename_agent.extract_filename(
-            query=state["original_query"]
-        )
+        requested_filename = await filename_agent.ainvoke(query=state["original_query"])
 
         if requested_filename:
             logger.info(f"Detected filename: {requested_filename}")
@@ -49,7 +48,9 @@ class SimpleSearchGraph:
         logger.info("Simple Search - Retrieving documents")
 
         kb_id = tool_context.state["input_message_metadata"]["kb_id"]
-        web_search_config = tool_context.state.get("web_search_config", {})
+        web_search_config: WebSearchConfig = tool_context.state.get(
+            "web_search_config", {}
+        )
 
         embed_top = 50
         rerank_top = 20
@@ -61,13 +62,13 @@ class SimpleSearchGraph:
         )
 
         # Web search mode
-        if web_search_config.get("active"):
+        if web_search_config.active:
             logger.info("Using web search")
 
             retrieved_docs = await web_search_service.search(
                 query=contextualized_query,
-                provider=web_search_config.get("provider"),
-                api_key=web_search_config.get("api_key"),
+                provider=web_search_config.provider,
+                api_key=web_search_config.api_key,
                 max_results=rerank_top,
             )
 
@@ -162,7 +163,7 @@ class SimpleSearchGraph:
             return {}
 
         # Extract citations
-        citation_indexes = await citation_agent.extract_citations(
+        citation_indexes = await citation_agent.ainvoke(
             history=state["conversation"],
             reference=retrieved_docs,
         )
@@ -200,7 +201,7 @@ class SimpleSearchGraph:
 
         cited_docs = state["cited_documents"]
 
-        response = await response_agent.generate_response(
+        response = await response_agent.ainvoke(
             contexts=cited_docs,
             history=state["conversation"],
         )
@@ -248,16 +249,5 @@ class SimpleSearchGraph:
 
     async def run(self, state: AgentState, tool_context: Any) -> AgentState:
         """Execute simple search graph"""
-        logger.info("=" * 80)
-        logger.info("STARTING SIMPLE SEARCH GRAPH")
-        logger.info(f"Query: {state['contextualized_query']}")
-        logger.info("=" * 80)
-
         result = await self.graph.ainvoke(state, {"tool_context": tool_context})
-
-        logger.info("=" * 80)
-        logger.info("SIMPLE SEARCH GRAPH COMPLETED")
-        logger.info(f"Cited documents: {len(result.get('cited_documents', []))}")
-        logger.info("=" * 80)
-
         return result

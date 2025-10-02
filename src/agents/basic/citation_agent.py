@@ -1,11 +1,13 @@
-from typing import List, cast
+from typing import List
 from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
 from src.llm.factory import get_llm
 from src.models.reference import CitationIndexes
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
+from src.agents.tools.server.mcp_retrieve_tools import think
+from src.utils import parse_response
+from src.agents.basic.base import AgentBase
 
 CITATION_PROMPT_TEMPLATE = """
 <role>
@@ -16,10 +18,19 @@ You are an expert document relevance evaluator. Your task is to identify which d
 Analyze the provided documents and conversation history, then return ONLY the indexes of documents that are relevant to answering the current query.
 </task>
 
+<optional_thinking>
+You have access to a 'think' tool that you MAY use if you need to reason through complex cases. Use it when:
+- The query type is ambiguous or complex
+- You need to carefully distinguish between similar documents
+- The relevance decision requires multi-step reasoning
+
+For straightforward queries where the relevance is clear, you can skip the thinking step and respond directly.
+</optional_thinking>
+
 <analysis_framework>
 
 ## Step 1: Understand the Query Context
-- Read the ENTIRE conversation history to understand the full context
+- Read the conversation history to understand the full context
 - Identify if the current query is:
   * A new topic/question
   * A follow-up using references ("it", "that", "those", "also", etc.)
@@ -93,134 +104,65 @@ Before finalizing, ask:
 - Indexes are 1-based (first document is index 1)
 - Return empty array for irrelevant queries: {"indexes": []}
 - Sort indexes in ascending order: {"indexes": [1, 3, 5]}
+- Your final message MUST be ONLY the JSON object: {"indexes": [...]}
+- Do NOT wrap the JSON in markdown code blocks or any other formatting
 </output_requirements>
 
 <critical_rules>
-1. NEVER include documents just because they share keywords - require semantic relevance
-2. For absence queries, DO include documents that help establish context even without explicit negatives
-3. For conversational queries with no information request, return empty indexes
-4. When in doubt between including/excluding, consider the query type:
+1. You MAY use the 'think' tool if you need to reason through complex cases, but it's optional
+2. NEVER include documents just because they share keywords - require semantic relevance
+3. For absence queries, DO include documents that help establish context even without explicit negatives
+4. For conversational queries with no information request, return empty indexes
+5. When in doubt between including/excluding, consider the query type:
    - Direct queries: EXCLUDE (favor precision)
    - Absence queries: INCLUDE (favor recall)
    - Conversational queries: EXCLUDE (favor minimalism)
-5. Always consider the full conversation history before making decisions
+6. Always consider the full conversation history before making decisions
+7. Your FINAL response must be ONLY a JSON object: {"indexes": [1, 2, 3]}
 </critical_rules>
 
 <examples>
 
-Example 1 - Direct Query:
-Conversation History:
-- User: "Tell me about Company X"
-- Assistant: "Company X is a tech company..."
-- User: "What is their annual revenue?"
+Example 1 - Direct Query (No Thinking Needed):
+User Query: "What is their annual revenue?"
+Documents: [Financial Report 2023, Hiring Guide, Marketing Plan]
 
-Documents:
-1. Company X overview and mission
-2. Company X Q4 2023 financial report with revenue data
-3. Company X hiring practices
-4. Company Y financial report
+Direct Response: {"indexes": [1]}
 
-Analysis:
-- Query type: Direct (asking for specific data)
-- Strategy: STRICT
-- Relevant: Document 2 (contains revenue data)
-Output: {"indexes": [2]}
+Reasoning: Clear direct query about revenue, and document 1 is obviously the financial report.
 
 ---
 
-Example 2 - Absence Query:
-User Query: "Which servers in the report have NOT experienced downtime in the last 6 months?"
+Example 2 - Complex Absence Query (Thinking Helpful):
+User Query: "Which servers have NOT experienced downtime in the last 6 months?"
+Documents: [Server-A Logs, Server-B Incident Report, Server-C Metrics, Database Guide, Server-D Deployment]
 
-Documents:
-1. Server-A monitoring logs showing 99.9% uptime
-2. Server-B incident report about downtime in March
-3. Server-C performance metrics (no downtime mentioned)
-4. Database optimization guide (unrelated)
-5. Server-D deployment schedule
+[Uses think tool to reason through which documents help establish presence/absence]
 
-Analysis:
-- Query type: Negative/Absence
-- Strategy: COMPREHENSIVE
-- Relevant: 1, 2, 3, 5 (all server docs help establish which have/haven't had downtime)
-- Irrelevant: 4 (unrelated topic)
-Output: {"indexes": [1, 2, 3, 5]}
+Final Response: {"indexes": [1, 2, 3, 5]}
 
 ---
 
-Example 3 - Follow-up with Context:
-Conversation History:
-- User: "Show me security incidents for Company A"
-- Assistant: "Company A had 2 incidents..."
-- User: "What about Company B?"
+Example 3 - Simple Conversational (No Thinking Needed):
+User Query: "Thank you!"
+Documents: [Any documents]
 
-Documents:
-1. Company A security report 2023
-2. Company B security report 2023
-3. Company B product roadmap
-4. Industry security trends
+Direct Response: {"indexes": []}
 
-Analysis:
-- Query type: Direct follow-up (asking about Company B)
-- Context: Previous query was about security incidents
-- Strategy: STRICT (direct information about Company B security)
-- Relevant: Document 2
-Output: {"indexes": [2]}
-
----
-
-Example 4 - Conversational:
-User Query: "Thanks, that's helpful!"
-
-Documents:
-1-10. Various technical documents
-
-Analysis:
-- Query type: Conversational/Meta
-- Strategy: MINIMAL
-- No information request detected
-Output: {"indexes": []}
-
----
-
-Example 5 - Comparative Query:
-User Query: "Compare the performance of Service A and Service B"
-
-Documents:
-1. Service A performance metrics Q1-Q4
-2. Service B performance metrics Q1-Q4
-3. Service C deployment guide
-4. Service A code repository
-5. Service B user feedback summary
-
-Analysis:
-- Query type: Comparative
-- Strategy: BALANCED
-- Relevant: 1, 2, 5 (provide comparable performance data)
-- Maybe relevant: 4 (less directly about performance)
-- Irrelevant: 3 (different service)
-Output: {"indexes": [1, 2, 5]}
+Reasoning: Pure pleasantry with no information request.
 
 </examples>
-
-<final_checklist>
-Before returning your answer:
-✓ I have classified the query type correctly
-✓ I have applied the appropriate relevance strategy
-✓ I have considered the full conversation history
-✓ I have included all necessary documents (recall)
-✓ I have excluded clearly irrelevant documents (precision)
-✓ My output is valid JSON with sorted indexes
-</final_checklist>
 """
 
 
 @singleton
-class CitationAgent:
+class CitationAgent(AgentBase):
     """Agent responsible for extracting citations from retrieved documents."""
 
     def __init__(self):
         self.llm = get_llm("nxchat")
-        self.structured_llm = self.llm.with_structured_output(CitationIndexes)
+        self.llm_with_tools = self.llm.bind_tools([think])
+        self.max_iterations = 10
         logger.info("Citation Agent initialized successfully.")
 
     def _format_context_for_response(self, documents: List[Document]) -> str:
@@ -236,28 +178,33 @@ class CitationAgent:
         xml_output += "</documents>"
         return xml_output
 
-    async def extract_citations(
+    async def ainvoke(
         self, history: List[BaseMessage], reference: List[Document]
     ) -> CitationIndexes:
         """Extracts citations from the provided context based on the user query."""
         if not reference:
             return CitationIndexes(indexes=[])
 
-        formatted_context = self._format_context_for_response(reference)
-        system_prompt = SystemMessage(content=CITATION_PROMPT_TEMPLATE)
-        user_content = HumanMessage(
-            content=f"""Here are documents:\n{formatted_context}\n---\nExtract correct citations for the following query: {history[-1].content}"""
-        )
-        messages = [system_prompt] + history[:-1] + [user_content]
-        citation_prompt = ChatPromptTemplate.from_messages(messages)
-
-        citation_chain = citation_prompt | self.structured_llm
         try:
-            response = citation_chain.invoke({})
+            formatted_context = self._format_context_for_response(reference)
+            system_prompt = SystemMessage(content=CITATION_PROMPT_TEMPLATE)
+            user_content = HumanMessage(
+                content=f"""Here are documents:\n{formatted_context}\n---\nExtract correct citations for the following query: {history[-1].content}"""
+            )
+            messages: List[BaseMessage] = (
+                [system_prompt] + history[:-1] + [user_content]
+            )
 
-            return cast(
-                CitationIndexes, response
-            )  # Ensure the response is of type CitationIndexes
+            response = await self.iterative_llm_call_structured(
+                messages=messages,
+                llm_with_tools=self.llm_with_tools,
+                available_tools={"think": think},
+                max_iterations=self.max_iterations,
+                parse_fn=parse_response,
+                retry_prompt='Please provide your final answer as a JSON object with the exact format: {"indexes": [1, 2, 3]}',
+            )
+            return CitationIndexes(indexes=response.content["indexes"])
+
         except Exception as e:
-            logger.info(f"Error extracting citations: {e}")
+            logger.error(f"Error extracting citations: {e}", exc_info=True)
             return CitationIndexes(indexes=[])

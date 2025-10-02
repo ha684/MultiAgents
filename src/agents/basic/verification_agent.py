@@ -141,26 +141,3 @@ class VerificationAgent:
             f"Verification Agent: Verification result: {can_answer}, Citations found: {len(citations)}"
         )
         return can_answer, citations
-
-
-# Example Usage (Optional - for testing)
-# if __name__ == "__main__":
-#     # Requires OPENAI_API_KEY to be set
-#     verification_agent = VerificationAgent()
-#
-#     # Dummy data
-#     test_query = "What is the capital of DummyLand?"
-#     doc1 = Document(page_content="The primary export of DummyLand is widgets.", metadata={"source": "doc1.txt"})
-#     doc2 = Document(page_content="DummyCity is the largest city in DummyLand, known for its widget factories.", metadata={"source": "doc2.txt"})
-#     doc3 = Document(page_content="The official capital of DummyLand is CapitalTown.", metadata={"source": "doc3.txt"})
-#
-#     documents_with_answer = [doc1, doc2, doc3]
-#     documents_without_answer = [doc1, doc2]
-#
-#     print("\n--- Test Case 1: Context WITH answer ---")
-#     can_answer_1, citations_1 = verification_agent.verify_context(test_query, documents_with_answer)
-#     print(f"Result: Can Answer = {can_answer_1}, Citations = {citations_1}")
-#
-#     print("\n--- Test Case 2: Context WITHOUT answer ---")
-#     can_answer_2, citations_2 = verification_agent.verify_context(test_query, documents_without_answer)
-#     print(f"Result: Can Answer = {can_answer_2}, Citations = {citations_2}")
