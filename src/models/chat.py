@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 from enum import Enum
 from src.common.types import Message
 
@@ -14,6 +14,10 @@ class WebSearchConfig(BaseModel):
     provider: SearchProvider = Field(default=SearchProvider.FIRECRAWL)
     active: bool = Field(default=False)
     api_key: str = ""
+
+    @field_serializer("provider")
+    def serialize_provider(self, provider: SearchProvider) -> str:
+        return provider.value
 
 
 # Chat Interaction Schemas

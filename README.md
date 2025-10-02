@@ -2,8 +2,8 @@ Mô tả các Node (Agent)
 Bước 1 & 2: User Query & Router
 Mục đích: Phân loại câu hỏi của người dùng để quyết định có cần vào flow nghiên cứu phức tạp hay không.
 Đầu vào: state['original_query']
-Logic: Dùng một LLM nhỏ (như Haiku) với prompt đơn giản để phân loại query thành "simple_chitchat" hoặc "needs_research".
-Đầu ra: Quyết định điều hướng (chitchat hoặc research). Nếu là chitchat, trả lời trực tiếp. Nếu là research, chuyển tới Query Planner.
+Logic: Dùng một LLM nhỏ (như Haiku) với prompt đơn giản để phân loại query thành "simple_chitchat" hoặc "simple_search" hoặc "needs_research".
+Đầu ra: Quyết định điều hướng (chitchat hoặc simple search hoặc research). Nếu là chitchat, trả lời trực tiếp. Nếu là research, chuyển tới Query Planner.
 Bước 3: Query Planner
 Mục đích: Phân rã câu hỏi phức tạp thành một kế hoạch gồm nhiều câu hỏi con có độ ưu tiên.
 Đầu vào: state['original_query']

@@ -1,7 +1,7 @@
 # src/agents/main.py
 from typing import Dict, Any, List, Optional
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from src.agents.basic import response_agent, query_context_agent
 from src.agents.basic.base import AgentBase
@@ -80,18 +80,16 @@ class OrchestratorGraph(AgentBase):
             retry_prompt="Please provide the route decision in correct JSON format.",
         )
 
-        if response.content:
+        if not response.content:
             logger.warning("No route decision provided")
             return {"route_decision": "chitchat"}
 
-        return {"route_decision": response.content.route}
+        return {"route_decision": response.content}
 
-    async def simple_search_node(
-        self, state: AgentState, tool_context: Any
-    ) -> Dict[str, Any]:
+    async def simple_search_subgraph_node(self, state: AgentState) -> Dict[str, Any]:
         """Execute simple search graph"""
 
-        result = await self.simple_search_graph.run(state, tool_context)
+        result = await self.simple_search_graph.run(state)
 
         return {
             "final_answer": result["final_answer"],
@@ -100,12 +98,10 @@ class OrchestratorGraph(AgentBase):
             "response_metadata": result.get("response_metadata", {}),
         }
 
-    async def research_subgraph_node(
-        self, state: AgentState, tool_context: Any
-    ) -> Dict[str, Any]:
+    async def research_subgraph_node(self, state: AgentState) -> Dict[str, Any]:
         """Execute research graph"""
 
-        result = await self.research_graph.run(state, tool_context)
+        result = await self.research_graph.run(state)
 
         return {
             "accumulated_knowledge": result["accumulated_knowledge"],
@@ -138,8 +134,6 @@ class OrchestratorGraph(AgentBase):
         """Generate final response"""
 
         route = state.get("route_decision")
-
-        # Chitchat - direct response
         if route == "chitchat":
             logger.info("Synthesizing chitchat response")
             response = await response_agent.ainvoke(
@@ -153,12 +147,9 @@ class OrchestratorGraph(AgentBase):
                 "response_metadata": {"route": "chitchat", "search_method": "none"},
             }
 
-        # Simple search - already has answer
-        if route == "simple_search":
-            logger.info("Simple search complete")
+        if route == "simple_search_subgraph":
             return {}
 
-        # Deep research - synthesize from accumulated knowledge
         logger.info("Synthesizing research response")
 
         conversation_text = self._format_conversation(state["conversation"])
@@ -170,7 +161,6 @@ class OrchestratorGraph(AgentBase):
 
         response = await self.llm.ainvoke(prompt)
 
-        # Collect cited sources
         cited_sources = []
         if state.get("used_rag_ids"):
             cited_sources.extend(
@@ -196,17 +186,8 @@ class OrchestratorGraph(AgentBase):
     def route_after_router(self, state: AgentState) -> str:
         """Route after classification"""
         decision = state["route_decision"]
-
-        route_map = {
-            "chitchat": "final_synthesizer",
-            "simple_search": "simple_search",
-            "deep_research": "research_subgraph",
-        }
-
-        destination = route_map.get(decision, "final_synthesizer")
-        logger.info(f"Routing to: {destination}")
-
-        return destination
+        logger.info(f"Routing to: {decision}")
+        return decision
 
     # =========================================================================
     # GRAPH CONSTRUCTION
@@ -219,8 +200,8 @@ class OrchestratorGraph(AgentBase):
         # Add nodes
         workflow.add_node("contextualize_query", self.contextualize_query_node)
         workflow.add_node("router", self.router_node)
-        workflow.add_node("simple_search", self.simple_search_node)
-        workflow.add_node("research_subgraph", self.research_subgraph_node)
+        workflow.add_node("simple_search_subgraph", self.simple_search_subgraph_node)
+        workflow.add_node("research_subgraph_node", self.research_subgraph_node)
         workflow.add_node("fact_checker", self.fact_checker_node)
         workflow.add_node("final_synthesizer", self.final_synthesizer_node)
 
@@ -235,15 +216,16 @@ class OrchestratorGraph(AgentBase):
             self.route_after_router,
             {
                 "chitchat": "final_synthesizer",
-                "simple_search": "simple_search",
-                "research_subgraph": "research_subgraph",
+                "simple_search": "simple_search_subgraph",
+                "research_subgraph": "research_subgraph_node",
             },
         )
 
-        workflow.add_edge("research_subgraph", "fact_checker")
+        workflow.add_edge("research_subgraph_node", "fact_checker")
         workflow.add_edge("fact_checker", "final_synthesizer")
-        workflow.add_edge("simple_search", "final_synthesizer")
-        workflow.add_edge("final_synthesizer", END)
+        workflow.add_edge("simple_search_subgraph", "final_synthesizer")
+
+        workflow.set_finish_point("final_synthesizer")
 
         return workflow.compile()
 
@@ -252,14 +234,14 @@ class OrchestratorGraph(AgentBase):
     # =========================================================================
 
     async def run(
-        self, conversation: List[BaseMessage], tool_context: Any
+        self, conversation: List[BaseMessage], metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Execute orchestrator graph with full conversation
 
         Args:
             conversation: Full conversation history (List[BaseMessage])
-            tool_context: Context for tool execution
+            metadata: The metadata of the search
 
         Returns:
             Dict with answer, metadata, contexts, and cited documents
@@ -289,10 +271,11 @@ class OrchestratorGraph(AgentBase):
             final_answer="",
             cited_documents=[],
             response_metadata={},
+            context_metadata=metadata,
         )
 
         # Run graph
-        result = await self.graph.ainvoke(initial_state, {"tool_context": tool_context})
+        result = await self.graph.ainvoke(initial_state)
 
         # Format output
         return {
@@ -311,7 +294,8 @@ def parse_route_decision(content: str) -> Optional[RouteDecision]:
         parsed = parse_response(content)
         if parsed is None:
             return None
-        return RouteDecision(route=parsed["route"])
+        response = RouteDecision(route=parsed["route"])
+        return response.route
     except Exception as e:
         logger.error(f"Error parsing route decision: {e}")
         return None

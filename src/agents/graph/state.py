@@ -69,3 +69,5 @@ class AgentState(TypedDict):
     final_answer: str
     cited_documents: List[Document]
     response_metadata: Dict[str, Any]
+
+    context_metadata: Dict[str, Any]

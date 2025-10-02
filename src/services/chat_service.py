@@ -23,6 +23,7 @@ from src.services.web_search_service import web_search_service
 from src.tracking.observability import tracer
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
+from src.agents.main import OrchestratorGraph
 import tiktoken
 
 
@@ -30,6 +31,7 @@ import tiktoken
 class ChatService:
     def __init__(self):
         self.conv_service = ConversationService()
+        self.orchestrator_graph = OrchestratorGraph()
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
 
     def _format_history(self, history: List[Message]) -> List[BaseMessage]:
@@ -540,8 +542,14 @@ class ChatService:
                 web_search_config = WebSearchConfig(active=False)
 
             metadata = request.message.metadata
+            metadata.update({"web_search_config": web_search_config.model_dump()})
             conversation = await self.sanitize_message(request.message)
-            response = await self.ask_normal(conversation, web_search_config, metadata)
+            if request.agentic:
+                response = await self.orchestrator_graph.run(conversation, metadata)
+            else:
+                response = await self.ask_normal(
+                    conversation, web_search_config, metadata
+                )
             return response
 
     async def ask_sse(

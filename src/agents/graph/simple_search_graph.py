@@ -1,9 +1,9 @@
 # src/agents/graph/simple_search_graph.py
 from typing import Dict, Any
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from qdrant_client.models import Filter, models
-from src.agents.basic import citation_agent, response_agent, filename_agent
+from src.agents.basic import citation_agent, filename_agent
 from src.rag.vector import vector_retrieval
 from src.services.web_search_service import web_search_service
 from src.utils.logger_conf import logger
@@ -40,15 +40,15 @@ class SimpleSearchGraph:
         return {"response_metadata": {"requested_filename": requested_filename}}
 
     async def retrieve_documents_node(
-        self, state: AgentState, tool_context: Any
+        self, state: AgentState, context_metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         Retrieve documents from RAG or web search based on config
         """
         logger.info("Simple Search - Retrieving documents")
 
-        kb_id = tool_context.state["input_message_metadata"]["kb_id"]
-        web_search_config: WebSearchConfig = tool_context.state.get(
+        kb_id = context_metadata["kb_id"]
+        web_search_config: WebSearchConfig = context_metadata.get(
             "web_search_config", {}
         )
 
@@ -195,29 +195,6 @@ class SimpleSearchGraph:
             },
         }
 
-    async def generate_response_node(self, state: AgentState) -> Dict[str, Any]:
-        """Generate final response using cited documents"""
-        logger.info("Simple Search - Generating response")
-
-        cited_docs = state["cited_documents"]
-
-        response = await response_agent.ainvoke(
-            contexts=cited_docs,
-            history=state["conversation"],
-        )
-
-        response_dict = response.model_dump()
-
-        logger.info("Response generated successfully")
-
-        return {
-            "final_answer": response_dict["content"],
-            "response_metadata": {
-                **state.get("response_metadata", {}),
-                **response_dict.get("response_metadata", {}),
-            },
-        }
-
     # =========================================================================
     # GRAPH CONSTRUCTION
     # =========================================================================
@@ -230,7 +207,6 @@ class SimpleSearchGraph:
         workflow.add_node("extract_filename", self.extract_filename_node)
         workflow.add_node("retrieve_documents", self.retrieve_documents_node)
         workflow.add_node("filter_citations", self.filter_citations_node)
-        workflow.add_node("generate_response", self.generate_response_node)
 
         # Set entry point
         workflow.set_entry_point("extract_filename")
@@ -238,8 +214,8 @@ class SimpleSearchGraph:
         # Linear flow
         workflow.add_edge("extract_filename", "retrieve_documents")
         workflow.add_edge("retrieve_documents", "filter_citations")
-        workflow.add_edge("filter_citations", "generate_response")
-        workflow.add_edge("generate_response", END)
+
+        workflow.set_finish_point("filter_citations")
 
         return workflow.compile()
 
@@ -247,7 +223,7 @@ class SimpleSearchGraph:
     # PUBLIC INTERFACE
     # =========================================================================
 
-    async def run(self, state: AgentState, tool_context: Any) -> AgentState:
+    async def run(self, state: AgentState) -> AgentState:
         """Execute simple search graph"""
-        result = await self.graph.ainvoke(state, {"tool_context": tool_context})
+        result = await self.graph.ainvoke(state)
         return result

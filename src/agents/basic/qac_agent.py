@@ -4,7 +4,6 @@ from langchain_core.prompts import PromptTemplate
 from src.config.llm_config import SupportedLLMProviders
 from src.llm.factory import get_llm
 from src.prompts.get_prompt_template import load_prompt_template
-from src.nlp.language_detector import language_detection
 
 
 class QACAgent:
@@ -22,10 +21,10 @@ class QACAgent:
             List[Tuple[str, str]]: List of (question, answer) tuples.
         """
         try:
-            language = language_detection(contexts[0])
+            language = "en"
             prompt_template = load_prompt_template(
                 task_name="generate_qa",
-                language_code=language[0],
+                language_code=language,
             )
             prompt = PromptTemplate(template=prompt_template, input_variables=["input"])
 

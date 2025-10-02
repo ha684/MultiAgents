@@ -1,6 +1,7 @@
 # src/agents/graph/research_graph.py
 import json
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
@@ -98,7 +99,7 @@ Make sure to output valid JSON that matches the schema above.
         }
 
     async def search_executor_node(
-        self, state: AgentState, tool_context: Any
+        self, state: AgentState, context_metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Execute search query"""
         if not state["pending_queries"]:
@@ -113,11 +114,17 @@ Make sure to output valid JSON that matches the schema above.
         try:
             if search_type == "rag":
                 content, source_ids = await rag_search(
-                    query=query_text, top_k=20, top_n=5, tool_context=tool_context
+                    query=query_text,
+                    top_k=20,
+                    top_n=5,
+                    context_metadata=context_metadata,
                 )
             else:
                 content, source_ids = await web_search(
-                    query=query_text, top_k=20, top_n=5, tool_context=tool_context
+                    query=query_text,
+                    top_k=20,
+                    top_n=5,
+                    context_metadata=context_metadata,
                 )
         except Exception as e:
             logger.error(f"Search failed: {e}")
@@ -132,7 +139,7 @@ Make sure to output valid JSON that matches the schema above.
             content=content,
             source_ids=source_ids,
             search_type=search_type,
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).isoformat(),
         )
 
         logger.info(f"Retrieved {len(source_ids)} sources")
@@ -392,7 +399,7 @@ Use 'think' tool to reason, then output queries in this JSON format:
 
         return workflow.compile()
 
-    async def run(self, state: AgentState, tool_context: Any) -> AgentState:
+    async def run(self, state: AgentState) -> AgentState:
         """Run research graph"""
-        result = await self.graph.ainvoke(state, {"tool_context": tool_context})
+        result = await self.graph.ainvoke(state)
         return result

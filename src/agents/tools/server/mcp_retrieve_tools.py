@@ -1,27 +1,25 @@
 # src/agents/tools/server/mcp_retrieve_tools.py
 from src.rag.vector import vector_retrieval
-from google.adk.tools.tool_context import ToolContext
 from src.utils.logger_conf import logger
-from typing import Tuple, List
+from typing import Tuple, List, Dict, Any
 from langchain_core.tools import tool
 
 
 @tool
 async def rag_search(
-    query: str, top_k: int, top_n: int, tool_context: ToolContext
+    query: str, top_k: int, top_n: int, context_metadata: Dict[str, Any]
 ) -> str:
     """
     Args:
         query (str): The search query to find relevant content
         top_k (int): Number of top embedding results to return
         top_n (int): Number of top reranking results to return
-        folder_name (str): The name of the folder possibly containing the information
+        context_metadata (Dict[str, Any]): The metadata of the search
     """
     if not query:
         raise ValueError("user query is required")
 
-    state = tool_context.state
-    kb_id = state["input_message_metadata"]["kb_id"]
+    kb_id = context_metadata["kb_id"]
     filters = None
     logger.info(
         f"Searching for {query} with top_k={top_k} and top_n={top_n} and kb_id={kb_id}"
@@ -80,13 +78,14 @@ async def rag_search(
 
 @tool
 async def web_search(
-    query: str, top_k: int, top_n: int, tool_context: ToolContext
+    query: str, top_k: int, top_n: int, context_metadata: Dict[str, Any]
 ) -> Tuple[str, List[str]]:
     """
     Args:
         query (str): The search query to find relevant content
         top_k (int): Number of top embedding results to return
         top_n (int): Number of top reranking results to return
+        context_metadata (Dict[str, Any]): The metadata of the search
     """
     return "Formatted contents here", ["List of urls here"]
 
