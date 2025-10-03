@@ -6,6 +6,7 @@ from src.utils.decorators import singleton
 from src.exceptions.chat_exceptions import ConversationNotFoundError
 from src.utils.logger_conf import logger
 import uuid
+from src.db.models.conversation import MessageStatus
 
 
 @singleton
@@ -62,3 +63,9 @@ class ConversationService:
         conversation.is_active = active
         conversation.name = name
         return await self.conv_repository.update_conversation(conversation, user_id)
+
+    async def update_message_status(
+        self, message_id: uuid.UUID, status: MessageStatus
+    ) -> bool:
+        """Update message status"""
+        return await self.conv_repository.update_message_status(message_id, status)

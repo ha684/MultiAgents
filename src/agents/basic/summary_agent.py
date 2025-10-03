@@ -1,5 +1,6 @@
 from typing import List
-from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage
+from src.common.types import Message
 from langchain_core.prompts import ChatPromptTemplate
 from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
@@ -51,7 +52,7 @@ class SummaryAgent:
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
         logger.info("Summary Agent initialized successfully.")
 
-    def count_tokens(self, messages: List[BaseMessage]) -> int:
+    def count_tokens(self, messages: List[Message]) -> int:
         """Count tokens in conversation history."""
         total_tokens = 0
         for message in messages:
@@ -61,7 +62,7 @@ class SummaryAgent:
         return total_tokens
 
     async def summarize_conversation(
-        self, messages: List[BaseMessage]
+        self, messages: List[Message]
     ) -> ConversationSummary:
         """Summarize conversation history to preserve key context while reducing tokens."""
         try:
@@ -85,7 +86,7 @@ class SummaryAgent:
                 summary="Previous conversation context available but could not be fully summarized due to processing error."
             )
 
-    def _format_messages_for_summary(self, messages: List[BaseMessage]) -> str:
+    def _format_messages_for_summary(self, messages: List[Message]) -> str:
         """Format messages for summary analysis."""
         formatted = []
         for i, message in enumerate(messages):

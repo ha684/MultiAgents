@@ -25,6 +25,7 @@ from src.utils.logger_conf import logger
 from src.db.repository.database_session import DatabaseSession
 from src.utils.decorators import singleton
 import uuid
+from src.db.models.conversation import MessageStatus
 
 
 @singleton
@@ -138,6 +139,11 @@ class ConversationRepository:
                 count_result = await session.execute(
                     select(MessageModel).filter_by(conversation_id=conversation_id)
                 )
+                status = (
+                    MessageStatus.COMPLETED
+                    if message.role == "agent"
+                    else MessageStatus.PROCESSING
+                )
                 max_order = len(count_result.scalars().all())
                 msg_model = MessageModel(
                     conversation_id=conversation_id,
@@ -148,6 +154,7 @@ class ConversationRepository:
                     retrieval_context=message.retrieval_context.model_dump()
                     if message.retrieval_context
                     else None,
+                    status=status,
                 )
                 session.add(msg_model)
 
@@ -194,6 +201,25 @@ class ConversationRepository:
 
         except SQLAlchemyError as e:
             logger.error(f"Error deleting conversation {conversation_id}")
+            raise e
+
+    async def update_message_status(
+        self, message_id: uuid.UUID, status: MessageStatus
+    ) -> bool:
+        """Update message status"""
+        try:
+            async with DatabaseSession() as session:
+                query = select(MessageModel).filter_by(id=message_id)
+                result = await session.execute(query)
+                message = result.scalar_one_or_none()
+                if not message:
+                    return False
+                message.status = status
+                await session.flush()
+                await session.refresh(message)
+            return True
+        except SQLAlchemyError as e:
+            logger.error(f"Error updating message status {message_id}")
             raise e
 
     def _serialize_parts(self, parts: List[Part]) -> List[Dict[str, Any]]:

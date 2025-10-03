@@ -1,5 +1,6 @@
 # src/agents/graph/simple_search_graph.py
-from typing import Dict, Any
+from typing import Dict, Any, List
+from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from qdrant_client.models import Filter, models
@@ -8,7 +9,6 @@ from src.rag.vector import vector_retrieval
 from src.services.web_search_service import web_search_service
 from src.utils.logger_conf import logger
 from src.agents.graph.state import AgentState
-from src.models.chat import WebSearchConfig
 import tiktoken
 
 
@@ -31,26 +31,25 @@ class SimpleSearchGraph:
     async def extract_filename_node(self, state: AgentState) -> Dict[str, Any]:
         """Extract filename from query if mentioned"""
         logger.info("Simple Search - Extracting filename")
-
-        requested_filename = await filename_agent.ainvoke(query=state["original_query"])
-
+        requested_filename = await filename_agent.ainvoke(
+            query=state["contextualized_query"]
+        )
         if requested_filename:
             logger.info(f"Detected filename: {requested_filename}")
 
         return {"response_metadata": {"requested_filename": requested_filename}}
 
-    async def retrieve_documents_node(
-        self, state: AgentState, context_metadata: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def retrieve_documents_node(self, state: AgentState) -> Dict[str, Any]:
         """
         Retrieve documents from RAG or web search based on config
         """
         logger.info("Simple Search - Retrieving documents")
-
-        kb_id = context_metadata["kb_id"]
-        web_search_config: WebSearchConfig = context_metadata.get(
-            "web_search_config", {}
-        )
+        conversation: List[BaseMessage] = state["conversation"]
+        last_human_message = conversation[-1]
+        kb_id = last_human_message.additional_kwargs["message_metadata"]["kb_id"]
+        web_search_config: Dict[str, str] = last_human_message.additional_kwargs[
+            "message_metadata"
+        ]["web_search_config"]
 
         embed_top = 50
         rerank_top = 20
@@ -61,24 +60,21 @@ class SimpleSearchGraph:
             "requested_filename"
         )
 
-        # Web search mode
-        if web_search_config.active:
+        if web_search_config.get("active"):
             logger.info("Using web search")
 
             retrieved_docs = await web_search_service.search(
                 query=contextualized_query,
-                provider=web_search_config.provider,
-                api_key=web_search_config.api_key,
+                provider=web_search_config.get("provider"),
+                api_key=web_search_config.get("api_key"),
                 max_results=rerank_top,
             )
 
             search_method = "web_search"
 
-        # RAG search mode
         else:
             logger.info("Using RAG search")
 
-            # Build filters
             filters = Filter(must=[])
             if requested_filename:
                 filters.must.append(
@@ -87,8 +83,6 @@ class SimpleSearchGraph:
                         match=models.MatchText(text=requested_filename),
                     )
                 )
-
-            logger.info(f"Filters: {filters}")
 
             retrieved_docs = await vector_retrieval.retrieve(
                 kb_id=str(kb_id),
@@ -102,7 +96,6 @@ class SimpleSearchGraph:
 
         logger.info(f"Retrieved {len(retrieved_docs)} documents")
 
-        # Token limiting
         if len(retrieved_docs) > rerank_top:
             retrieved_docs = retrieved_docs[:rerank_top]
 
@@ -112,7 +105,6 @@ class SimpleSearchGraph:
 
         logger.info(f"Total tokens: {total_tokens} / {max_tokens}")
 
-        # Truncate if needed
         if total_tokens > max_tokens:
             final_docs = []
             current_tokens = 0
@@ -130,7 +122,6 @@ class SimpleSearchGraph:
 
             retrieved_docs = final_docs
 
-        # Add original index to metadata
         for i, doc in enumerate(retrieved_docs):
             doc.metadata["original_index"] = i
 
@@ -140,14 +131,13 @@ class SimpleSearchGraph:
                     "original_query": state["original_query"],
                     "contextualized_query": contextualized_query,
                     "total_retrieved": len(retrieved_docs),
-                    "total_cited": 0,  # Will be updated in next node
+                    "total_cited": 0,
                     "cited_chunks": retrieved_docs,
                 }
             ],
             "response_metadata": {
                 **state.get("response_metadata", {}),
                 "search_method": search_method,
-                "total_retrieved": len(retrieved_docs),
             },
         }
 
@@ -162,13 +152,11 @@ class SimpleSearchGraph:
             logger.warning("No documents to filter")
             return {}
 
-        # Extract citations
         citation_indexes = await citation_agent.ainvoke(
             history=state["conversation"],
             reference=retrieved_docs,
         )
 
-        # Filter cited documents
         cited_docs = []
         if citation_indexes.indexes:
             cited_docs = [
@@ -179,7 +167,6 @@ class SimpleSearchGraph:
 
         logger.info(f"Filtered to {len(cited_docs)} cited documents")
 
-        # Update retrieval context
         updated_context = {
             **retrieval_context,
             "total_cited": len(cited_docs),
@@ -188,10 +175,8 @@ class SimpleSearchGraph:
 
         return {
             "retrieval_contexts": [updated_context],
-            "cited_documents": cited_docs,
             "response_metadata": {
                 **state.get("response_metadata", {}),
-                "total_cited": len(cited_docs),
             },
         }
 
@@ -203,15 +188,12 @@ class SimpleSearchGraph:
         """Construct the simple search graph"""
         workflow = StateGraph(AgentState)
 
-        # Add nodes
         workflow.add_node("extract_filename", self.extract_filename_node)
         workflow.add_node("retrieve_documents", self.retrieve_documents_node)
         workflow.add_node("filter_citations", self.filter_citations_node)
 
-        # Set entry point
         workflow.set_entry_point("extract_filename")
 
-        # Linear flow
         workflow.add_edge("extract_filename", "retrieve_documents")
         workflow.add_edge("retrieve_documents", "filter_citations")
 

@@ -13,8 +13,13 @@ from src.agents.graph.schemas import RouteDecision
 from src.agents.graph.simple_search_graph import SimpleSearchGraph
 from src.agents.graph.research_graph import ResearchGraph
 from src.agents.tools.server.mcp_retrieve_tools import think
+from src.services.types import Message
+from src.common.types import TextPart, RetrievalContext
 from src.utils import parse_response
+from src.services.conversation_service import ConversationService
 import tiktoken
+import uuid
+from src.db.models.conversation import MessageStatus
 
 
 class OrchestratorGraph(AgentBase):
@@ -28,10 +33,7 @@ class OrchestratorGraph(AgentBase):
         self.simple_search_graph = SimpleSearchGraph(tokenizer)
         self.research_graph = ResearchGraph()
         self.graph = self._build_graph()
-
-    # =========================================================================
-    # HELPER
-    # =========================================================================
+        self.conv_service = ConversationService()
 
     def _format_conversation(self, conversation: List[BaseMessage]) -> str:
         """Format conversation for prompts"""
@@ -40,10 +42,6 @@ class OrchestratorGraph(AgentBase):
             role = "Human" if isinstance(msg, HumanMessage) else "Assistant"
             formatted.append(f"{role}: {msg.content}")
         return "\n".join(formatted)
-
-    # =========================================================================
-    # NODES
-    # =========================================================================
 
     async def contextualize_query_node(self, state: AgentState) -> Dict[str, Any]:
         """Contextualize query before routing"""
@@ -80,17 +78,16 @@ class OrchestratorGraph(AgentBase):
             retry_prompt="Please provide the route decision in correct JSON format.",
         )
 
-        if not response.content:
+        if not response:
             logger.warning("No route decision provided")
             return {"route_decision": "chitchat"}
 
-        return {"route_decision": response.content}
+        return {"route_decision": response["route"]}
 
     async def simple_search_subgraph_node(self, state: AgentState) -> Dict[str, Any]:
         """Execute simple search graph"""
 
         result = await self.simple_search_graph.run(state)
-
         return {
             "final_answer": result["final_answer"],
             "cited_documents": result.get("cited_documents", []),
@@ -118,17 +115,30 @@ class OrchestratorGraph(AgentBase):
             logger.warning("No knowledge to fact check")
             return {}
 
-        prompt = PromptTemplates.FACT_CHECKER_PROMPT.format(
-            original_query=state["contextualized_query"],
-            accumulated_knowledge=state["accumulated_knowledge"],
+        system_prompt = SystemMessage(
+            content="You are a fact-checking expert responsible for verifying and refining accumulated research knowledge before final synthesis."
         )
+        user_prompt = HumanMessage(
+            content=PromptTemplates.FACT_CHECKER_PROMPT.format(
+                original_query=state["contextualized_query"],
+                accumulated_knowledge=state["accumulated_knowledge"],
+            )
+        )
+        messages = [system_prompt, user_prompt]
 
-        response = await self.llm.ainvoke(prompt)
-        verified = response.content
+        fact_check_llm = self.llm.bind_tools([think])
+        fact_checked_knowledge = await self.iterative_llm_call_text(
+            messages=messages,
+            llm_with_tools=fact_check_llm,
+            available_tools={"think": think},
+            max_iterations=3,
+            retry_prompt="Please provide your answer again.",
+            fallback_value=state["accumulated_knowledge"],
+        )
 
         logger.info("Fact checking complete")
 
-        return {"accumulated_knowledge": verified}
+        return {"accumulated_knowledge": fact_checked_knowledge.content}
 
     async def final_synthesizer_node(self, state: AgentState) -> Dict[str, Any]:
         """Generate final response"""
@@ -139,27 +149,41 @@ class OrchestratorGraph(AgentBase):
             response = await response_agent.ainvoke(
                 contexts=[], history=state["conversation"]
             )
-
+            response_metadata = state.get("response_metadata", {})
+            response_metadata.update({"route": "chitchat", "search_method": "none"})
             return {
-                "final_answer": response.content
-                if hasattr(response, "content")
-                else str(response),
-                "response_metadata": {"route": "chitchat", "search_method": "none"},
+                "final_answer": response.content,
+                "response_metadata": response_metadata,
             }
 
-        if route == "simple_search_subgraph":
-            return {}
+        if route == "simple_search":
+            logger.info("Synthesizing simple search response")
+            response = await response_agent.ainvoke(
+                contexts=state["retrieval_contexts"][0]["cited_chunks"],
+                history=state["conversation"],
+            )
+            response_metadata = state.get("response_metadata", {})
+            response_metadata.update({"route": "simple_search"})
+            return {
+                "final_answer": response.content,
+                "response_metadata": response_metadata,
+            }
 
         logger.info("Synthesizing research response")
 
-        conversation_text = self._format_conversation(state["conversation"])
-
-        prompt = PromptTemplates.FINAL_SYNTHESIZER_PROMPT.format(
-            conversation=conversation_text,
-            accumulated_knowledge=state.get("accumulated_knowledge", ""),
+        system_prompt = SystemMessage(
+            content="You are a research synthesis expert tasked with creating a comprehensive, well-structured response based on accumulated research findings."
         )
+        user_prompt = HumanMessage(
+            content=PromptTemplates.FINAL_SYNTHESIZER_PROMPT.format(
+                accumulated_knowledge=state.get("accumulated_knowledge", "")
+            )
+        )
+        messages = [system_prompt] + state["conversation"] + [user_prompt]
 
-        response = await self.llm.ainvoke(prompt)
+        final_synthesizer_response = await self.simple_llm_call(
+            messages=messages, llm=self.llm
+        )
 
         cited_sources = []
         if state.get("used_rag_ids"):
@@ -170,7 +194,7 @@ class OrchestratorGraph(AgentBase):
             cited_sources.extend([f"Web:{url}" for url in state["used_web_urls"][:10]])
 
         return {
-            "final_answer": response.content,
+            "final_answer": final_synthesizer_response.content,
             "response_metadata": {
                 "route": "deep_research",
                 "search_method": "multi_step_research",
@@ -179,19 +203,11 @@ class OrchestratorGraph(AgentBase):
             },
         }
 
-    # =========================================================================
-    # ROUTING
-    # =========================================================================
-
     def route_after_router(self, state: AgentState) -> str:
         """Route after classification"""
         decision = state["route_decision"]
         logger.info(f"Routing to: {decision}")
         return decision
-
-    # =========================================================================
-    # GRAPH CONSTRUCTION
-    # =========================================================================
 
     def _build_graph(self) -> CompiledStateGraph:
         """Build orchestrator graph"""
@@ -229,13 +245,7 @@ class OrchestratorGraph(AgentBase):
 
         return workflow.compile()
 
-    # =========================================================================
-    # PUBLIC INTERFACE
-    # =========================================================================
-
-    async def run(
-        self, conversation: List[BaseMessage], metadata: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    async def run(self, conversation: List[BaseMessage]) -> Dict[str, Any]:
         """
         Execute orchestrator graph with full conversation
 
@@ -246,46 +256,69 @@ class OrchestratorGraph(AgentBase):
         Returns:
             Dict with answer, metadata, contexts, and cited documents
         """
-        # Extract latest query
-        original_query = conversation[-1].content
+        try:
+            original_query = conversation[-1].content
+            conversation_metadata = conversation[-1].additional_kwargs.get(
+                "message_metadata", {}
+            )
+            conversation_id = conversation_metadata.get("conversation_id")
+            user_message_id = conversation_metadata.get("message_id")
 
-        # Initialize state
-        initial_state = AgentState(
-            conversation=conversation,
-            original_query=original_query,
-            contextualized_query="",
-            route_decision=None,
-            search_plan=None,
-            pending_queries=[],
-            completed_queries=[],
-            accumulated_knowledge="",
-            search_results=[],
-            all_search_history=[],
-            iteration_count=0,
-            max_searches=0,
-            used_rag_ids=[],
-            used_web_urls=[],
-            should_switch_search_type=False,
-            verification_result=None,
-            retrieval_contexts=[],
-            final_answer="",
-            cited_documents=[],
-            response_metadata={},
-            context_metadata=metadata,
-        )
+            initial_state = AgentState(
+                conversation=conversation,
+                original_query=original_query,
+                contextualized_query="",
+                route_decision=None,
+                search_plan=None,
+                pending_queries=[],
+                completed_queries=[],
+                accumulated_knowledge="",
+                search_results=[],
+                all_search_history=[],
+                iteration_count=0,
+                max_searches=0,
+                used_rag_ids=[],
+                used_web_urls=[],
+                should_switch_search_type=False,
+                verification_result=None,
+                retrieval_contexts=[],
+                final_answer="",
+                response_metadata={},
+            )
 
-        # Run graph
-        result = await self.graph.ainvoke(initial_state)
+            result = await self.graph.ainvoke(initial_state)
 
-        # Format output
-        return {
-            "answer": result["final_answer"],
-            "route": result.get("route_decision"),
-            "metadata": result.get("response_metadata", {}),
-            "retrieval_contexts": result.get("retrieval_contexts", []),
-            "cited_documents": result.get("cited_documents", []),
-            "iterations": result.get("iteration_count", 0),
-        }
+            metadata: Dict[str, Any] = result.get("response_metadata", {})
+            metadata.update({"route": result.get("route_decision")})
+            used_rag_ids = result.get("used_rag_ids", [])
+            used_web_urls = result.get("used_web_urls", [])
+            metadata.update({"used_rag_ids": used_rag_ids})
+            metadata.update({"used_web_urls": used_web_urls})
+
+            message = Message(
+                parts=[TextPart(type="text", text=result["final_answer"])],
+                role="agent",
+                metadata=metadata,
+                retrieval_context=RetrievalContext(
+                    **result.get("retrieval_contexts", [])[0]
+                ),
+            )
+
+            await self.conv_service.add_message(message, conversation_id)
+
+            if user_message_id:
+                await self.conv_service.update_message_status(
+                    uuid.UUID(user_message_id), MessageStatus.COMPLETED
+                )
+
+            return message
+        except Exception as e:
+            logger.error(f"Error running orchestrator graph: {e}")
+            if user_message_id:
+                await self.conv_service.update_message_status(
+                    uuid.UUID(user_message_id), MessageStatus.FAILED
+                )
+            raise e
 
 
 def parse_route_decision(content: str) -> Optional[RouteDecision]:
@@ -294,8 +327,7 @@ def parse_route_decision(content: str) -> Optional[RouteDecision]:
         parsed = parse_response(content)
         if parsed is None:
             return None
-        response = RouteDecision(route=parsed["route"])
-        return response.route
+        return parsed
     except Exception as e:
         logger.error(f"Error parsing route decision: {e}")
         return None

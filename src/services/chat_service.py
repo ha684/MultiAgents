@@ -25,6 +25,7 @@ from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 from src.agents.main import OrchestratorGraph
 import tiktoken
+from src.db.models.conversation import MessageStatus
 
 
 @singleton
@@ -35,14 +36,27 @@ class ChatService:
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
 
     def _format_history(self, history: List[Message]) -> List[BaseMessage]:
-        """Converts simple dict history to LangChain message objects."""
-        return [
-            HumanMessage(content=item.parts[0].text)
-            if item.role == "user"
-            else AIMessage(content=item.parts[0].text)
-            for item in history
-            if item.role in ("user", "agent")
-        ]
+        """Converts simple dict history to LangChain message objects with metadata preserved."""
+        formatted_messages = []
+        for item in history:
+            if item.role not in ("user", "agent"):
+                continue
+
+            content = item.parts[0].text
+            metadata = item.metadata or {}
+
+            if item.role == "user":
+                msg = HumanMessage(
+                    content=content, additional_kwargs={"message_metadata": metadata}
+                )
+            else:
+                msg = AIMessage(
+                    content=content, additional_kwargs={"message_metadata": metadata}
+                )
+
+            formatted_messages.append(msg)
+
+        return formatted_messages
 
     def sanitize_request(self, request: ChatRequest):
         """Sanitize the request"""
@@ -120,7 +134,8 @@ class ChatService:
             )
             if conversation_history is None:
                 raise ConversationNotFoundError(conversation_id=conversation_id)
-            await self.conv_service.add_message(message, conversation_id)
+            message_id = await self.conv_service.add_message(message, conversation_id)
+            message.metadata["message_id"] = message_id
             conversation_history.append(message)  # type: ignore
             formatted_conversation = self._format_history(conversation_history)
             managed_conversation = await self._manage_conversation_length(
@@ -155,10 +170,8 @@ class ChatService:
                 with tracer.start_as_current_span(
                     "QueryContextAgent.contextualize_query"
                 ):
-                    contextualized_query = (
-                        await query_context_agent.contextualize_query(
-                            history=conversation
-                        )
+                    contextualized_query = await query_context_agent.ainvoke(
+                        history=conversation
                     )
                 span.set_attribute("contextualized_query", contextualized_query)
             if web_search_config.active:
@@ -171,7 +184,7 @@ class ChatService:
                     )
             else:
                 with tracer.start_as_current_span("FilenameAgent.extract_filename"):
-                    requested_filename = await filename_agent.extract_filename(
+                    requested_filename = await filename_agent.ainvoke(
                         query=original_query
                     )
 
@@ -234,7 +247,7 @@ class ChatService:
 
             if retrieved_docs:
                 with tracer.start_as_current_span("CitationAgent.extract_citations"):
-                    citation_indexes = await citation_agent.extract_citations(
+                    citation_indexes = await citation_agent.ainvoke(
                         history=conversation,
                         reference=retrieved_docs,
                     )
@@ -284,7 +297,7 @@ class ChatService:
                 "Analyzing conversation context...",
                 progress=0.1,
             )
-            contextualized_query = await query_context_agent.contextualize_query(
+            contextualized_query = await query_context_agent.ainvoke(
                 history=conversation
             )
             logger.info(f"Contextualized query: {contextualized_query}")
@@ -321,9 +334,7 @@ class ChatService:
                 "Searching for relevant documents...",
                 progress=0.3,
             )
-            requested_filename = await filename_agent.extract_filename(
-                query=original_query
-            )
+            requested_filename = await filename_agent.ainvoke(query=original_query)
 
             filters: Filter = Filter(must=[])
 
@@ -382,7 +393,7 @@ class ChatService:
                 "Extracting relevant citations...",
                 progress=0.8,
             )
-            citation_indexes = await citation_agent.extract_citations(
+            citation_indexes = await citation_agent.ainvoke(
                 history=conversation,
                 reference=retrieved_docs,
             )
@@ -409,35 +420,54 @@ class ChatService:
 
     async def ask_normal(
         self,
-        conversation: List[Message],
+        conversation: List[BaseMessage],
         web_search_config: WebSearchConfig,
         metadata: Dict[str, Any],
     ) -> Tuple[Message, List[Dict]]:
         """Handles non-streaming (full text) response."""
-        retrieval_context = await self._retrieve(
-            conversation, web_search_config, metadata
-        )
-        with tracer.start_as_current_span("ResponseAgent.generate_response"):
-            response = await response_agent.generate_response(
-                contexts=retrieval_context.cited_chunks,
-                history=conversation,
+        user_message_id = _extract_message_id(conversation[-1])
+
+        try:
+            retrieval_context = await self._retrieve(
+                conversation, web_search_config, metadata
             )
-            response_dict = response.model_dump()
-        if web_search_config.active:
-            response_dict["response_metadata"]["search_method"] = "web_search"
-        else:
-            response_dict["response_metadata"]["search_method"] = "database_search"
-        response_dict["response_metadata"].update(metadata)
+            with tracer.start_as_current_span("ResponseAgent.generate_response"):
+                response = await response_agent.ainvoke(
+                    contexts=retrieval_context.cited_chunks,
+                    history=conversation,
+                )
+                response_dict = response.model_dump()
 
-        message = Message(
-            role="agent",
-            parts=[TextPart(type="text", text=response_dict["content"])],
-            metadata=response_dict["response_metadata"],
-            retrieval_context=retrieval_context,
-        )
+            if web_search_config.active:
+                response_dict["response_metadata"]["search_method"] = "web_search"
+            else:
+                response_dict["response_metadata"]["search_method"] = "database_search"
+            response_dict["response_metadata"].update(metadata)
 
-        await self.conv_service.add_message(message, metadata.get("conversation_id"))
-        return message
+            message = Message(
+                role="agent",
+                parts=[TextPart(type="text", text=response_dict["content"])],
+                metadata=response_dict["response_metadata"],
+                retrieval_context=retrieval_context,
+            )
+
+            await self.conv_service.add_message(
+                message, metadata.get("conversation_id")
+            )
+
+            if user_message_id:
+                await self.conv_service.update_message_status(
+                    uuid.UUID(user_message_id), MessageStatus.COMPLETED
+                )
+
+            return message
+
+        except Exception as e:
+            if user_message_id:
+                await self.conv_service.update_message_status(
+                    uuid.UUID(user_message_id), MessageStatus.FAILED
+                )
+            raise e
 
     async def ask_stream(
         self,
@@ -464,7 +494,7 @@ class ChatService:
                 StreamPhase.RESPONSE_GENERATION, "Generating response...", progress=0.0
             )
 
-            response_generator = response_agent.generate_streaming_response(
+            response_generator = response_agent.astream(
                 contexts=retrieval_context.cited_chunks,
                 history=conversation,
             )
@@ -507,10 +537,14 @@ class ChatService:
                 retrieval_context=retrieval_context,
             )
 
+            user_message_id = _extract_message_id(conversation[-1])
+
             await self.conv_service.add_message(
                 message, metadata.get("conversation_id")
             )
-
+            await self.conv_service.update_message_status(
+                user_message_id, MessageStatus.COMPLETED
+            )
             yield StreamEventBuilder.message_stop(
                 references=references,
                 metadata=final_metadata,
@@ -545,7 +579,8 @@ class ChatService:
             metadata.update({"web_search_config": web_search_config.model_dump()})
             conversation = await self.sanitize_message(request.message)
             if request.agentic:
-                response = await self.orchestrator_graph.run(conversation, metadata)
+                response = await self.orchestrator_graph.run(conversation)
+
             else:
                 response = await self.ask_normal(
                     conversation, web_search_config, metadata
@@ -587,3 +622,9 @@ def _get_api_key_for_provider(provider: SearchProvider) -> str:
         return settings.tavily_api_key
     elif provider == SearchProvider.FIRECRAWL:
         return settings.firecrawl_api_key
+
+
+def _extract_message_id(message: BaseMessage) -> str | None:
+    """Extract message_id from LangChain message's metadata."""
+    metadata = message.additional_kwargs.get("message_metadata", {})
+    return metadata.get("message_id")

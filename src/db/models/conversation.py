@@ -1,11 +1,28 @@
 # src/db/models/conversation.py
 from src.connector.database_conn import Base
-from sqlalchemy import Column, String, Integer, Boolean, DateTime, Index, ForeignKey
+from sqlalchemy import (
+    Column,
+    String,
+    Integer,
+    Boolean,
+    DateTime,
+    Index,
+    ForeignKey,
+    Text,
+)
 from datetime import datetime
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from uuid_extensions import uuid7
 from zoneinfo import ZoneInfo
+import enum
+from sqlalchemy import Enum
+
+
+class MessageStatus(enum.Enum):
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class ConversationModel(Base):
@@ -50,6 +67,13 @@ class MessageModel(Base):
     )
     role = Column(String(50), nullable=False)
     parts = Column(JSONB, nullable=False)
+
+    status = Column(
+        Enum(MessageStatus), nullable=False, default=MessageStatus.COMPLETED
+    )
+
+    error_details = Column(Text, nullable=True)
+
     message_metadata = Column(JSONB)
     created_at = Column(
         DateTime(timezone=True),

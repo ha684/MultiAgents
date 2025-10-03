@@ -116,7 +116,7 @@ class AgentBase:
         parse_fn: Callable[[str], Optional[Dict[str, Any]]],
         retry_prompt: str,
         error_context: str = "Agent",
-    ) -> Optional[AIMessage]:
+    ) -> Optional[Dict[str, Any]]:
         """
         Iterative LLM call with tools - returns parsed structured output
 
@@ -148,7 +148,7 @@ class AgentBase:
                     logger.info(
                         f"{error_context}: Successfully parsed response in iteration {iteration}"
                     )
-                    return AIMessage(content=parsed_result)
+                    return parsed_result
 
             if not response.tool_calls:
                 logger.warning(
@@ -180,4 +180,4 @@ class AgentBase:
         logger.error(
             f"{error_context}: Failed to get valid response after {iteration} iterations."
         )
-        return AIMessage(content="")
+        return None

@@ -17,7 +17,6 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from uuid_extensions import uuid7
-
 from src.connector.database_conn import Base
 
 
