@@ -42,13 +42,34 @@ class RetrievalContext(TypedDict):
     cited_chunks: List[Document]
 
 
-class AgentState(TypedDict):
+# ==================== ORCHESTRATOR STATE ====================
+class OrchestratorState(TypedDict):
+    # Input & Core State
+    conversation: List[BaseMessage]
+    original_query: str
+    contextualized_query: str
+    route_decision: Optional[str]
+
+    # Data passed between nodes
+    accumulated_knowledge: str  # Output from ResearchGraph
+    retrieval_contexts: List[RetrievalContext]  # Output from SimpleSearchGraph
+
+    # Final Output
+    final_answer: str
+    response_metadata: Dict[str, Any]
+
+
+class SimpleSearchState(TypedDict):
     conversation: List[BaseMessage]
     original_query: str
     contextualized_query: str
 
-    route_decision: Optional[Literal["chitchat", "simple_search", "deep_research"]]
+    retrieval_contexts: List[RetrievalContext]
+    response_metadata: Dict[str, Any]
 
+
+class ResearchState(TypedDict):
+    contextualized_query: str
     search_plan: Optional[SearchPlan]
     pending_queries: List[SearchQuery]
     completed_queries: List[SearchQuery]
@@ -57,14 +78,7 @@ class AgentState(TypedDict):
     all_search_history: List[SearchResult]
     iteration_count: int
     max_searches: int
-
     used_rag_ids: List[str]
     used_web_urls: List[str]
     should_switch_search_type: bool
-
     verification_result: Optional[VerificationResult]
-
-    retrieval_contexts: List[RetrievalContext]
-
-    final_answer: str
-    response_metadata: Dict[str, Any]

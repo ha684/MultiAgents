@@ -314,6 +314,10 @@ class PromptTemplates:
     """)
 
     FINAL_SYNTHESIZER_PROMPT = textwrap.dedent("""\
+        <user_message>
+        {user_message}
+        </user_message>
+
         <accumulated_knowledge>
         {accumulated_knowledge}
         </accumulated_knowledge>
@@ -353,7 +357,7 @@ class PromptTemplates:
         - Do not overstate conclusions beyond what the evidence supports
 
         6. CONVERSATIONAL AWARENESS:
-        - Address the specific question asked in the most recent user message
+        - Address the specific question asked in the user message
         - Consider the full conversation context for relevance and focus
         - Adjust depth and scope based on what the user seems to need
 

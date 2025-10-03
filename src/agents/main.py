@@ -7,7 +7,7 @@ from src.agents.basic import response_agent, query_context_agent
 from src.agents.basic.base import AgentBase
 from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
-from src.agents.graph.state import AgentState
+from src.agents.graph.state import OrchestratorState
 from src.agents.graph.prompts import PromptTemplates
 from src.agents.graph.schemas import RouteDecision
 from src.agents.graph.simple_search_graph import SimpleSearchGraph
@@ -32,18 +32,12 @@ class OrchestratorGraph(AgentBase):
         tokenizer = tiktoken.encoding_for_model("gpt-4o")
         self.simple_search_graph = SimpleSearchGraph(tokenizer)
         self.research_graph = ResearchGraph()
-        self.graph = self._build_graph()
         self.conv_service = ConversationService()
+        self.graph = self._build_graph()
 
-    def _format_conversation(self, conversation: List[BaseMessage]) -> str:
-        """Format conversation for prompts"""
-        formatted = []
-        for msg in conversation:
-            role = "Human" if isinstance(msg, HumanMessage) else "Assistant"
-            formatted.append(f"{role}: {msg.content}")
-        return "\n".join(formatted)
-
-    async def contextualize_query_node(self, state: AgentState) -> Dict[str, Any]:
+    async def contextualize_query_node(
+        self, state: OrchestratorState
+    ) -> Dict[str, Any]:
         """Contextualize query before routing"""
 
         original_query = state["original_query"]
@@ -59,7 +53,7 @@ class OrchestratorGraph(AgentBase):
 
         return {"contextualized_query": contextualized}
 
-    async def router_node(self, state: AgentState) -> Dict[str, Any]:
+    async def router_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """Route with structured output"""
 
         max_iterations = 3
@@ -84,7 +78,9 @@ class OrchestratorGraph(AgentBase):
 
         return {"route_decision": response["route"]}
 
-    async def simple_search_subgraph_node(self, state: AgentState) -> Dict[str, Any]:
+    async def simple_search_subgraph_node(
+        self, state: OrchestratorState
+    ) -> Dict[str, Any]:
         """Execute simple search graph"""
 
         result = await self.simple_search_graph.run(state)
@@ -95,7 +91,7 @@ class OrchestratorGraph(AgentBase):
             "response_metadata": result.get("response_metadata", {}),
         }
 
-    async def research_subgraph_node(self, state: AgentState) -> Dict[str, Any]:
+    async def research_subgraph_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """Execute research graph"""
 
         result = await self.research_graph.run(state)
@@ -108,7 +104,7 @@ class OrchestratorGraph(AgentBase):
             "iteration_count": result["iteration_count"],
         }
 
-    async def fact_checker_node(self, state: AgentState) -> Dict[str, Any]:
+    async def fact_checker_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """Fact check accumulated knowledge"""
 
         if not state.get("accumulated_knowledge"):
@@ -140,7 +136,7 @@ class OrchestratorGraph(AgentBase):
 
         return {"accumulated_knowledge": fact_checked_knowledge.content}
 
-    async def final_synthesizer_node(self, state: AgentState) -> Dict[str, Any]:
+    async def final_synthesizer_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """Generate final response"""
 
         route = state.get("route_decision")
@@ -170,16 +166,17 @@ class OrchestratorGraph(AgentBase):
             }
 
         logger.info("Synthesizing research response")
-
+        user_message = state["conversation"][-1].content
         system_prompt = SystemMessage(
             content="You are a research synthesis expert tasked with creating a comprehensive, well-structured response based on accumulated research findings."
         )
         user_prompt = HumanMessage(
             content=PromptTemplates.FINAL_SYNTHESIZER_PROMPT.format(
-                accumulated_knowledge=state.get("accumulated_knowledge", "")
+                user_message=user_message,
+                accumulated_knowledge=state.get("accumulated_knowledge", ""),
             )
         )
-        messages = [system_prompt] + state["conversation"] + [user_prompt]
+        messages = [system_prompt] + state["conversation"][-1:] + [user_prompt]
 
         final_synthesizer_response = await self.simple_llm_call(
             messages=messages, llm=self.llm
@@ -203,7 +200,7 @@ class OrchestratorGraph(AgentBase):
             },
         }
 
-    def route_after_router(self, state: AgentState) -> str:
+    def route_after_router(self, state: OrchestratorState) -> str:
         """Route after classification"""
         decision = state["route_decision"]
         logger.info(f"Routing to: {decision}")
@@ -211,7 +208,7 @@ class OrchestratorGraph(AgentBase):
 
     def _build_graph(self) -> CompiledStateGraph:
         """Build orchestrator graph"""
-        workflow = StateGraph(AgentState)
+        workflow = StateGraph(OrchestratorState)
 
         # Add nodes
         workflow.add_node("contextualize_query", self.contextualize_query_node)
@@ -264,7 +261,7 @@ class OrchestratorGraph(AgentBase):
             conversation_id = conversation_metadata.get("conversation_id")
             user_message_id = conversation_metadata.get("message_id")
 
-            initial_state = AgentState(
+            initial_state = OrchestratorState(
                 conversation=conversation,
                 original_query=original_query,
                 contextualized_query="",
