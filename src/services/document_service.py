@@ -34,6 +34,8 @@ from src.exceptions.document_exceptions import (
     DuplicateDocumentError,
 )
 from src.utils.hash_calculator import calculate_hash_from_stream
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 
 @singleton
@@ -97,7 +99,7 @@ class DocumentService:
         tenant_id: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Document, str]:
-        """Upload a document and queue it for processing."""
+        """Upload a document and queue it for processing with retry support for failed documents."""
         await self._verify_knowledge_base_exists(knowledge_base_id)
         content_hash = await calculate_hash_from_stream(file)
         existing_document = await self.document_repository.find_by_hash(
@@ -105,9 +107,47 @@ class DocumentService:
         )
 
         if existing_document:
-            raise DuplicateDocumentError(
-                message=f"Document with identical content already exists as '{existing_document.original_filename}'."
-            )
+            if existing_document.status == DocumentStatusEnum.FAILED:
+                logger.info(
+                    f"Found failed document {existing_document.id} with same hash. "
+                    f"Resetting status to PENDING for retry."
+                )
+
+                await self.document_repository.update(
+                    document_id=existing_document.id,
+                    update_data={
+                        "status": DocumentStatusEnum.PENDING,
+                        "processing_error": None,
+                        "updated_at": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+                    },
+                )
+
+                task_id = self.file_processor.process_files(str(existing_document.id))
+
+                if not task_id:
+                    logger.error(
+                        f"Failed to queue document {existing_document.id} for reprocessing"
+                    )
+                    raise DocumentProcessingError(
+                        message="Failed to queue document for reprocessing"
+                    )
+
+                logger.info(
+                    f"Document {existing_document.id} queued for reprocessing with task ID {task_id}"
+                )
+
+                return existing_document, task_id
+
+            elif existing_document.status in [
+                DocumentStatusEnum.FINISHED,
+                DocumentStatusEnum.PROCESSING,
+                DocumentStatusEnum.PENDING,
+            ]:
+                raise DuplicateDocumentError(
+                    message=f"Document with identical content already exists as '{existing_document.original_filename}' "
+                    f"with status '{existing_document.status}'."
+                )
+
         try:
             unique_filename, file_type = await self._get_file_info(file)
             minio_object_path, file_size = await self._upload_to_minio(

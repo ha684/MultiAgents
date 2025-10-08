@@ -20,6 +20,7 @@ from src.connector import minio_client
 from src.event_pub import event_publisher
 from src.models.document import DocumentProcessingStatusResponse, DocumentStatusEnum
 from src.rag.processor.strategy import get_strategy
+from src.rag.processor.strategy.image import ImageStrategy
 from src.tasks.qac import _generate_qa_pairs_async
 from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 from src.rag.vector import vector_storage
@@ -91,7 +92,6 @@ async def temp_file_manager(document_id: uuid.UUID, filename: str):
         try:
             if temp_file_path.exists():
                 os.remove(temp_file_path)
-                logger.debug(f"Cleaned up temp file: {temp_file_path}")
         except Exception as cleanup_error:
             logger.error(
                 f"Error cleaning up temp file {temp_file_path}: {cleanup_error}"
@@ -132,9 +132,16 @@ async def _process_document_async(
             file_size = temp_file_path.stat().st_size
             logger.info(f"Downloaded file ({file_size} bytes) in {download_time:.2f}s")
 
-            strategy = get_strategy(config={})
+            strategy = get_strategy(document=document, config={})
             chunk_start = time.time()
-            chunks = strategy.chunk(file_path=str(temp_file_path), document=document)
+            if isinstance(strategy, ImageStrategy):
+                chunks = await strategy.chunk(
+                    file_path=str(temp_file_path), document=document
+                )
+            else:
+                chunks = strategy.chunk(
+                    file_path=str(temp_file_path), document=document
+                )
             chunk_time = time.time() - chunk_start
 
             if not chunks:

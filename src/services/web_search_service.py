@@ -1,10 +1,35 @@
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Union
 from langchain_core.documents import Document
 from src.services.web_search.base import BaseSearchService
 from src.services.web_search.tavily import TavilyService
 from src.services.web_search.firecrawl import FireCrawlService
 from src.models.chat import SearchProvider
+from src.config.settings import settings
 from src.utils.logger_conf import logger
+
+Provider = Union[str, SearchProvider]
+
+
+def get_api_key_for_provider(provider: SearchProvider) -> str:
+    """Get API key based on the selected provider."""
+    if provider == SearchProvider.TAVILY:
+        return settings.tavily_api_key
+    elif provider == SearchProvider.FIRECRAWL:
+        return settings.firecrawl_api_key
+
+
+def normalize_provider(p: Provider) -> SearchProvider:
+    if isinstance(p, SearchProvider):
+        return p
+    s = p.strip()
+    try:
+        return SearchProvider(s.lower())
+    except ValueError:
+        try:
+            return SearchProvider[s.upper()]
+        except KeyError:
+            valid = [e.value for e in SearchProvider]
+            raise ValueError(f"Unknown provider {p!r}. Valid: {valid}")
 
 
 class WebSearchService:
@@ -22,17 +47,18 @@ class WebSearchService:
     async def search(
         self,
         query: str,
-        provider: SearchProvider,
-        api_key: str,
+        provider: Provider,
+        api_key: Optional[str] = None,
         max_results: int = 5,
         **kwargs: Any,
     ) -> Optional[List[Document]]:
         """
         Search using the specified provider.
         """
-        target_provider = provider
+        target_provider = normalize_provider(provider)
+        api_key = api_key or get_api_key_for_provider(target_provider)
         try:
-            service = self._providers[provider]
+            service = self._providers[target_provider]
             result = await service.search(api_key, query, max_results, **kwargs)
             if result:
                 logger.info(f"Search successful with provider: {target_provider.value}")

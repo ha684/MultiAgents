@@ -1,3 +1,4 @@
+# src/agents/basic/citation_agent.py
 from typing import List
 from langchain_core.documents import Document
 from src.llm.factory import get_llm
@@ -45,7 +46,7 @@ Therefore:
 
 <analysis_framework>
 
-## Step 1: Understand the Query Context (Use 'think' tool)
+## Step 1: Understand the Query Context
 - Read the full conversation history
 - Identify the query type:
   * New topic/question
@@ -54,61 +55,61 @@ Therefore:
   * Multi-part question
 - Extract key entities, topics, and intent
 
-## Step 2: Classify Query Type (Use 'think' tool)
+## Step 2: Classify Query Type
 
 ### Type A: Direct Information Query
 **Indicators:** "What is...", "How does...", "When did...", "Show me...", "Explain..."
 **Strategy:** Include documents that discuss the topic or contain related information
-**Example:** "What is the Q2 revenue?" → Financial documents, quarterly reports, budget docs
+**Example:** "What is the Q2 revenue?" : Financial documents, quarterly reports, budget docs
 
 ### Type B: Negative/Absence Query  
 **Indicators:** "NOT", "haven't", "which ones don't...", "excluding...", "without..."
 **Strategy:** VERY PERMISSIVE - include all documents about relevant entities/topics
-**Example:** "Which companies have NOT been hacked?" → Include ALL company security/tech documents
+**Example:** "Which companies have NOT been hacked?" : Include ALL company security/tech documents
 
 ### Type C: Comparative/Analytical Query
 **Indicators:** "Compare...", "difference between...", "which is better...", "analyze..."
 **Strategy:** Include documents covering any comparison subjects or related metrics
-**Example:** "Compare A and B's performance" → Include docs for A, B, and general performance metrics
+**Example:** "Compare A and B's performance" : Include docs for A, B, and general performance metrics
 
 ### Type D: List/Enumeration Query
 **Indicators:** "List all...", "What are the...", "Show me all...", "Which ones..."
 **Strategy:** BROAD inclusion - include all documents that might contain relevant items
-**Example:** "What products do we offer?" → All product docs, marketing materials, catalogs
+**Example:** "What products do we offer?" : All product docs, marketing materials, catalogs
 
 ### Type E: Conversational/Meta Query
 **Indicators:** Pure greetings, thanks, clarifications without content requests
 **Strategy:** Return empty indexes
-**Example:** "Hello", "Thank you", "I see" → {"indexes": []}
+**Example:** "Hello", "Thank you", "I see" : {"indexes": []}
 
-## Step 3: Apply Permissive Relevance Criteria (Use 'think' tool)
+## Step 3: Apply Permissive Relevance Criteria
 
 ### Include documents that:
-✓ Directly discuss the query topic
-✓ Contain related entities or concepts
-✓ Provide background/context that might be useful
-✓ Cover adjacent topics that could be relevant
-✓ Mention keywords or related terms from the query
-✓ Are from the same domain/category as the query
+- Directly discuss the query topic
+- Contain related entities or concepts
+- Provide background/context that might be useful
+- Cover adjacent topics that could be relevant
+- Mention keywords or related terms from the query
+- Are from the same domain/category as the query
 
 ### Only exclude documents that:
-✗ Are clearly about completely different topics
-✗ Are pure conversational responses (for conversational queries)
-✗ Have zero semantic connection to the query
+- Are clearly about completely different topics
+- Are pure conversational responses (for conversational queries)
+- Have zero semantic connection to the query
 
-## Step 4: Context Integration (Use 'think' tool)
+## Step 4: Context Integration
 - If query references previous messages:
   * Extract referenced topics from history
   * Combine with current query
   * Include documents relevant to EITHER topic
 - Consider the conversation flow and user's overall goal
 
-## Step 5: Inclusivity Check (Use 'think' tool)
+## Step 5: Inclusivity Check
 Ask yourself:
 1. Could this document contain ANY information that helps answer the question?
 2. Would a human assistant want to review this document when answering?
 3. Am I excluding this because it's definitely irrelevant, or just because I'm not sure?
-   → If "not sure", INCLUDE it
+    If "not sure", INCLUDE it
 
 </analysis_framework>
 

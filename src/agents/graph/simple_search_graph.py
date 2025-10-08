@@ -8,7 +8,7 @@ from src.agents.basic import citation_agent, filename_agent
 from src.rag.vector import vector_retrieval
 from src.services.web_search_service import web_search_service
 from src.utils.logger_conf import logger
-from src.agents.graph.state import AgentState
+from src.agents.graph.state import SimpleSearchState
 import tiktoken
 
 
@@ -24,11 +24,7 @@ class SimpleSearchGraph:
         self.tokenizer = tokenizer
         self.graph = self._build_graph()
 
-    # =========================================================================
-    # NODE IMPLEMENTATIONS
-    # =========================================================================
-
-    async def extract_filename_node(self, state: AgentState) -> Dict[str, Any]:
+    async def extract_filename_node(self, state: SimpleSearchState) -> Dict[str, Any]:
         """Extract filename from query if mentioned"""
         logger.info("Simple Search - Extracting filename")
         requested_filename = await filename_agent.ainvoke(
@@ -39,7 +35,7 @@ class SimpleSearchGraph:
 
         return {"response_metadata": {"requested_filename": requested_filename}}
 
-    async def retrieve_documents_node(self, state: AgentState) -> Dict[str, Any]:
+    async def retrieve_documents_node(self, state: SimpleSearchState) -> Dict[str, Any]:
         """
         Retrieve documents from RAG or web search based on config
         """
@@ -126,26 +122,24 @@ class SimpleSearchGraph:
             doc.metadata["original_index"] = i
 
         return {
-            "retrieval_contexts": [
-                {
-                    "original_query": state["original_query"],
-                    "contextualized_query": contextualized_query,
-                    "total_retrieved": len(retrieved_docs),
-                    "total_cited": 0,
-                    "cited_chunks": retrieved_docs,
-                }
-            ],
+            "retrieval_contexts": {
+                "original_query": state["original_query"],
+                "contextualized_query": contextualized_query,
+                "total_retrieved": len(retrieved_docs),
+                "total_cited": 0,
+                "cited_chunks": retrieved_docs,
+            },
             "response_metadata": {
                 **state.get("response_metadata", {}),
                 "search_method": search_method,
             },
         }
 
-    async def filter_citations_node(self, state: AgentState) -> Dict[str, Any]:
+    async def filter_citations_node(self, state: SimpleSearchState) -> Dict[str, Any]:
         """Filter relevant documents using citation agent"""
         logger.info("Simple Search - Filtering citations")
 
-        retrieval_context = state["retrieval_contexts"][0]
+        retrieval_context = state["retrieval_contexts"]
         retrieved_docs = retrieval_context["cited_chunks"]
 
         if not retrieved_docs:
@@ -174,19 +168,15 @@ class SimpleSearchGraph:
         }
 
         return {
-            "retrieval_contexts": [updated_context],
+            "retrieval_contexts": updated_context,
             "response_metadata": {
                 **state.get("response_metadata", {}),
             },
         }
 
-    # =========================================================================
-    # GRAPH CONSTRUCTION
-    # =========================================================================
-
     def _build_graph(self) -> CompiledStateGraph:
         """Construct the simple search graph"""
-        workflow = StateGraph(AgentState)
+        workflow = StateGraph(SimpleSearchState)
 
         workflow.add_node("extract_filename", self.extract_filename_node)
         workflow.add_node("retrieve_documents", self.retrieve_documents_node)
@@ -201,11 +191,7 @@ class SimpleSearchGraph:
 
         return workflow.compile()
 
-    # =========================================================================
-    # PUBLIC INTERFACE
-    # =========================================================================
-
-    async def run(self, state: AgentState) -> AgentState:
+    async def run(self, state: SimpleSearchState) -> SimpleSearchState:
         """Execute simple search graph"""
         result = await self.graph.ainvoke(state)
         return result

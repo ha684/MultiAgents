@@ -8,6 +8,7 @@ from .verification_agent import VerificationAgent
 from .qac_agent import QACAgent
 from .summary_agent import SummaryAgent
 from .chunk_contextual_agent import ChunkContextualAgent
+from .compress_agent import CompressAgent
 
 citation_agent = CitationAgent()
 summary_agent = SummaryAgent()
@@ -18,3 +19,4 @@ verification_agent = VerificationAgent()
 qac_agent = QACAgent()
 filename_agent = FilenameAgent()
 chunk_contextual_agent = ChunkContextualAgent()
+compress_agent = CompressAgent()

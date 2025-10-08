@@ -7,7 +7,7 @@ from src.agents.basic import response_agent, query_context_agent
 from src.agents.basic.base import AgentBase
 from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
-from src.agents.graph.state import OrchestratorState
+from src.agents.graph.state import OrchestratorState, SimpleSearchState, ResearchState
 from src.agents.graph.prompts import PromptTemplates
 from src.agents.graph.schemas import RouteDecision
 from src.agents.graph.simple_search_graph import SimpleSearchGraph
@@ -29,6 +29,7 @@ class OrchestratorGraph(AgentBase):
 
     def __init__(self):
         self.llm = get_llm("nxchat")
+        self.thinking_llm = self.llm.bind_tools([think])
         tokenizer = tiktoken.encoding_for_model("gpt-4o")
         self.simple_search_graph = SimpleSearchGraph(tokenizer)
         self.research_graph = ResearchGraph()
@@ -61,7 +62,7 @@ class OrchestratorGraph(AgentBase):
 
         system_prompt = SystemMessage(content=PromptTemplates.ROUTER_PROMPT)
         messages: List[BaseMessage] = [system_prompt] + conversation
-        router_llm = self.llm.bind_tools([think])
+        router_llm = self.thinking_llm
 
         response = await self.iterative_llm_call_structured(
             messages=messages,
@@ -83,25 +84,33 @@ class OrchestratorGraph(AgentBase):
     ) -> Dict[str, Any]:
         """Execute simple search graph"""
 
-        result = await self.simple_search_graph.run(state)
+        simple_search_state = SimpleSearchState(
+            conversation=state["conversation"],
+            original_query=state["original_query"],
+            contextualized_query=state["contextualized_query"],
+        )
+
+        result = await self.simple_search_graph.run(simple_search_state)
         return {
-            "final_answer": result["final_answer"],
-            "cited_documents": result.get("cited_documents", []),
-            "retrieval_contexts": result.get("retrieval_contexts", []),
+            "retrieval_contexts": result.get("retrieval_contexts", {}),
             "response_metadata": result.get("response_metadata", {}),
         }
 
     async def research_subgraph_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """Execute research graph"""
+        context_metadata = state["conversation"][-1].additional_kwargs.get(
+            "message_metadata", {}
+        )
+        research_state = ResearchState(
+            contextualized_query=state["contextualized_query"],
+            context_metadata=context_metadata,
+        )
 
-        result = await self.research_graph.run(state)
+        final_state: ResearchState = await self.research_graph.run(research_state)
 
         return {
-            "accumulated_knowledge": result["accumulated_knowledge"],
-            "all_search_history": result["all_search_history"],
-            "used_rag_ids": result["used_rag_ids"],
-            "used_web_urls": result["used_web_urls"],
-            "iteration_count": result["iteration_count"],
+            "accumulated_knowledge": final_state.get("accumulated_knowledge", ""),
+            "all_search_history": final_state.get("all_search_history", []),
         }
 
     async def fact_checker_node(self, state: OrchestratorState) -> Dict[str, Any]:
@@ -122,7 +131,7 @@ class OrchestratorGraph(AgentBase):
         )
         messages = [system_prompt, user_prompt]
 
-        fact_check_llm = self.llm.bind_tools([think])
+        fact_check_llm = self.thinking_llm
         fact_checked_knowledge = await self.iterative_llm_call_text(
             messages=messages,
             llm_with_tools=fact_check_llm,
@@ -155,7 +164,7 @@ class OrchestratorGraph(AgentBase):
         if route == "simple_search":
             logger.info("Synthesizing simple search response")
             response = await response_agent.ainvoke(
-                contexts=state["retrieval_contexts"][0]["cited_chunks"],
+                contexts=state["retrieval_contexts"]["cited_chunks"],
                 history=state["conversation"],
             )
             response_metadata = state.get("response_metadata", {})
@@ -182,21 +191,11 @@ class OrchestratorGraph(AgentBase):
             messages=messages, llm=self.llm
         )
 
-        cited_sources = []
-        if state.get("used_rag_ids"):
-            cited_sources.extend(
-                [f"RAG:{doc_id}" for doc_id in state["used_rag_ids"][:10]]
-            )
-        if state.get("used_web_urls"):
-            cited_sources.extend([f"Web:{url}" for url in state["used_web_urls"][:10]])
-
         return {
             "final_answer": final_synthesizer_response.content,
             "response_metadata": {
                 "route": "deep_research",
                 "search_method": "multi_step_research",
-                "total_iterations": state.get("iteration_count", 0),
-                "total_sources": len(cited_sources),
             },
         }
 
@@ -266,18 +265,7 @@ class OrchestratorGraph(AgentBase):
                 original_query=original_query,
                 contextualized_query="",
                 route_decision=None,
-                search_plan=None,
-                pending_queries=[],
-                completed_queries=[],
                 accumulated_knowledge="",
-                search_results=[],
-                all_search_history=[],
-                iteration_count=0,
-                max_searches=0,
-                used_rag_ids=[],
-                used_web_urls=[],
-                should_switch_search_type=False,
-                verification_result=None,
                 retrieval_contexts=[],
                 final_answer="",
                 response_metadata={},
@@ -287,18 +275,14 @@ class OrchestratorGraph(AgentBase):
 
             metadata: Dict[str, Any] = result.get("response_metadata", {})
             metadata.update({"route": result.get("route_decision")})
-            used_rag_ids = result.get("used_rag_ids", [])
-            used_web_urls = result.get("used_web_urls", [])
-            metadata.update({"used_rag_ids": used_rag_ids})
-            metadata.update({"used_web_urls": used_web_urls})
+            retrieval_contexts = result.get("retrieval_contexts", {})
+            metadata.update({"retrieval_contexts": retrieval_contexts})
 
             message = Message(
                 parts=[TextPart(type="text", text=result["final_answer"])],
                 role="agent",
                 metadata=metadata,
-                retrieval_context=RetrievalContext(
-                    **result.get("retrieval_contexts", [])[0]
-                ),
+                retrieval_context=RetrievalContext(**retrieval_contexts),
             )
 
             await self.conv_service.add_message(message, conversation_id)

@@ -285,6 +285,7 @@ class DocumentRepository:
     async def find_by_hash(
         self, kb_id: uuid.UUID, content_hash: str
     ) -> Optional[Document]:
+        """Find document by hash with status information for retry logic"""
         try:
             async with DatabaseSession() as session:
                 result = await session.execute(
