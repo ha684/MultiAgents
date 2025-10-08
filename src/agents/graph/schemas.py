@@ -17,16 +17,16 @@ class SearchPlanSchema(BaseModel):
     queries: List[Dict[str, Any]] = Field(
         description="Essential queries that must be executed"
     )
-    max_searches: int = Field(
-        description="Maximum number of search iterations", ge=2, le=10
-    )
 
 
 class VerificationSchema(BaseModel):
     """Verification agent output schema"""
 
-    next_action: Literal["continue_planned", "generate_dynamic", "synthesize"] = Field(
-        description="Next action to take"
+    is_sufficient: bool = Field(
+        description="Whether the accumulated knowledge is sufficient to answer the original query"
+    )
+    confidence: Literal["high", "medium", "low"] = Field(
+        description="Confidence level in the sufficiency assessment"
     )
     missing_aspects: List[str] = Field(
         description="List of information gaps that need to be filled"

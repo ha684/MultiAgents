@@ -26,6 +26,8 @@ class ResearchGraph(AgentBase):
         self.llm = get_llm("nxchat")
         self.thinking_llm = self.llm.bind_tools([think])
         self.graph = self._build_graph()
+        self.max_searches = 10
+        self.max_consecutive_failures = 3
         logger.info("ResearchGraph initialized successfully.")
 
     async def query_planner_node(self, state: ResearchState) -> Dict[str, Any]:
@@ -36,13 +38,8 @@ class ResearchGraph(AgentBase):
         )
 
         max_iterations = 3
-        max_searches_range = "2-10"
 
-        system_prompt = SystemMessage(
-            content=PromptTemplates.QUERY_PLANNER_PROMPT.format(
-                max_searches_range=max_searches_range
-            )
-        )
+        system_prompt = SystemMessage(content=PromptTemplates.QUERY_PLANNER_PROMPT)
         prompt = HumanMessage(
             content=f"Create the plan for the following query: {state['contextualized_query']}"
         )
@@ -58,23 +55,36 @@ class ResearchGraph(AgentBase):
             retry_prompt="Please provide the research plan in correct JSON format.",
         )
 
-        if not response:
-            logger.error("[QueryPlanner] Failed to generate a valid search plan.")
-            return {"pending_queries": []}
+        if not response or not response.get("queries"):
+            logger.error(
+                "[QueryPlanner] Failed to generate a valid search plan or plan is empty."
+            )
+            return {
+                "pending_queries": [],
+                "accumulated_knowledge": "",
+                "completed_queries": [],
+                "max_searches": self.max_searches,
+                "iteration_count": 0,
+                "all_search_history": [],
+                "used_rag_ids": [],
+                "used_web_urls": [],
+                "should_switch_search_type": False,
+                "has_tried_rag": False,
+                "has_tried_web": False,
+                "consecutive_search_failures": 0,
+            }
 
-        all_queries: List[SearchQuery] = response["queries"]
+        queries = response.get("queries", [])
+        all_queries: List[SearchQuery] = queries
         all_queries.sort(key=lambda x: x.get("priority", 0), reverse=True)
 
-        logger.info(
-            f"[QueryPlanner] Plan generated: {len(response['queries'])} queries. Max searches: {response['max_searches']}"
-        )
+        logger.info(f"[QueryPlanner] Plan generated: {len(queries)} queries.")
         logger.debug(f"[QueryPlanner] Full plan: {json.dumps(response, indent=2)}")
 
         return {
-            "search_plan": response,
             "pending_queries": all_queries,
             "completed_queries": [],
-            "max_searches": response["max_searches"],
+            "max_searches": self.max_searches,
             "iteration_count": 0,
             "accumulated_knowledge": "",
             "all_search_history": [],
@@ -83,7 +93,24 @@ class ResearchGraph(AgentBase):
             "should_switch_search_type": False,
             "has_tried_rag": False,
             "has_tried_web": False,
+            "consecutive_search_failures": 0,
         }
+
+    async def handle_no_plan_node(self, state: ResearchState) -> Dict[str, Any]:
+        """
+        Prepares the state to go directly to the dynamic query generator
+        if the initial planner fails.
+        """
+        logger.warning(
+            "[HandleNoPlan] No initial search plan was generated. Routing to dynamic query generator."
+        )
+        verification_result = {
+            "is_sufficient": False,
+            "missing_aspects": [state["contextualized_query"]],
+            "confidence": "low",
+            "reasoning": "The initial query planner failed to generate a search plan, so no information has been gathered yet.",
+        }
+        return {"verification_result": verification_result}
 
     async def search_executor_node(self, state: ResearchState) -> Dict[str, Any]:
         """Execute search query"""
@@ -113,9 +140,15 @@ class ResearchGraph(AgentBase):
                     query=query_text,
                 )
                 has_tried_web = True
+
+            consecutive_search_failures = 0
+
         except Exception as e:
             logger.error(
                 f"[SearchExecutor] Search failed for '{query_text}': {e}", exc_info=True
+            )
+            consecutive_search_failures = (
+                state.get("consecutive_search_failures", 0) + 1
             )
             return {
                 "completed_queries": state["completed_queries"] + [current_query],
@@ -123,10 +156,14 @@ class ResearchGraph(AgentBase):
                 "iteration_count": state["iteration_count"] + 1,
                 "has_tried_rag": has_tried_rag,
                 "has_tried_web": has_tried_web,
+                "consecutive_search_failures": consecutive_search_failures,
             }
 
         search_result = SearchResult(
-            query=query_text, documents=documents, search_type=search_type
+            query=query_text,
+            documents=documents,
+            search_type=search_type,
+            processed=False,
         )
 
         return {
@@ -137,6 +174,7 @@ class ResearchGraph(AgentBase):
             "iteration_count": state["iteration_count"] + 1,
             "has_tried_rag": has_tried_rag,
             "has_tried_web": has_tried_web,
+            "consecutive_search_failures": consecutive_search_failures,
         }
 
     async def process_results_node(self, state: ResearchState) -> Dict[str, Any]:
@@ -144,7 +182,7 @@ class ResearchGraph(AgentBase):
         logger.info("[ProcessResults] Starting...")
         if not state["search_results"] or not state["search_results"]["documents"]:
             logger.warning("[ProcessResults] No search results to process. Skipping.")
-            return {}
+            return {"should_switch_search_type": True}
 
         overlap_threshold = 0.7
         consolidation_threshold = 4000
@@ -209,7 +247,7 @@ class ResearchGraph(AgentBase):
             logger.warning(
                 "[ProcessResults] Citation agent found no relevant documents."
             )
-            return {}
+            return {"should_switch_search_type": True}
 
         cited_docs = [
             new_documents[i - 1]
@@ -222,7 +260,7 @@ class ResearchGraph(AgentBase):
         iteration = state["iteration_count"]
 
         should_consolidate = (
-            ratio > overlap_threshold * 0.8
+            ratio > overlap_threshold * 0.5
             or iteration > 0
             and iteration % consolidation_interval == 0
             or accumulated_len > consolidation_threshold
@@ -267,12 +305,18 @@ class ResearchGraph(AgentBase):
             f"[ProcessResults] Knowledge updated from {accumulated_len} to {len(merged)} chars. "
             f"Total sources used (RAG: {len(new_rag_ids)}, Web: {len(new_web_urls)})"
         )
-        logger.info(f"[ProcessResults] Accumulated knowledge : {merged}")
+
+        last_search_result = state["search_results"]
+        last_search_result["processed"] = True
+        all_search_history = state["all_search_history"][:-1] + [last_search_result]
+
         return {
             "accumulated_knowledge": merged,
             "used_rag_ids": new_rag_ids,
             "used_web_urls": new_web_urls,
             "should_switch_search_type": False,
+            "search_results": last_search_result,
+            "all_search_history": all_search_history,
         }
 
     async def verification_agent_node(self, state: ResearchState) -> Dict[str, Any]:
@@ -280,16 +324,29 @@ class ResearchGraph(AgentBase):
         logger.info(
             f"[Verification] Starting... (Iteration {state['iteration_count']}/{state['max_searches']})"
         )
+        if not state.get("accumulated_knowledge"):
+            logger.warning(
+                "[Verification] No accumulated knowledge to verify. Defaulting to insufficient."
+            )
+            return {
+                "verification_result": {
+                    "is_sufficient": False,
+                    "missing_aspects": [state["contextualized_query"]],
+                    "confidence": "low",
+                }
+            }
 
         max_iterations = 3
+        remaining_iterations = state["max_searches"] - state["iteration_count"]
+
         prompt_input = PromptTemplates.VERIFICATION_HUMAN_PROMPT.format(
             original_query=state["contextualized_query"],
             accumulated_knowledge=state["accumulated_knowledge"],
-            pending_queries=json.dumps([q["query"] for q in state["pending_queries"]]),
             iteration_count=state["iteration_count"],
-            remaining_iterations=state["max_searches"] - state["iteration_count"],
+            remaining_iterations=remaining_iterations,
             max_searches=state["max_searches"],
         )
+
         messages: List[BaseMessage] = [
             SystemMessage(content=PromptTemplates.VERIFICATION_PROMPT),
             HumanMessage(content=prompt_input),
@@ -307,36 +364,66 @@ class ResearchGraph(AgentBase):
 
         if not verification_dict:
             logger.error(
-                "[Verification] Failed to get a valid verification. Defaulting to 'synthesize'."
+                "[Verification] Failed to get a valid verification. Defaulting to insufficient."
             )
-            return {"verification_result": {"next_action": "synthesize"}}
+            return {
+                "verification_result": {
+                    "is_sufficient": False,
+                    "missing_aspects": [],
+                    "confidence": "low",
+                }
+            }
 
-        logger.info(f"[Verification] Decision: '{verification_dict['next_action']}'")
+        logger.info(
+            f"[Verification] Result: is_sufficient={verification_dict['is_sufficient']}, "
+            f"confidence={verification_dict['confidence']}, "
+            f"missing_aspects={len(verification_dict.get('missing_aspects', []))}"
+        )
 
         return {"verification_result": verification_dict}
 
     async def dynamic_query_generator_node(
         self, state: ResearchState
     ) -> Dict[str, Any]:
-        """Generate dynamic queries"""
+        """Generate dynamic queries with search history awareness"""
         logger.info("[DynamicQueryGenerator] Starting...")
 
         max_iterations = 3
         verification = state["verification_result"]
+
         if not verification or not verification.get("missing_aspects"):
             logger.warning(
                 "[DynamicQueryGenerator] No missing aspects identified. Skipping query generation."
             )
-            return {}
+            return {"pending_queries": []}
 
+        missing_aspects = verification["missing_aspects"]
         logger.info(
-            f"[DynamicQueryGenerator] Generating queries for missing aspects: {verification['missing_aspects']}"
+            f"[DynamicQueryGenerator] Generating queries for {len(missing_aspects)} missing aspects"
         )
+
+        search_history = []
+        for search_result in state.get("all_search_history", []):
+            search_history.append(
+                {
+                    "query": search_result["query"],
+                    "search_type": search_result["search_type"],
+                }
+            )
+
+        search_history_str = (
+            json.dumps(search_history, indent=2)
+            if search_history
+            else "No previous searches"
+        )
+
         prompt_input = PromptTemplates.DYNAMIC_QUERY_GENERATOR_HUMAN_PROMPT.format(
             original_query=state["contextualized_query"],
             accumulated_knowledge=state["accumulated_knowledge"],
-            missing_aspects=json.dumps(verification["missing_aspects"]),
+            missing_aspects=json.dumps(missing_aspects, indent=2),
+            search_history=search_history_str,
         )
+
         messages: List[BaseMessage] = [
             SystemMessage(content=PromptTemplates.DYNAMIC_QUERY_GENERATOR_PROMPT),
             HumanMessage(content=prompt_input),
@@ -356,41 +443,76 @@ class ResearchGraph(AgentBase):
             logger.error(
                 "[DynamicQueryGenerator] Failed to generate valid dynamic queries."
             )
-            return {}
+            return {"pending_queries": []}
 
         new_queries = dynamic_query_generator_dict.get("queries", [])
+
+        if not new_queries:
+            logger.warning(
+                "[DynamicQueryGenerator] Agent returned empty queries. This may mean information gaps are minor or unresolvable."
+            )
+            return {"pending_queries": []}
+
         logger.info(
-            f"[DynamicQueryGenerator] Generated {len(new_queries)} new queries."
+            f"[DynamicQueryGenerator] Generated {len(new_queries)} new distinct queries."
         )
         logger.debug(
-            f"[DynamicQueryGenerator] New queries: {[q['query'] for q in new_queries]}"
+            f"[DynamicQueryGenerator] New queries: {json.dumps(new_queries, indent=2)}"
         )
 
-        return {"pending_queries": state["pending_queries"] + new_queries}
+        return {"pending_queries": new_queries}
+
+    def decide_after_planner(self, state: ResearchState) -> str:
+        """Decides where to go after the query planner."""
+        logger.info("[Router] Deciding route after query planner.")
+        if state.get("pending_queries"):
+            logger.info("[Router] Plan generated. Proceeding to search_executor.")
+            return "search_executor"
+        else:
+            logger.warning("[Router] No plan generated. Proceeding to handle_no_plan.")
+            return "handle_no_plan"
+
+    def route_after_dynamic_generation(self, state: ResearchState) -> str:
+        """Decides where to go after attempting to generate new queries."""
+        logger.info("[Router] Deciding route after dynamic query generation.")
+        if state.get("pending_queries"):
+            logger.info(
+                "[Router] New queries generated. Proceeding to search_executor."
+            )
+            return "search_executor"
+        else:
+            logger.error(
+                "[Router] Failed to generate new queries. Terminating process."
+            )
+            return "__end__"
 
     def route_after_verification(self, state: ResearchState) -> str:
-        """Route based on verification"""
+        """Smart routing based on verification + pending queries analysis"""
         iteration = state["iteration_count"]
         max_searches = state["max_searches"]
+
         logger.info(
             f"[Router] Evaluating route after iteration {iteration}/{max_searches}"
         )
 
+        if state.get("consecutive_search_failures", 0) >= self.max_consecutive_failures:
+            logger.error(
+                f"[Router] Route: Exceeded max consecutive search failures ({self.max_consecutive_failures}) → END"
+            )
+            return "__end__"
+
         if iteration >= max_searches:
-            logger.info(f"[Router] Route: Max iterations ({iteration}) reached → END")
+            logger.info("[Router] Route: Max iterations reached → END")
             return "__end__"
 
         verification = state["verification_result"]
         if not verification:
-            logger.warning("[Router] Route: No verification result found → END")
+            logger.warning("[Router] Route: No verification result → END")
             return "__end__"
 
-        action = verification["next_action"]
-
         if state.get("should_switch_search_type"):
-            logger.info(
-                "[Router] 'should_switch_search_type' is True. Attempting to switch."
-            )
+            logger.info("[Router] High overlap detected, attempting search type switch")
+
             last_search_type = (
                 state["completed_queries"][-1]["search_type"]
                 if state["completed_queries"]
@@ -400,54 +522,73 @@ class ResearchGraph(AgentBase):
             has_tried_web = state.get("has_tried_web", False)
 
             if last_search_type == "rag" and not has_tried_web:
-                logger.info(
-                    "[Router] Route: High RAG overlap, switching to Web search."
-                )
+                logger.info("[Router] Switching RAG → Web")
                 target_search_type = "web"
             elif last_search_type == "web" and not has_tried_rag:
-                logger.info(
-                    "[Router] Route: High Web overlap, switching to RAG search."
-                )
+                logger.info("[Router] Switching Web → RAG")
                 target_search_type = "rag"
             else:
-                logger.warning(
-                    f"[Router] Route: High overlap detected. "
-                    f"Already tried: RAG={has_tried_rag}, Web={has_tried_web}. "
-                    f"Both sources may be exhausted → END"
-                )
+                logger.warning("[Router] Both search types exhausted → END")
                 return "__end__"
 
             if state["pending_queries"]:
                 state["pending_queries"][0]["search_type"] = target_search_type
-                logger.info(
-                    f"[Router] Next query '{state['pending_queries'][0]['query']}' set to '{target_search_type}'."
-                )
                 return "search_executor"
             else:
-                logger.info(
-                    f"[Router] No pending queries. Generating dynamic queries for {target_search_type} search."
-                )
                 return "dynamic_query_generator"
 
-        if action == "synthesize":
-            logger.info("[Router] Route: Verification agent chose 'synthesize' → END")
-            return "__end__"
-        elif action == "continue_planned":
-            if not state["pending_queries"]:
-                logger.info(
-                    "[Router] Route: 'continue_planned' but no pending queries. Switching to dynamic generation."
-                )
-                return "dynamic_query_generator"
+        is_sufficient = verification["is_sufficient"]
+        confidence = verification["confidence"]
+        missing_aspects = verification.get("missing_aspects", [])
+
+        if is_sufficient:
             logger.info(
-                "[Router] Route: 'continue_planned' with pending queries → search_executor"
+                f"[Router] Verification says SUFFICIENT (confidence: {confidence}) → END"
             )
-            return "search_executor"
-        elif action == "generate_dynamic":
-            logger.info("[Router] Route: 'generate_dynamic' → dynamic_query_generator")
+            return "__end__"
+
+        if iteration >= max_searches:
+            logger.info(
+                f"[Router] Insufficient but out of budget (iteration {iteration}/{max_searches}) → END"
+            )
+            return "__end__"
+
+        pending_queries = state.get("pending_queries", [])
+
+        if not pending_queries:
+            logger.info("[Router] No pending queries → dynamic_query_generator")
             return "dynamic_query_generator"
 
-        logger.warning(f"[Router] Route: Unknown action '{action}' → END")
-        return "__end__"
+        relevance_score = calculate_query_relevance(missing_aspects, pending_queries)
+
+        logger.info(
+            f"[Router] Pending queries relevance to missing aspects: {relevance_score:.2f}"
+        )
+
+        HIGH_RELEVANCE_THRESHOLD = 0.6
+        LOW_RELEVANCE_THRESHOLD = 0.3
+
+        if relevance_score >= HIGH_RELEVANCE_THRESHOLD:
+            logger.info(
+                f"[Router] High relevance ({relevance_score:.2f}) → continue_planned"
+            )
+            return "search_executor"
+        elif relevance_score <= LOW_RELEVANCE_THRESHOLD:
+            logger.info(
+                f"[Router] Low relevance ({relevance_score:.2f}) → dynamic_query_generator"
+            )
+            return "dynamic_query_generator"
+        else:
+            if confidence == "high":
+                logger.info(
+                    "[Router] Medium relevance + high confidence in gaps → dynamic_query_generator"
+                )
+                return "dynamic_query_generator"
+            else:
+                logger.info(
+                    f"[Router] Medium relevance + {confidence} confidence → continue_planned"
+                )
+                return "search_executor"
 
     def _build_graph(self) -> CompiledStateGraph:
         """Build research graph"""
@@ -458,13 +599,31 @@ class ResearchGraph(AgentBase):
         workflow.add_node("process_results", self.process_results_node)
         workflow.add_node("verification_agent", self.verification_agent_node)
         workflow.add_node("dynamic_query_generator", self.dynamic_query_generator_node)
+        workflow.add_node("handle_no_plan", self.handle_no_plan_node)
 
         workflow.set_entry_point("query_planner")
 
-        workflow.add_edge("query_planner", "search_executor")
+        workflow.add_conditional_edges(
+            "query_planner",
+            self.decide_after_planner,
+            {
+                "search_executor": "search_executor",
+                "handle_no_plan": "handle_no_plan",
+            },
+        )
+
+        workflow.add_edge("handle_no_plan", "dynamic_query_generator")
         workflow.add_edge("search_executor", "process_results")
         workflow.add_edge("process_results", "verification_agent")
-        workflow.add_edge("dynamic_query_generator", "search_executor")
+
+        workflow.add_conditional_edges(
+            "dynamic_query_generator",
+            self.route_after_dynamic_generation,
+            {
+                "search_executor": "search_executor",
+                "__end__": END,
+            },
+        )
 
         workflow.add_conditional_edges(
             "verification_agent",
@@ -485,23 +644,29 @@ class ResearchGraph(AgentBase):
         )
         config = {"recursion_limit": 50}
         result = await self.graph.ainvoke(state, config=config)
-        logger.info(
-            f"--- ResearchGraph finished. Final knowledge length: {len(result.get('accumulated_knowledge', ''))} chars. ---"
-        )
+
+        accumulated_knowledge = result.get("accumulated_knowledge", "")
+
+        if not accumulated_knowledge:
+            logger.warning(
+                "--- ResearchGraph finished, but NO KNOWLEDGE was accumulated. The research process may have failed or found no relevant information. ---"
+            )
+        else:
+            logger.info(
+                f"--- ResearchGraph finished. Final knowledge length: {len(accumulated_knowledge)} chars. ---"
+            )
         return result
 
 
 def parse_planner_response(content: str) -> Optional[SearchPlanSchema]:
     """Parse planner response"""
-    logger.debug(f"[Parser] Parsing Planner response: {content}")
     try:
         parsed = parse_response(content)
-        if parsed is None:
+        if not parsed:
             logger.warning("[Parser] Failed to parse planner response (null result).")
             return None
         response = SearchPlanSchema(**parsed)
         dumped = response.model_dump()
-        logger.info("[Parser] Successfully parsed planner response.")
         return dumped
     except Exception as e:
         logger.error(f"[Parser] Error parsing planner response: {e}", exc_info=True)
@@ -510,17 +675,15 @@ def parse_planner_response(content: str) -> Optional[SearchPlanSchema]:
 
 def parse_verification_response(content: str) -> Optional[VerificationSchema]:
     """Parse verification response"""
-    logger.debug(f"[Parser] Parsing Verification response: {content}")
     try:
         parsed = parse_response(content)
-        if parsed is None:
+        if not parsed:
             logger.warning(
                 "[Parser] Failed to parse verification response (null result)."
             )
             return None
         response = VerificationSchema(**parsed)
         dumped = response.model_dump()
-        logger.info("[Parser] Successfully parsed verification response.")
         return dumped
     except Exception as e:
         logger.error(
@@ -533,17 +696,15 @@ def parse_dynamic_query_generator_response(
     content: str,
 ) -> Optional[DynamicQueriesSchema]:
     """Parse dynamic query generator response"""
-    logger.debug(f"[Parser] Parsing Dynamic Query Generator response: {content}")
     try:
         parsed = parse_response(content)
-        if parsed is None:
+        if not parsed:
             logger.warning(
                 "[Parser] Failed to parse dynamic query generator response (null result)."
             )
             return None
         response = DynamicQueriesSchema(**parsed)
         dumped = response.model_dump()
-        logger.info("[Parser] Successfully parsed dynamic query generator response.")
         return dumped
     except Exception as e:
         logger.error(
@@ -551,3 +712,27 @@ def parse_dynamic_query_generator_response(
             exc_info=True,
         )
         return None
+
+
+def calculate_query_relevance(
+    missing_aspects: List[str], pending_queries: List[Dict]
+) -> float:
+    """
+    Calculate how well pending queries address missing aspects
+    Returns: 0.0 to 1.0 (0 = no overlap, 1 = perfect match)
+    """
+    if not missing_aspects or not pending_queries:
+        return 0.0
+
+    missing_keywords = set()
+    for aspect in missing_aspects:
+        missing_keywords.update(aspect.lower().split())
+
+    query_keywords = set()
+    for query in pending_queries:
+        query_keywords.update(query["query"].lower().split())
+
+    overlap = len(missing_keywords & query_keywords)
+    total = len(missing_keywords)
+
+    return overlap / total if total > 0 else 0.0

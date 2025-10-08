@@ -12,9 +12,6 @@ class FireCrawlService(BaseSearchService):
     def __init__(self, api_url: str = None):
         self.api_base_url = settings.firecrawl_api_url or api_url
         self.api_base_url = self.api_base_url.rstrip("/") if self.api_base_url else None
-        logger.info(
-            f"FileCrawlSearchService is ready, targeting URL: {self.api_base_url}"
-        )
 
     async def search(
         self, api_key: Optional[str], query: str, max_results: int = 5, **kwargs: Any

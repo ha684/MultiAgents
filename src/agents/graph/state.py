@@ -12,22 +12,12 @@ class SearchQuery(TypedDict):
     search_type: Literal["rag", "web"]
 
 
-class SearchPlan(TypedDict):
-    """Search plan from search operations"""
-
-    core_queries: List[SearchQuery]
-    optional_queries: List[SearchQuery]
-    max_searches: int
-
-
 class VerificationResult(TypedDict):
     """Verification result from verification operations"""
 
     sufficient: bool
     confidence: float
-    next_action: Literal["continue_planned", "generate_dynamic", "synthesize"]
     missing_aspects: List[str]
-    reasoning: str
 
 
 class SearchResult(TypedDict):
@@ -36,6 +26,7 @@ class SearchResult(TypedDict):
     query: str
     documents: List[Document]
     search_type: Literal["rag", "web"]
+    processed: bool
 
 
 class RetrievalContext(TypedDict):
@@ -85,7 +76,6 @@ class ResearchState(TypedDict):
 
     contextualized_query: str
     context_metadata: Dict[str, Any]
-    search_plan: Optional[SearchPlan]
     pending_queries: List[SearchQuery]
     completed_queries: List[SearchQuery]
     accumulated_knowledge: str
@@ -99,3 +89,4 @@ class ResearchState(TypedDict):
     verification_result: Optional[VerificationResult]
     has_tried_rag: bool
     has_tried_web: bool
+    consecutive_search_failures: int

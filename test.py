@@ -5,7 +5,7 @@
 #             {
 #                 "type": "text",
 #                 "text": "i want to know about the recent storm coming to viet nam",
-#             }
+#             }ImageExtractionAgent
 #         ],
 #         "metadata": {
 #             "conversation_id": "068d35e5-9423-716b-8000-5cd0aeb06bdc",
@@ -42,10 +42,22 @@
 #     print(doc.page_content)
 #     print("-"*100)
 
-from langchain_pymupdf4llm import PyMuPDF4LLMLoader
+# from langchain_pymupdf4llm import PyMuPDF4LLMLoader
 
-loader = PyMuPDF4LLMLoader(r"C:\workspace\data\2506.09250v1.pdf")
-docs = loader.load()
-for doc in docs:
-    print(doc.page_content)
-    print("-" * 100)
+# loader = PyMuPDF4LLMLoader(r"C:\workspace\data\2506.09250v1.pdf")
+# docs = loader.load()
+# for doc in docs:
+#     print(doc.page_content)
+#     print("-" * 100)
+
+from src.rag.processor.loader.images_loader import ImageLoader
+import asyncio
+
+image_agent = ImageLoader(r"C:\workspace\data\heza_data\0.jpg")
+
+try:
+    content = asyncio.run(image_agent.lazy_load())
+    print("Content: ", content)
+except Exception as e:
+    print("Error: ", e)
+    print("Error extracting image")

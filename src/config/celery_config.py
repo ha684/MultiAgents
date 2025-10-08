@@ -1,18 +1,21 @@
-# celery_config.py
+# src/config/celery_config.py
 from .settings import settings
 
 # Redis connection settings
 broker_url = settings.redis_uri
 result_backend = settings.redis_uri
 
+broker_transport_options = {"master_name": "mymaster", "visibility_timeout": 3300}
+
 # Connection pool settings for better Redis performance
 broker_connection_retry_on_startup = True
 broker_connection_max_retries = 10
+
 result_backend_transport_options = {
     "master_name": "mymaster",
-    "visibility_timeout": 3600,
     "connection_pool_kwargs": {"max_connections": 20, "retry_on_timeout": True},
 }
+
 
 # Serialization
 task_serializer = "json"
@@ -86,3 +89,5 @@ beat_schedule = {
 task_compression = "gzip"
 worker_disable_rate_limits = False
 task_always_eager = False  # Make sure this is False in production
+
+worker_heartbeat = 120

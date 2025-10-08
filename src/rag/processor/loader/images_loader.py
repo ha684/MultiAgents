@@ -22,7 +22,6 @@ class ImageLoader(BaseLoader):
         """Load a text file."""
         try:
             content = await self.agent.extract(self.image_path)
-            logger.info(f"Images content: {content}")
             full_text = textwrap.dedent(f"""\
                 This is an image. The content extracted from the image is: <|IMAGE|>{content}</|IMAGE|>."
                 If user asked something about the content in this image, you should mention about the content is retrieved from a image when response.

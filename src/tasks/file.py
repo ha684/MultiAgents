@@ -112,6 +112,16 @@ async def _process_document_async(
         if not document:
             raise ValueError(f"Document with ID {document_id} not found")
 
+        if document.status == DocumentStatusEnum.FINISHED:
+            logger.warning(
+                f"Document {document_id} has already been processed. Skipping."
+            )
+            return {
+                "status": "skipped",
+                "document_id": str(document_id),
+                "reason": "Already processed",
+            }
+
         document = await document_repository.update_status(
             document_id=document_id, status=DocumentStatusEnum.PROCESSING
         )

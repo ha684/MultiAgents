@@ -26,6 +26,7 @@ from src.common.types import HealthCheckResponse
 from zoneinfo import ZoneInfo
 from prometheus_fastapi_instrumentator import Instrumentator
 from src.tracking.observability import setup_tracing
+import yaml
 
 
 @asynccontextmanager
@@ -166,5 +167,7 @@ app.include_router(auth_router)
 
 if __name__ == "__main__":
     host = "0.0.0.0"
+    with open("etc/log_config.yml", "r", encoding="utf-8") as f:
+        log_config = yaml.safe_load(f)
     logger.info(f"Starting server on host={host}, port={settings.port}")
-    uvicorn.run("src.main:app", host=host, port=settings.port)
+    uvicorn.run("src.main:app", host=host, port=settings.port, log_config=log_config)
