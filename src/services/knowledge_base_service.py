@@ -69,9 +69,7 @@ class KnowledgeBaseService:
 
     async def delete_knowledge_base(self, request: KnowledgeBaseDeleteRequest) -> dict:
         """Delete a knowledge base and all its documents."""
-        kb = await self.kb_repository.get(
-            kb_id=UUID(request.id), user_id=request.user_id
-        )
+        kb = await self.kb_repository.get(kb_id=request.id, user_id=request.user_id)
         if not kb:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
 

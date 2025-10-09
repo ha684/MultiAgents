@@ -5,7 +5,7 @@
 #             {
 #                 "type": "text",
 #                 "text": "i want to know about the recent storm coming to viet nam",
-#             }ImageExtractionAgent
+#             }
 #         ],
 #         "metadata": {
 #             "conversation_id": "068d35e5-9423-716b-8000-5cd0aeb06bdc",
