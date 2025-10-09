@@ -66,6 +66,8 @@ dependencies = [
     "pyjwt>=2.10.1",
     "graphiti-core>=0.3.21",
     "fastmcp>=2.12.4",
+    "graphviz>=0.21",
+    "grandalf>=0.8",
 ]
 
 [tool.ruff]

@@ -27,8 +27,8 @@ async def rag_search(query: str, context_metadata: Dict[str, Any]) -> List[Docum
         return results
 
     except Exception as e:
-        logger.error(f"Error in search: {str(e)}")
-        return []
+        logger.error("Error in search from RAG")
+        raise e
 
 
 async def web_search(query: str) -> List[Document]:

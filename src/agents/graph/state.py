@@ -54,7 +54,7 @@ class OrchestratorState(TypedDict):
     # --- Data from Research Subgraph ---
     accumulated_knowledge: str
     all_search_history: List[SearchResult]
-
+    cited_documents: List[Document]
     # Final Output
     final_answer: str
     response_metadata: Dict[str, Any]
@@ -85,8 +85,14 @@ class ResearchState(TypedDict):
     max_searches: int
     used_rag_ids: List[str]
     used_web_urls: List[str]
-    should_switch_search_type: bool
     verification_result: Optional[VerificationResult]
     has_tried_rag: bool
     has_tried_web: bool
     consecutive_search_failures: int
+    citation_counter: int
+    cited_documents: List[Document]
+
+    rag_is_unavailable: bool
+    web_is_unavailable: bool
+
+    should_retry_query: bool

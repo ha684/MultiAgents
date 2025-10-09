@@ -3,12 +3,10 @@ from typing import Dict, Any, List
 from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from qdrant_client.models import Filter, models
 from src.agents.basic import citation_agent, filename_agent
-from src.rag.vector import vector_retrieval
-from src.services.web_search_service import web_search_service
 from src.utils.logger_conf import logger
 from src.agents.graph.state import SimpleSearchState
+from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search
 import tiktoken
 
 
@@ -47,45 +45,26 @@ class SimpleSearchGraph:
             "message_metadata"
         ]["web_search_config"]
 
-        embed_top = 50
-        rerank_top = 20
+        rerank_top = 10
         max_tokens = 8192
 
         contextualized_query = state["contextualized_query"]
-        requested_filename = state.get("response_metadata", {}).get(
-            "requested_filename"
-        )
+        context_metadata = {
+            "kb_id": kb_id,
+        }
 
         if web_search_config.get("active"):
             logger.info("Using web search")
-
-            retrieved_docs = await web_search_service.search(
+            retrieved_docs = await web_search(
                 query=contextualized_query,
-                provider=web_search_config.get("provider"),
-                api_key=web_search_config.get("api_key"),
-                max_results=rerank_top,
             )
 
             search_method = "web_search"
 
         else:
             logger.info("Using RAG search")
-
-            filters = Filter(must=[])
-            if requested_filename:
-                filters.must.append(
-                    models.FieldCondition(
-                        key="metadata.original_filename",
-                        match=models.MatchText(text=requested_filename),
-                    )
-                )
-
-            retrieved_docs = await vector_retrieval.retrieve(
-                kb_id=str(kb_id),
-                query=contextualized_query,
-                filters=filters,
-                top_k=embed_top,
-                top_n=rerank_top,
+            retrieved_docs = await rag_search(
+                query=contextualized_query, context_metadata=context_metadata
             )
 
             search_method = "database_search"

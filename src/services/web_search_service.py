@@ -67,7 +67,7 @@ class WebSearchService:
                 logger.warning(f"No results from provider: {target_provider.value}")
                 return []
         except Exception as e:
-            logger.error(f"Error with provider {target_provider.value}: {e}")
+            logger.error(f"Error with provider {target_provider.value}")
             raise e
 
     def get_available_providers(self) -> List[SearchProvider]:

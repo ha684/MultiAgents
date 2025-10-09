@@ -26,7 +26,7 @@ class ResearchGraph(AgentBase):
         self.llm = get_llm("nxchat")
         self.thinking_llm = self.llm.bind_tools([think])
         self.graph = self._build_graph()
-        self.max_searches = 10
+        self.max_searches = 20
         self.max_consecutive_failures = 3
         logger.info("ResearchGraph initialized successfully.")
 
@@ -37,7 +37,7 @@ class ResearchGraph(AgentBase):
             f"[QueryPlanner] Generating plan for query: '{state['contextualized_query']}'"
         )
 
-        max_iterations = 3
+        max_iterations = 5
 
         system_prompt = SystemMessage(content=PromptTemplates.QUERY_PLANNER_PROMPT)
         prompt = HumanMessage(
@@ -68,10 +68,14 @@ class ResearchGraph(AgentBase):
                 "all_search_history": [],
                 "used_rag_ids": [],
                 "used_web_urls": [],
-                "should_switch_search_type": False,
                 "has_tried_rag": False,
                 "has_tried_web": False,
                 "consecutive_search_failures": 0,
+                "citation_counter": 0,
+                "cited_documents": [],
+                "rag_is_unavailable": False,
+                "web_is_unavailable": False,
+                "should_retry_query": False,
             }
 
         queries = response.get("queries", [])
@@ -90,10 +94,14 @@ class ResearchGraph(AgentBase):
             "all_search_history": [],
             "used_rag_ids": [],
             "used_web_urls": [],
-            "should_switch_search_type": False,
             "has_tried_rag": False,
             "has_tried_web": False,
             "consecutive_search_failures": 0,
+            "citation_counter": 0,
+            "cited_documents": [],
+            "rag_is_unavailable": False,
+            "web_is_unavailable": False,
+            "should_retry_query": False,
         }
 
     async def handle_no_plan_node(self, state: ResearchState) -> Dict[str, Any]:
@@ -108,55 +116,116 @@ class ResearchGraph(AgentBase):
             "is_sufficient": False,
             "missing_aspects": [state["contextualized_query"]],
             "confidence": "low",
-            "reasoning": "The initial query planner failed to generate a search plan, so no information has been gathered yet.",
         }
         return {"verification_result": verification_result}
 
     async def search_executor_node(self, state: ResearchState) -> Dict[str, Any]:
-        """Execute search query"""
+        """Execute search query with robust failure handling"""
         logger.info("[SearchExecutor] Starting...")
         if not state["pending_queries"]:
             logger.warning("[SearchExecutor] No pending queries. Skipping execution.")
             return {}
 
         current_query = state["pending_queries"][0]
+        remaining_queries = state["pending_queries"][1:]
+
         search_type = current_query["search_type"]
         query_text = current_query["query"]
         context_metadata = state["context_metadata"]
-        has_tried_rag = state.get("has_tried_rag", False)
-        has_tried_web = state.get("has_tried_web", False)
+
+        rag_unavailable = state.get("rag_is_unavailable", False)
+        web_unavailable = state.get("web_is_unavailable", False)
+
+        if search_type == "rag" and rag_unavailable:
+            logger.warning(
+                f"[SearchExecutor] RAG is unavailable, attempting to switch query '{query_text}' to Web."
+            )
+            if not web_unavailable:
+                search_type = "web"
+                current_query["search_type"] = "web"
+            else:
+                logger.error(
+                    "[SearchExecutor] Both RAG and Web are unavailable. Terminating."
+                )
+                return {
+                    "completed_queries": state["completed_queries"] + [current_query],
+                    "pending_queries": remaining_queries,
+                    "consecutive_search_failures": self.max_consecutive_failures,
+                }
+
+        if search_type == "web" and web_unavailable:
+            logger.warning(
+                f"[SearchExecutor] Web is unavailable, attempting to switch query '{query_text}' to RAG."
+            )
+            if not rag_unavailable:
+                search_type = "rag"
+                current_query["search_type"] = "rag"
+            else:
+                logger.error(
+                    "[SearchExecutor] Both Web and RAG are unavailable. Terminating."
+                )
+                return {
+                    "completed_queries": state["completed_queries"] + [current_query],
+                    "pending_queries": remaining_queries,
+                    "consecutive_search_failures": self.max_consecutive_failures,
+                }
+
         logger.info(
             f"[SearchExecutor] Executing search ({search_type.upper()}) for query: '{query_text}'"
         )
 
+        documents = []
         try:
             if search_type == "rag":
                 documents = await rag_search(
                     query=query_text, context_metadata=context_metadata
                 )
-                has_tried_rag = True
-            else:
+            else:  # web
                 documents = await web_search(
                     query=query_text,
                 )
-                has_tried_web = True
 
             consecutive_search_failures = 0
 
         except Exception as e:
             logger.error(
-                f"[SearchExecutor] Search failed for '{query_text}': {e}", exc_info=True
+                f"[SearchExecutor] HARD FAILURE in {search_type.upper()} search for '{query_text}'. Error: {e}"
             )
             consecutive_search_failures = (
                 state.get("consecutive_search_failures", 0) + 1
             )
+
+            new_pending_queries = list(remaining_queries)
+            fallback_type = ""
+            updated_state = {
+                "rag_is_unavailable": rag_unavailable,
+                "web_is_unavailable": web_unavailable,
+            }
+
+            if search_type == "rag":
+                updated_state["rag_is_unavailable"] = True
+                if not web_unavailable:
+                    fallback_type = "web"
+            else:  # web
+                updated_state["web_is_unavailable"] = True
+                if not rag_unavailable:
+                    fallback_type = "rag"
+
+            if fallback_type:
+                logger.warning(
+                    f"[SearchExecutor] Switching all future '{search_type}' queries to '{fallback_type}'."
+                )
+                for i in range(len(new_pending_queries)):
+                    if new_pending_queries[i]["search_type"] == search_type:
+                        new_pending_queries[i]["search_type"] = fallback_type
+
             return {
                 "completed_queries": state["completed_queries"] + [current_query],
-                "pending_queries": state["pending_queries"][1:],
+                "pending_queries": new_pending_queries,
                 "iteration_count": state["iteration_count"] + 1,
-                "has_tried_rag": has_tried_rag,
-                "has_tried_web": has_tried_web,
                 "consecutive_search_failures": consecutive_search_failures,
+                "rag_is_unavailable": updated_state["rag_is_unavailable"],
+                "web_is_unavailable": updated_state["web_is_unavailable"],
             }
 
         search_result = SearchResult(
@@ -169,24 +238,24 @@ class ResearchGraph(AgentBase):
         return {
             "search_results": search_result,
             "completed_queries": state["completed_queries"] + [current_query],
-            "pending_queries": state["pending_queries"][1:],
+            "pending_queries": remaining_queries,
             "all_search_history": state["all_search_history"] + [search_result],
             "iteration_count": state["iteration_count"] + 1,
-            "has_tried_rag": has_tried_rag,
-            "has_tried_web": has_tried_web,
+            "has_tried_rag": state.get("has_tried_rag", False) or search_type == "rag",
+            "has_tried_web": state.get("has_tried_web", False) or search_type == "web",
             "consecutive_search_failures": consecutive_search_failures,
         }
 
     async def process_results_node(self, state: ResearchState) -> Dict[str, Any]:
         """Filter, compress, merge results with hybrid strategy"""
         logger.info("[ProcessResults] Starting...")
-        if not state["search_results"] or not state["search_results"]["documents"]:
-            logger.warning("[ProcessResults] No search results to process. Skipping.")
-            return {"should_switch_search_type": True}
+        if not state.get("search_results") or not state["search_results"].get(
+            "documents"
+        ):
+            logger.warning("[ProcessResults] No documents found in search result.")
+            return {"should_retry_query": True, "search_results": {}}
 
         overlap_threshold = 0.7
-        consolidation_threshold = 4000
-        consolidation_interval = 3
 
         documents = state["search_results"]["documents"]
         search_type = state["search_results"]["search_type"]
@@ -211,7 +280,7 @@ class ResearchGraph(AgentBase):
                 logger.warning(
                     f"[ProcessResults] High web source overlap ({ratio:.1%}). Switching to RAG."
                 )
-                return {"should_switch_search_type": True}
+                return {"should_retry_query": True}
         else:
             source_ids = [doc.metadata.get("document_id", "") for doc in documents]
             new_documents = [
@@ -228,13 +297,13 @@ class ResearchGraph(AgentBase):
                 logger.warning(
                     f"[ProcessResults] High RAG source overlap ({ratio:.1%}). Switching to Web."
                 )
-                return {"should_switch_search_type": True}
+                return {"should_retry_query": True}
 
         if not new_documents:
             logger.warning(
                 "[ProcessResults] All documents already used. Switching search type."
             )
-            return {"should_switch_search_type": True}
+            return {"should_retry_query": True}
 
         logger.info(
             f"[ProcessResults] Filtering {len(new_documents)} new documents (from {len(documents)} total)."
@@ -245,9 +314,9 @@ class ResearchGraph(AgentBase):
 
         if not relevant_indices or not relevant_indices.indexes:
             logger.warning(
-                "[ProcessResults] Citation agent found no relevant documents."
+                "[ProcessResults] Citation agent found no relevant documents. This is a soft failure."
             )
-            return {"should_switch_search_type": True}
+            return {"should_retry_query": True}
 
         cited_docs = [
             new_documents[i - 1]
@@ -256,42 +325,56 @@ class ResearchGraph(AgentBase):
         ]
         logger.info(f"[ProcessResults] Found {len(cited_docs)} relevant documents.")
 
+        citation_start_index = state.get("citation_counter", 0)
+        all_cited_docs_so_far = state.get("cited_documents", [])
+
+        docs_with_citation_markers = []
+        current_citation_index = citation_start_index
+
+        for doc in cited_docs:
+            doc_copy = doc.model_copy(deep=True)
+            doc_copy.page_content = (
+                f"[CITATION: {current_citation_index}] {doc.page_content}"
+            )
+            docs_with_citation_markers.append(doc_copy)
+            all_cited_docs_so_far.append(doc)
+            current_citation_index += 1
+
         accumulated_len = len(state["accumulated_knowledge"])
-        iteration = state["iteration_count"]
 
-        should_consolidate = (
-            ratio > overlap_threshold * 0.5
-            or iteration > 0
-            and iteration % consolidation_interval == 0
-            or accumulated_len > consolidation_threshold
-        )
-        logger.info(
-            f"[ProcessResults] Consolidation check: {should_consolidate} (ratio: {ratio:.1%}, iter: {iteration}, len: {accumulated_len})"
+        # should_consolidate = (
+        #     ratio > overlap_threshold * 0.5
+        #     or iteration > 0
+        #     and iteration % consolidation_interval == 0
+        #     or accumulated_len > consolidation_threshold
+        # )
+        # logger.info(
+        #     f"[ProcessResults] Consolidation check: {should_consolidate} (ratio: {ratio:.1%}, iter: {iteration}, len: {accumulated_len})"
+        # )
+
+        # if should_consolidate and state["accumulated_knowledge"]:
+        #     logger.info(
+        #         "[ProcessResults] Consolidating new docs with existing knowledge."
+        #     )
+        #     new_merged = await compress_agent.ainvoke_with_merge(
+        #         query=current_query,
+        #         new_documents=docs_with_citation_markers,
+        #         existing_knowledge=state["accumulated_knowledge"],
+        #     )
+        #     merged = new_merged if new_merged else state["accumulated_knowledge"]
+        # else:
+        logger.info("[ProcessResults] Compressing new documents.")
+        compressed = await compress_agent.ainvoke(
+            query=current_query, reference=docs_with_citation_markers
         )
 
-        if should_consolidate and state["accumulated_knowledge"]:
-            logger.info(
-                "[ProcessResults] Consolidating new docs with existing knowledge."
+        if state["accumulated_knowledge"]:
+            merged = (
+                f"{state['accumulated_knowledge']}\n\n"
+                f"## {current_query}\n\n{compressed}"
             )
-            new_merged = await compress_agent.ainvoke_with_merge(
-                query=current_query,
-                new_documents=cited_docs,
-                existing_knowledge=state["accumulated_knowledge"],
-            )
-            merged = new_merged if new_merged else state["accumulated_knowledge"]
         else:
-            logger.info("[ProcessResults] Compressing new documents.")
-            compressed = await compress_agent.ainvoke(
-                query=current_query, reference=cited_docs
-            )
-
-            if state["accumulated_knowledge"]:
-                merged = (
-                    f"{state['accumulated_knowledge']}\n\n"
-                    f"## {current_query}\n\n{compressed}"
-                )
-            else:
-                merged = compressed
+            merged = compressed
 
         new_rag_ids = state["used_rag_ids"]
         new_web_urls = state["used_web_urls"]
@@ -314,10 +397,60 @@ class ResearchGraph(AgentBase):
             "accumulated_knowledge": merged,
             "used_rag_ids": new_rag_ids,
             "used_web_urls": new_web_urls,
-            "should_switch_search_type": False,
             "search_results": last_search_result,
             "all_search_history": all_search_history,
+            "should_retry_query": False,
+            "citation_counter": current_citation_index,
+            "cited_documents": all_cited_docs_so_far,
         }
+
+    def decide_after_processing(self, state: ResearchState) -> str:
+        """
+        Decides the next step after processing search results.
+        - If successful, go to verification.
+        - If soft failure, try to retry with a fallback search type.
+        - If fallback is unavailable, skip the failed query and continue with the next one.
+        """
+        if not state.get("should_retry_query"):
+            logger.info("[Router] Processing successful. Proceeding to verification.")
+            return "verification_agent"
+
+        logger.info(
+            "[Router] Soft failure detected. Evaluating retry for the last query."
+        )
+
+        last_query = state["completed_queries"][-1]
+        last_search_type = last_query["search_type"]
+        fallback_type = "web" if last_search_type == "rag" else "rag"
+
+        is_fallback_unavailable = (
+            fallback_type == "rag" and state.get("rag_is_unavailable")
+        ) or (fallback_type == "web" and state.get("web_is_unavailable"))
+
+        if is_fallback_unavailable:
+            logger.warning(
+                f"[Router] Cannot retry query '{last_query['query']}' with {fallback_type} as it is unavailable. "
+                "Skipping this query and moving on."
+            )
+            if state.get("pending_queries"):
+                logger.info(
+                    "[Router] Other queries are pending. Continuing to search_executor."
+                )
+                return "search_executor"
+            else:
+                logger.info(
+                    "[Router] No more pending queries. Proceeding to final verification."
+                )
+                return "verification_agent"
+        else:
+            logger.info(f"[Router] Retrying query with {fallback_type.upper()}.")
+            retry_query = last_query.copy()
+            retry_query["search_type"] = fallback_type
+            pending = state.get("pending_queries", [])
+            pending.insert(0, retry_query)
+            state["pending_queries"] = pending
+
+            return "search_executor"
 
     async def verification_agent_node(self, state: ResearchState) -> Dict[str, Any]:
         """Verify sufficiency"""
@@ -510,85 +643,22 @@ class ResearchGraph(AgentBase):
             logger.warning("[Router] Route: No verification result → END")
             return "__end__"
 
-        if state.get("should_switch_search_type"):
-            logger.info("[Router] High overlap detected, attempting search type switch")
-
-            last_search_type = (
-                state["completed_queries"][-1]["search_type"]
-                if state["completed_queries"]
-                else "rag"
-            )
-            has_tried_rag = state.get("has_tried_rag", False)
-            has_tried_web = state.get("has_tried_web", False)
-
-            if last_search_type == "rag" and not has_tried_web:
-                logger.info("[Router] Switching RAG → Web")
-                target_search_type = "web"
-            elif last_search_type == "web" and not has_tried_rag:
-                logger.info("[Router] Switching Web → RAG")
-                target_search_type = "rag"
-            else:
-                logger.warning("[Router] Both search types exhausted → END")
-                return "__end__"
-
-            if state["pending_queries"]:
-                state["pending_queries"][0]["search_type"] = target_search_type
-                return "search_executor"
-            else:
-                return "dynamic_query_generator"
-
-        is_sufficient = verification["is_sufficient"]
-        confidence = verification["confidence"]
-        missing_aspects = verification.get("missing_aspects", [])
-
-        if is_sufficient:
+        if verification.get("is_sufficient"):
             logger.info(
-                f"[Router] Verification says SUFFICIENT (confidence: {confidence}) → END"
+                f"[Router] Knowledge is sufficient (confidence: {verification.get('confidence')}). Ending."
             )
             return "__end__"
 
-        if iteration >= max_searches:
+        if state.get("pending_queries"):
             logger.info(
-                f"[Router] Insufficient but out of budget (iteration {iteration}/{max_searches}) → END"
-            )
-            return "__end__"
-
-        pending_queries = state.get("pending_queries", [])
-
-        if not pending_queries:
-            logger.info("[Router] No pending queries → dynamic_query_generator")
-            return "dynamic_query_generator"
-
-        relevance_score = calculate_query_relevance(missing_aspects, pending_queries)
-
-        logger.info(
-            f"[Router] Pending queries relevance to missing aspects: {relevance_score:.2f}"
-        )
-
-        HIGH_RELEVANCE_THRESHOLD = 0.6
-        LOW_RELEVANCE_THRESHOLD = 0.3
-
-        if relevance_score >= HIGH_RELEVANCE_THRESHOLD:
-            logger.info(
-                f"[Router] High relevance ({relevance_score:.2f}) → continue_planned"
+                "[Router] Pending queries exist. Continuing with planned search."
             )
             return "search_executor"
-        elif relevance_score <= LOW_RELEVANCE_THRESHOLD:
-            logger.info(
-                f"[Router] Low relevance ({relevance_score:.2f}) → dynamic_query_generator"
-            )
-            return "dynamic_query_generator"
-        else:
-            if confidence == "high":
-                logger.info(
-                    "[Router] Medium relevance + high confidence in gaps → dynamic_query_generator"
-                )
-                return "dynamic_query_generator"
-            else:
-                logger.info(
-                    f"[Router] Medium relevance + {confidence} confidence → continue_planned"
-                )
-                return "search_executor"
+
+        logger.info(
+            "[Router] No pending queries, but knowledge is insufficient. Generating new queries."
+        )
+        return "dynamic_query_generator"
 
     def _build_graph(self) -> CompiledStateGraph:
         """Build research graph"""
@@ -614,7 +684,15 @@ class ResearchGraph(AgentBase):
 
         workflow.add_edge("handle_no_plan", "dynamic_query_generator")
         workflow.add_edge("search_executor", "process_results")
-        workflow.add_edge("process_results", "verification_agent")
+
+        workflow.add_conditional_edges(
+            "process_results",
+            self.decide_after_processing,
+            {
+                "search_executor": "search_executor",
+                "verification_agent": "verification_agent",
+            },
+        )
 
         workflow.add_conditional_edges(
             "dynamic_query_generator",
@@ -642,7 +720,7 @@ class ResearchGraph(AgentBase):
         logger.info(
             f"--- Running ResearchGraph for query: '{state.get('contextualized_query')}' ---"
         )
-        config = {"recursion_limit": 50}
+        config = {"recursion_limit": 100}
         result = await self.graph.ainvoke(state, config=config)
 
         accumulated_knowledge = result.get("accumulated_knowledge", "")
@@ -653,7 +731,7 @@ class ResearchGraph(AgentBase):
             )
         else:
             logger.info(
-                f"--- ResearchGraph finished. Final knowledge length: {len(accumulated_knowledge)} chars. ---"
+                f"--- ResearchGraph finished. Final knowledge length: {len(accumulated_knowledge)} chars. ---\n\n"
             )
         return result
 
@@ -712,27 +790,3 @@ def parse_dynamic_query_generator_response(
             exc_info=True,
         )
         return None
-
-
-def calculate_query_relevance(
-    missing_aspects: List[str], pending_queries: List[Dict]
-) -> float:
-    """
-    Calculate how well pending queries address missing aspects
-    Returns: 0.0 to 1.0 (0 = no overlap, 1 = perfect match)
-    """
-    if not missing_aspects or not pending_queries:
-        return 0.0
-
-    missing_keywords = set()
-    for aspect in missing_aspects:
-        missing_keywords.update(aspect.lower().split())
-
-    query_keywords = set()
-    for query in pending_queries:
-        query_keywords.update(query["query"].lower().split())
-
-    overlap = len(missing_keywords & query_keywords)
-    total = len(missing_keywords)
-
-    return overlap / total if total > 0 else 0.0

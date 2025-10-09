@@ -111,6 +111,7 @@ class OrchestratorGraph(AgentBase):
         return {
             "accumulated_knowledge": final_state.get("accumulated_knowledge", ""),
             "all_search_history": final_state.get("all_search_history", []),
+            "cited_documents": final_state.get("cited_documents", []),
         }
 
     async def fact_checker_node(self, state: OrchestratorState) -> Dict[str, Any]:
@@ -174,6 +175,7 @@ class OrchestratorGraph(AgentBase):
                 "response_metadata": response_metadata,
             }
 
+        # Research Subgraph
         logger.info("Synthesizing research response")
         user_message = state["conversation"][-1].content
         system_prompt = SystemMessage(
@@ -266,7 +268,8 @@ class OrchestratorGraph(AgentBase):
                 contextualized_query="",
                 route_decision=None,
                 accumulated_knowledge="",
-                retrieval_contexts=[],
+                cited_documents=[],
+                retrieval_contexts={},
                 final_answer="",
                 response_metadata={},
             )
@@ -277,6 +280,16 @@ class OrchestratorGraph(AgentBase):
             metadata.update({"route": result.get("route_decision")})
             retrieval_contexts = result.get("retrieval_contexts", {})
             metadata.update({"retrieval_contexts": retrieval_contexts})
+
+            if not retrieval_contexts:
+                cited_documents = result.get("cited_documents", [])
+                retrieval_contexts = {
+                    "cited_chunks": cited_documents,
+                    "total_retrieved": 0,
+                    "total_cited": len(cited_documents),
+                    "original_query": original_query,
+                    "contextualized_query": result.get("contextualized_query", ""),
+                }
 
             message = Message(
                 parts=[TextPart(type="text", text=result["final_answer"])],
