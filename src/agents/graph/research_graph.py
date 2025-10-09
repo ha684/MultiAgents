@@ -105,6 +105,49 @@ class ResearchGraph(AgentBase):
             "should_retry_query": False,
         }
 
+    async def pre_flight_rag_check_node(self, state: ResearchState) -> Dict[str, Any]:
+        """
+        Performs a single RAG check with the main query to determine if the
+        entire RAG source is relevant for this session using the citation agent.
+        """
+        logger.info(
+            "[PreFlightCheck] Checking global RAG relevance using citation agent..."
+        )
+        original_query = state["contextualized_query"]
+        context_metadata = state["context_metadata"]
+
+        try:
+            documents = await rag_search(
+                query=original_query, context_metadata=context_metadata
+            )
+
+            if not documents:
+                logger.warning(
+                    "[PreFlightCheck] RAG source returned no documents. Deeming irrelevant."
+                )
+                return {"is_rag_source_relevant": False, "rag_is_unavailable": True}
+
+            relevant_indices = await citation_agent.ainvoke(
+                history=[HumanMessage(content=original_query)], reference=documents
+            )
+
+            if not relevant_indices or not relevant_indices.indexes:
+                logger.warning(
+                    "[PreFlightCheck] Citation agent found no relevant documents in initial RAG search. Deeming RAG source irrelevant for this run."
+                )
+                return {"is_rag_source_relevant": False, "rag_is_unavailable": True}
+
+        except Exception as e:
+            logger.error(
+                f"[PreFlightCheck] RAG pre-flight check failed with an error: {e}. Disabling RAG."
+            )
+            return {"is_rag_source_relevant": False, "rag_is_unavailable": True}
+
+        logger.info(
+            "[PreFlightCheck] RAG source appears relevant. Proceeding normally."
+        )
+        return {"is_rag_source_relevant": True}
+
     async def handle_no_plan_node(self, state: ResearchState) -> Dict[str, Any]:
         """
         Prepares the state to go directly to the dynamic query generator
@@ -136,6 +179,27 @@ class ResearchGraph(AgentBase):
 
         rag_unavailable = state.get("rag_is_unavailable", False)
         web_unavailable = state.get("web_is_unavailable", False)
+
+        is_rag_relevant = state.get("is_rag_source_relevant", True)
+        if search_type == "rag" and not is_rag_relevant:
+            logger.warning(
+                f"[SearchExecutor] RAG source deemed irrelevant by pre-flight check. Attempting to switch query '{query_text}' to Web."
+            )
+            if not web_unavailable:
+                search_type = "web"
+                current_query["search_type"] = "web"
+            else:
+                logger.error(
+                    "[SearchExecutor] RAG source is irrelevant and Web is also unavailable. Terminating this query."
+                )
+                return {
+                    "completed_queries": state["completed_queries"] + [current_query],
+                    "pending_queries": remaining_queries,
+                    "consecutive_search_failures": state.get(
+                        "consecutive_search_failures", 0
+                    )
+                    + 1,
+                }
 
         if search_type == "rag" and rag_unavailable:
             logger.warning(
@@ -185,9 +249,7 @@ class ResearchGraph(AgentBase):
                 documents = await web_search(
                     query=query_text,
                 )
-
             consecutive_search_failures = 0
-
         except Exception as e:
             logger.error(
                 f"[SearchExecutor] HARD FAILURE in {search_type.upper()} search for '{query_text}'. Error: {e}"
@@ -195,7 +257,6 @@ class ResearchGraph(AgentBase):
             consecutive_search_failures = (
                 state.get("consecutive_search_failures", 0) + 1
             )
-
             new_pending_queries = list(remaining_queries)
             fallback_type = ""
             updated_state = {
@@ -365,13 +426,13 @@ class ResearchGraph(AgentBase):
                 query=current_query, reference=docs_with_citation_markers
             )
 
-        if state["accumulated_knowledge"]:
-            merged = (
-                f"{state['accumulated_knowledge']}\n\n"
-                f"## {current_query}\n\n{compressed}"
-            )
-        else:
-            merged = compressed
+            if state["accumulated_knowledge"]:
+                merged = (
+                    f"{state['accumulated_knowledge']}\n\n"
+                    f"## {current_query}\n\n{compressed}"
+                )
+            else:
+                merged = compressed
 
         new_rag_ids = state["used_rag_ids"]
         new_web_urls = state["used_web_urls"]
@@ -405,8 +466,8 @@ class ResearchGraph(AgentBase):
         """
         Decides the next step after processing search results.
         - If successful, go to verification.
-        - If soft failure, try to retry with a fallback search type.
-        - If fallback is unavailable, skip the failed query and continue with the next one.
+        - If soft failure, try to retry with a fallback search type IF AVAILABLE.
+        - If fallback is unavailable, skip the failed query and continue.
         """
         if not state.get("should_retry_query"):
             logger.info("[Router] Processing successful. Proceeding to verification.")
@@ -420,32 +481,41 @@ class ResearchGraph(AgentBase):
         last_search_type = last_query["search_type"]
         fallback_type = "web" if last_search_type == "rag" else "rag"
 
-        is_fallback_unavailable = (
-            fallback_type == "rag" and state.get("rag_is_unavailable")
-        ) or (fallback_type == "web" and state.get("web_is_unavailable"))
+        is_fallback_usable = True
+        if fallback_type == "rag":
+            if state.get("rag_is_unavailable") or not state.get(
+                "is_rag_source_relevant", True
+            ):
+                is_fallback_usable = False
+                logger.warning(
+                    "[Router] Cannot retry with RAG because it's unavailable or deemed irrelevant."
+                )
+        elif fallback_type == "web":
+            if state.get("web_is_unavailable"):
+                is_fallback_usable = False
+                logger.warning(
+                    "[Router] Cannot retry with Web because it's unavailable."
+                )
 
-        if is_fallback_unavailable:
+        if not is_fallback_usable:
             logger.warning(
-                f"[Router] Cannot retry query '{last_query['query']}' with {fallback_type} as it is unavailable. "
-                "Skipping this query and moving on."
+                f"[Router] Fallback type '{fallback_type.upper()}' is not usable for query '{last_query['query']}'. "
+                "Skipping this retry attempt and moving on."
             )
             if state.get("pending_queries"):
-                logger.info(
-                    "[Router] Other queries are pending. Continuing to search_executor."
-                )
                 return "search_executor"
             else:
-                logger.info(
-                    "[Router] No more pending queries. Proceeding to final verification."
-                )
                 return "verification_agent"
         else:
             logger.info(f"[Router] Retrying query with {fallback_type.upper()}.")
             retry_query = last_query.copy()
             retry_query["search_type"] = fallback_type
+
             pending = state.get("pending_queries", [])
             pending.insert(0, retry_query)
             state["pending_queries"] = pending
+
+            state["should_retry_query"] = False
 
             return "search_executor"
 
@@ -636,7 +706,7 @@ class ResearchGraph(AgentBase):
         logger.info("[Router] Deciding route after query planner.")
         if state.get("pending_queries"):
             logger.info("[Router] Plan generated. Proceeding to search_executor.")
-            return "search_executor"
+            return "pre_flight_rag_check"
         else:
             logger.warning("[Router] No plan generated. Proceeding to handle_no_plan.")
             return "handle_no_plan"
@@ -701,6 +771,7 @@ class ResearchGraph(AgentBase):
         workflow = StateGraph(ResearchState)
 
         workflow.add_node("query_planner", self.query_planner_node)
+        workflow.add_node("pre_flight_rag_check", self.pre_flight_rag_check_node)
         workflow.add_node("search_executor", self.search_executor_node)
         workflow.add_node("process_results", self.process_results_node)
         workflow.add_node("verification_agent", self.verification_agent_node)
@@ -714,11 +785,12 @@ class ResearchGraph(AgentBase):
             "query_planner",
             self.decide_after_planner,
             {
-                "search_executor": "search_executor",
+                "pre_flight_rag_check": "pre_flight_rag_check",
                 "handle_no_plan": "handle_no_plan",
             },
         )
 
+        workflow.add_edge("pre_flight_rag_check", "search_executor")
         workflow.add_edge("handle_no_plan", "dynamic_query_generator")
         workflow.add_edge("search_executor", "process_results")
 

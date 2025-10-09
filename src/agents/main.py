@@ -198,7 +198,7 @@ class OrchestratorGraph(AgentBase):
             {
                 "chitchat": "final_synthesizer",
                 "simple_search": "simple_search_subgraph",
-                "research_subgraph": "research_subgraph_node",
+                "deep_research": "research_subgraph_node",
             },
         )
 

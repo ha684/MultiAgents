@@ -96,3 +96,4 @@ class ResearchState(TypedDict):
     web_is_unavailable: bool
 
     should_retry_query: bool
+    is_rag_source_relevant: bool

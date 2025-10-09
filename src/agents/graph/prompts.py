@@ -1765,69 +1765,6 @@ class PromptTemplates:
         </instruction>
         """)
 
-    FACT_CHECKER_PROMPT = textwrap.dedent("""\
-        <original_query>
-        {original_query}
-        </original_query>
-
-        <accumulated_knowledge>
-        {accumulated_knowledge}
-        </accumulated_knowledge>
-
-        Your task is to rigorously verify the accumulated knowledge and produce a clean, verified version suitable for final synthesis.
-
-        VERIFICATION PROCESS:
-
-        1. RELEVANCE CHECK:
-        - Ensure all information directly relates to answering the original query
-        - Remove tangential information that doesn't contribute to the answer
-        - Keep contextual information necessary for understanding core concepts
-
-        2. CONSISTENCY CHECK:
-        - Identify any contradictions or conflicting statements
-        - When conflicts exist, note them explicitly with: "Conflicting information exists: [source A states X, while source B states Y]"
-        - Do not arbitrarily choose one source over another without clear justification
-        - Flag information that seems internally inconsistent
-
-        3. CLAIM VERIFICATION:
-        - Review each factual claim for proper grounding
-        - Remove any statements that appear speculative or unsupported
-        - Flag claims that seem plausible but lack explicit sourcing
-        - Keep only well-supported, verifiable information
-
-        4. COMPLETENESS CHECK:
-        - Assess whether the knowledge sufficiently addresses the query
-        - Identify critical gaps: "Missing information: [specific gap]"
-        - Note if certain aspects of the query remain unanswered
-        - Do not fabricate information to fill gaps
-
-        5. QUALITY REFINEMENT:
-        - Remove redundant or repetitive information
-        - Correct obvious errors or misinterpretations
-        - Improve clarity without changing meaning
-        - Organize information logically
-
-        6. UNCERTAINTY HANDLING:
-        - Preserve appropriate uncertainty language (e.g., "may", "appears to", "suggests")
-        - Strengthen claims that are well-supported; soften claims that are less certain
-        - Make confidence levels explicit when relevant
-
-        OUTPUT REQUIREMENTS:
-        - Produce refined accumulated knowledge that is accurate, relevant, and well-organized
-        - Maintain all critical information needed to answer the query
-        - Explicitly note any significant limitations, gaps, or conflicts
-        - Use clear, precise language
-        - Structure information logically for easy synthesis
-
-        CRITICAL RULES:
-        - Never add new information not present in the original accumulated knowledge
-        - Never remove well-supported, relevant information just to make the answer cleaner
-        - When uncertain about a claim's validity, flag it rather than removing it
-        - Preserve nuance and complexity rather than oversimplifying
-
-        Your output will be used directly for final synthesis, so ensure it is trustworthy and comprehensive.
-    """)
-
     FINAL_SYNTHESIZER_PROMPT = textwrap.dedent("""\
         <user_message>
         {user_message}
@@ -1911,7 +1848,6 @@ class PromptTemplates:
         1. **Opening**: Direct answer to the main question (1-2 paragraphs with citations)
         2. **Body**: Detailed exploration organized by themes/aspects (with citations throughout)
         3. **Conclusion** (if appropriate): Synthesis of key insights or implications (with citations)
-        4. **References**: Complete list of all cited documents at the end
 
         FORMATTING GUIDELINES:
         - Use clear section structure with **bold headers** (not markdown # headers)
@@ -1962,7 +1898,6 @@ class PromptTemplates:
         - Report has clear structure with smooth flow
         - Writing is thorough and comprehensive
         - Technical terms explained when necessary
-        - References section included at the end with all cited documents
         - Professional, accessible tone maintained throughout
 
 

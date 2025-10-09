@@ -1,22 +1,23 @@
 # {
-#     "message": {
-#         "role": "user",
-#         "parts": [
-#             {
-#                 "type": "text",
-#                 "text": "i want to know about the recent storm coming to viet nam",
-#             }
-#         ],
-#         "metadata": {
-#             "conversation_id": "068d35e5-9423-716b-8000-5cd0aeb06bdc",
-#             "kb_id": "068da9ca-5467-713d-8000-edc609d6fcfb",
-#             "user_id": "123",
-#             "app_name": "test",
-#         },
-#     },
-#     "agentic": false,
-#     "web_search": false,
+#   "message": {
+#     "role": "user",
+#     "parts": [
+#       {
+#         "type": "text",
+#         "text": "i want to know about the recent storm coming to viet nam"
+#       }
+#     ],
+#     "metadata": {
+#       "conversation_id": "068d35e5-9423-716b-8000-5cd0aeb06bdc",
+#       "kb_id": "068da9ca-5467-713d-8000-edc609d6fcfb",
+#       "user_id": "123",
+#       "app_name": "test"
+#     }
+#   },
+#   "agentic": false,
+#   "web_search": false
 # }
+
 
 # from langchain_community.document_loaders import UnstructuredExcelLoader
 # loader = UnstructuredExcelLoader(r"C:\workspace\data\サンプル_QMSシステム開発_RD_エンティティ一覧.xlsx", mode="elements", include_header=True, find_subtable=True)
@@ -50,19 +51,7 @@
 #     print(doc.page_content)
 #     print("-" * 100)
 
-from src.services.web_search.tavily import TavilyService
-import asyncio
-from src.config.settings import settings
 
-tavily_service = TavilyService()
+s = """# Best Practices and Key Considerations for Implementing a Cloud-Native Microservices Architecture\n\nImplementing a cloud-native microservices architecture requires a strategic approach that incorporates best practices for deployment, security, performance, and system resilience. This architecture is designed to be scalable, flexible, and resilient to failures, and it relies on components such as service discovery, load balancing, and robust orchestration tools to function effectively. Key considerations include the use of Kubernetes for deployment and scaling, continuous integration and delivery (CI/CD) for streamlined development, and runtime visibility to enhance security posture ([Melbourne Cloud Native Summit][0], [Cloud Native Now][1]).\n\n## Service Discovery in Microservices\n\nService discovery is a fundamental aspect of microservices architecture, enabling services to dynamically locate and communicate with one another. It is essential for managing distributed systems, especially in environments that demand scalability, fault tolerance, and dynamic service registration ([Microservices][9]).\n\nOne of the widely used tools for service discovery is **Netflix Eureka**, which is commonly integrated with **Spring Boot** applications to facilitate service registration and discovery. To use Eureka, the first step is to set up the **Eureka Server**, which acts as a central registry for all microservices. The server typically runs on port 8761 and must be operational before any microservices can register with it ([Eureka Server][6]).\n\nMicroservices that participate in Eureka-based service discovery must be configured as **Eureka Clients**. This involves adding the `@EnableEurekaClient` or `@EnableDiscoveryClient` annotation to the main Spring Boot class. Additionally, the appropriate dependencies must be included in the project. For **Maven**, the dependency is:\n```\norg.springframework.cloud\nspring-cloud-starter-netflix-eureka-client\n```\nFor **Gradle**, the equivalent is:\n```\ncompile('org.springframework.cloud:spring-cloud-starter-netflix-eureka-client')\n```\n([Eureka Server][6]).\n\nConfiguration files, such as `application.yml` or `application.properties`, must be properly set to register the service with the Eureka Server. A sample configuration includes specifying the `defaultZone` for the Eureka Server URL and setting `preferIpAddress` to `true` for accurate service identification. Once configured, the application can be compiled using **Maven** with the command:\n```\nmvn clean install\n```\nor **Gradle** with:\n```\ngradle clean build\n```\nAfter successful compilation, the microservice can be executed via:\n```\njava -jar <jar-file-name>\n```\nThis starts the service on port 8080 and registers it with the Eureka Server ([Eureka Server][6]).\n\nTo verify that the service has been registered, one can access the Eureka Server UI and check the list of services. Additionally, the service's REST endpoint can be tested to ensure it is available and functioning correctly ([Eureka Server][6]).\n\nBeyond Eureka, **Gloo Operator** offers an alternative for service discovery, particularly in environments using **Istio Ambient Mesh**. Gloo Operator simplifies ambient mesh deployments by capturing Layer 7 telemetry directly from **zTunnel**, thereby eliminating the need for **waypoints**. This can lead to more efficient and scalable service discovery in complex environments ([Ambient Mesh][8]).\n\nOther service discovery tools and patterns are also relevant. For example, **API gateways**, **circuit breakers**, and the **Saga pattern** are often used alongside service discovery to manage communication, fault tolerance, and distributed transactions ([Microservices Patterns][10]).\n\n## Load Balancing in Microservices\n\nLoad balancing is crucial in a cloud-native microservices architecture to ensure optimal resource utilization and prevent service overload. It helps distribute incoming requests across multiple instances of a service, improving system performance and availability.\n\nWhile the accumulated knowledge does not provide specific details about load balancing tools or configurations, it is implied that **Kubernetes** and **Istio** (via Gloo Operator) are likely to be used for this purpose. These platforms are known for their ability to manage traffic distribution and service routing in a dynamic environment, which is a key requirement for microservices.\n\n## Ensuring System Resilience\n\nSystem resilience in a cloud-native microservices architecture can be achieved through various mechanisms, including fault tolerance patterns, automated recovery, and adaptive resource management. The **Saga pattern** is one such mechanism that helps manage long-running transactions in a distributed system, ensuring that failures in one service do not cascade to others ([Microservices Patterns][10]).\n\nAnother important approach to resilience is the use of **runtime visibility**. This is identified as a missing layer in cloud-native security, but it also plays a critical role in system resilience. Runtime visibility provides **packet-level visibility** to workloads, which is essential for monitoring and responding to failures or performance issues in real time ([Cloud Native Now][1]).\n\nA notable research contribution in this area is the **REACH algorithm**, which is based on **reinforcement learning (RL)** and is designed to optimize the **end-to-end latency** of microservices applications in the **cloud-edge continuum**. This algorithm models **heterogeneous computing resources** and considers **network latency** between microservices and computing nodes to make adaptive decisions on **pod placement** and **rescheduling**. The REACH algorithm is the first to demonstrate the practical effectiveness of a learned RL-based policy for microservices rescheduling in a real-world testbed with heterogeneous computing nodes ([REACH Algorithm][4]).\n\n## Security Considerations\n\nSecurity is a critical concern in cloud-native microservices, and best practices include addressing **security tool sprawl**, which can become a new breach vector, and implementing **runtime visibility** to improve the security posture of distributed systems. Runtime visibility provides **packet-level visibility** to workloads, which helps detect and respond to threats in real time ([Cloud Native Now][1]).\n\nAdditionally, **container-native storage** is a key consideration for securing and managing data in microservices. It ensures that **storage services** are exposed to **containers** and microservices in a secure and scalable manner, allowing for **aggregation and pooling** of storage resources. This is particularly important in environments where services are frequently scaled or redeployed ([Data Storage Systems][2]).\n\n## Productivity Tools for Microservices\n\nTo enhance productivity, **Dapr (Distributed Application Runtime)** is highlighted as a valuable tool for cloud-native teams. Dapr abstracts away **infrastructure complexities**, providing essential building blocks such as **service discovery**, **state management**, and **resilience patterns**. This allows developers to focus on **application logic** and business outcomes rather than low-level infrastructure concerns ([Cloud Native Now][1]).\n\n## Storage and Scalability\n\nStorage solutions must be designed to support the dynamic nature of microservices. **Container-native storage** is recommended to expose underlying storage services to **containers** and microservices, enabling **aggregation and pooling** of storage resources for **flexibility and scalability** ([Data Storage Systems][2]).\n\nIn the context of **scalable AI deployment**, cloud platforms like **AWS SageMaker/EKS**, **Azure ML/AKS**, and **Google Vertex AI** are noted for their **elasticity** and **managed services** for compute, storage, and AI lifecycle management. These platforms, when combined with **robust container and orchestration strategies**, can support **future-ready operations** in microservices environments ([Cloud Platforms for AI][3]).\n\n## Practical Implementation Strategies\n\nPractical strategies for implementing cloud-native microservices include **containerization** and **orchestration tools** such as **Kubernetes**. These strategies help in building **robust, reproducible, and future-proof operations** by removing **infrastructure bottlenecks** and allowing teams to focus on **application logic and outcomes** ([Cloud Platforms for AI][3]).\n\n## Challenges and Implementation Nuances\n\nImplementing service discovery introduces challenges such as ensuring **consistency across services** and handling **failures**. These issues can be mitigated using **distribution transactions**, **event sourcing**, or other **fault-tolerant mechanisms** ([Microservices][9]).\n\nMoreover, some methodologies for implementing service discovery are designed to be **modular and service-agnostic**, allowing for the addition of **new service types** or **elasticity parameters**. This modularity is essential for adapting to **various microservices and cloud environments** ([Autoscaling][12]).\n\n## Conclusion\n\nIn summary, implementing a cloud-native microservices architecture involves a combination of **deployment and scaling strategies**, **CI/CD practices**, **security measures**, and **resilience mechanisms**. Tools such as **Netflix Eureka**, **Dapr**, and **Gloo Operator** are important for **service discovery**, while **Kubernetes** and **REACH algorithm** contribute to **load balancing** and **adaptive rescheduling**, respectively. However, information about **specific load balancing configurations** and **security tooling beyond runtime visibility** is not found in the sources. Therefore, further investigation into these areas may be necessary to fully optimize the architecture.\n\n---\n\n## References\n\n1. [Melbourne Cloud Native Summit][0]  \n2. [Cloud Native Now][1]  \n3. [Cloud Platforms for AI][3]  \n4. [REACH Algorithm][4]  \n5. [Eureka Server][6]  \n6. [Ambient Mesh][8]  \n7. [Microservices Patterns][10]  \n8. [Microservices][9]  \n9. [Service Networking][11]  \n10. [Autoscaling][12]"""
 
-result = asyncio.run(
-    tavily_service.search(
-        api_key=settings.tavily_api_key,
-        query="i want to know about the recent storm coming to viet nam",
-        include_answer=True,
-    )
-)
-# for doc in result:
-#     print(doc.page_content)
-#     print("-" * 100)
+print(s)
