@@ -39,6 +39,7 @@ class TavilyService(BaseSearchService):
                 include_answer=include_answer,
                 include_raw_content=include_raw_content,
                 country=country,
+                include_favicon=True,
             )
             unique_results = {}
             for result in results.get("results", []):
@@ -48,10 +49,11 @@ class TavilyService(BaseSearchService):
                         "title": result.get("title"),
                         "content": result.get("raw_content")
                         if result.get("raw_content")
+                        and len(result.get("raw_content")) < 10000
                         else result.get("content"),
                         "url": url,
+                        "favicon": result.get("favicon"),
                     }
-
             if not unique_results:
                 logger.warning("Tavily search returned no unique results.")
                 return None

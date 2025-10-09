@@ -60,8 +60,9 @@ result = asyncio.run(
     tavily_service.search(
         api_key=settings.tavily_api_key,
         query="i want to know about the recent storm coming to viet nam",
+        include_answer=True,
     )
 )
-for doc in result:
-    print(doc.page_content)
-    print("-" * 100)
+# for doc in result:
+#     print(doc.page_content)
+#     print("-" * 100)

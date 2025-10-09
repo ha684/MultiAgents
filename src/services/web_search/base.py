@@ -37,7 +37,10 @@ class BaseSearchService(ABC):
 
             document = Document(
                 page_content=context,
-                metadata={"original_filename": result.get("url", "")},
+                metadata={
+                    "original_filename": result.get("url", ""),
+                    "favicon": result.get("favicon", ""),
+                },
             )
             documents.append(document)
         return documents

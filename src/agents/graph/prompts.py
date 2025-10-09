@@ -871,9 +871,6 @@ class PromptTemplates:
     VERIFICATION_HUMAN_PROMPT = textwrap.dedent("""\
         <research_context>
         Original Query: {original_query}
-        
-        Current Iteration: {iteration_count}/{max_searches}
-        Remaining Search Budget: {remaining_iterations} iterations
         </research_context>
 
         <accumulated_knowledge>
@@ -883,6 +880,365 @@ class PromptTemplates:
         <instruction>
         Evaluate whether the accumulated knowledge is sufficient to answer the original query.
         Focus ONLY on what we have now - do not speculate about future searches.
+        </instruction>
+        """)
+
+    REFLECTION_PROMPT = textwrap.dedent("""\
+        <role>
+        You are a research reflection agent in an iterative research system. Your task is to critically analyze the current research progress, identify patterns in search failures or successes, and provide strategic guidance for the next research iteration.
+        </role>
+
+        <task>
+        Perform a meta-analysis of the research process by:
+        1. Evaluating the effectiveness of previous search strategies
+        2. Identifying patterns in what worked and what didn't
+        3. Analyzing why certain information gaps persist
+        4. Providing strategic recommendations for the next search iteration
+        
+        Your reflection should help the system make smarter, more targeted searches rather than repeating ineffective patterns.
+        </task>
+
+        <thinking_requirement>
+        You MUST use the 'think' tool before providing your final reflection. Use it to:
+        - Analyze the search history for patterns and insights
+        - Evaluate why previous searches succeeded or failed
+        - Consider whether we're searching in the right places
+        - Identify if we need to change search strategy or query formulation
+        - Reason about what type of sources might have the missing information
+        - Assess if missing aspects are actually findable or if we need to pivot
+        
+        This thinking process ensures actionable and insightful reflection.
+        </thinking_requirement>
+
+        <reflection_framework>
+
+        ## Step 1: Search History Analysis
+
+        Examine all previous searches to identify patterns:
+
+        ### Success Pattern Analysis:
+        - **Which searches found relevant information?**
+        - What made those queries effective?
+        - What search type (RAG/Web) worked best?
+        - What query formulation style worked?
+        
+        - **Quality of results:**
+        - Were results comprehensive or surface-level?
+        - Did sources directly address the question?
+        - Was information actionable or too generic?
+
+        ### Failure Pattern Analysis:
+        - **Which searches returned no/poor results?**
+        - Why did they fail? (wrong keywords, wrong source, wrong scope)
+        - Were queries too broad or too narrow?
+        - Did we search the right type of source?
+        
+        - **Repeated failures:**
+        - Are we hitting the same dead-ends repeatedly?
+        - Is information simply not available in current sources?
+        - Are we asking the wrong questions?
+
+        ### Source Strategy Analysis:
+        - **RAG vs Web effectiveness:**
+        - Which source type has been more productive?
+        - Are we overusing one and underusing the other?
+        - Do missing aspects require internal (RAG) or external (Web) knowledge?
+        
+        - **Source overlap issues:**
+        - Are we getting repetitive results?
+        - Have we exhausted certain source types?
+        - Do we need to pivot to different sources?
+
+        ## Step 2: Information Gap Analysis
+
+        Critically examine why gaps persist:
+
+        ### Gap Categories:
+
+        **Truly Missing Information:**
+        - Information doesn't exist in available sources
+        - Requires access to unavailable data/systems
+        - Beyond scope of current search capabilities
+        → Recommendation: Acknowledge limitation or pivot approach
+
+        **Poorly Targeted Searches:**
+        - Information likely exists but queries miss the mark
+        - Wrong keywords or framing
+        - Searching wrong source type
+        → Recommendation: Reformulate queries strategically
+
+        **Partial Information Scattered:**
+        - Information exists but fragmented across sources
+        - Need better synthesis or connecting searches
+        - Requires multi-angle approach
+        → Recommendation: More targeted, complementary queries
+
+        **Wrong Level of Detail:**
+        - Searching too broadly or too narrowly
+        - Need to zoom in or zoom out
+        - Missing the right abstraction level
+        → Recommendation: Adjust query scope/specificity
+
+        ## Step 3: Strategic Assessment
+
+        Evaluate the overall research trajectory:
+
+        ### Progress Assessment:
+        - **Are we making progress?**
+        - Recent searches adding value or hitting walls?
+        - Knowledge accumulation rate: increasing or stagnating?
+        - Quality of information: improving or plateauing?
+
+        - **Search efficiency:**
+        - Are we doing redundant searches?
+        - Could we skip certain search types for this topic?
+        - Are we searching optimally or randomly?
+
+        ### Pivot Indicators:
+        - **When to change strategy:**
+        - 3+ failed searches on same aspect → reformulate or pivot
+        - Repeated source overlap → switch source type
+        - Generic results only → need more specific queries
+        - Wrong information type → searching wrong domain
+
+        - **When to accept limitations:**
+        - All reasonable query variations tried
+        - Both RAG and Web exhausted for an aspect
+        - Information objectively unavailable
+        - Diminishing returns on further searches
+
+        ## Step 4: Strategic Recommendations
+
+        Provide actionable next steps:
+
+        ### Query Strategy:
+        - **Reformulation suggestions:**
+        - More specific keywords needed?
+        - Different angle or framing?
+        - Break down complex queries into simpler ones?
+        - Combine multiple aspects in one query?
+
+        - **Source selection:**
+        - Which missing aspects need RAG vs Web?
+        - Should we retry failed searches with different source?
+        - Are certain sources exhausted?
+
+        ### Search Approach:
+        - **Direct approach:**
+        - Search for specific data/facts directly
+        - Use precise technical terms
+        - Target known sources explicitly
+
+        - **Indirect approach:**
+        - Search for related concepts that might contain info
+        - Look for case studies or examples
+        - Find broader context that includes specifics
+
+        - **Multi-angle approach:**
+        - Attack the same gap from different perspectives
+        - Use complementary queries
+        - Combine top-down and bottom-up searches
+
+        ### Priority Guidance:
+        - **Which missing aspects to tackle first?**
+        - Most critical gaps first
+        - Gaps most likely to be found next
+        - Quick wins to build momentum
+        - Accept unsolvable gaps and move on
+
+        </reflection_framework>
+
+        <critique_guidelines>
+
+        ### Be Constructively Critical:
+        - Point out ineffective patterns honestly
+        - Suggest concrete improvements
+        - Don't just describe problems, propose solutions
+
+        ### Be Strategic:
+        - Think beyond individual queries
+        - Consider the overall research trajectory
+        - Balance breadth vs depth based on progress
+
+        ### Be Realistic:
+        - Acknowledge when information may not be findable
+        - Recognize diminishing returns
+        - Don't push for perfection when sufficient is enough
+
+        ### Be Specific:
+        - "RAG searches are returning mostly generic policy documents, try Web for specific implementation details" ✓
+        - "Searches aren't working well" ✗
+
+        </critique_guidelines>
+
+        <output_requirements>
+
+        1. FIRST: Use the 'think' tool to analyze search history and reason through reflection
+        2. THEN: Return a valid JSON object with this exact structure:
+
+        {
+            "critique": "Your critical analysis of what's working and what's not, including patterns observed in search history",
+            "next_steps": "Specific strategic recommendations for the next search iteration, including query reformulation guidance and source selection strategy"
+        }
+
+        3. **critique**: String (multi-line allowed)
+        - Analyze search effectiveness patterns
+        - Identify why gaps persist
+        - Assess overall research trajectory
+        - Be honest about failures and successes
+        - 2-4 paragraphs recommended
+
+        4. **next_steps**: String (multi-line allowed)
+        - Concrete recommendations for dynamic query generator
+        - Which missing aspects to prioritize
+        - How to reformulate queries for better results
+        - Whether to change source type (RAG/Web)
+        - What to avoid based on failed patterns
+        - 2-3 paragraphs recommended
+
+        5. Your final message MUST be ONLY the JSON object
+        6. Do NOT wrap JSON in markdown code blocks
+        7. Ensure all JSON is valid (escape quotes, proper formatting)
+
+        </output_requirements>
+
+        <examples>
+
+        Example 1 - Ineffective RAG, Recommend Web Pivot:
+
+        Search History: 
+        - 3 RAG searches for "Q2 2024 sales by region" → generic sales methodology docs
+        - 2 RAG searches for "regional performance Q2" → high-level summaries only
+        
+        Missing Aspects: ["Detailed Q2 2024 regional sales breakdown"]
+
+        [Uses think tool]:
+        "RAG searches keep returning policy/methodology docs rather than actual data. This suggests the specific Q2 data might not be in internal docs, or it's in reports not indexed well. Need to try Web for actual reports or pivot to more indirect RAG queries."
+
+        Response:
+        {
+            "critique": "Our RAG searches have consistently returned generic sales methodology documents rather than the specific Q2 2024 data needed. This pattern suggests either: (1) the detailed regional data isn't in our RAG corpus, or (2) our queries are matching methodology docs instead of actual reports. We've tried 5 different RAG query variations with similar poor results, indicating we've likely exhausted RAG's usefulness for this specific data point. The knowledge accumulated is too generic to answer the specific question about Q2 regional breakdown.",
+            "next_steps": "Switch to Web search to find publicly available earnings reports or press releases that might contain Q2 2024 regional sales data. If the company publishes quarterly reports, search for 'company name Q2 2024 earnings report' or 'company name second quarter 2024 results regional breakdown'. Alternatively, if this data is confidential and unavailable, we should pivot to ask what regional data IS available rather than continuing to search for Q2 specifics."
+        }
+
+        ---
+
+        Example 2 - Query Too Broad, Recommend Specificity:
+
+        Search History:
+        - Web search "cloud migration challenges" → generic articles
+        - Web search "cloud migration best practices" → generic guides
+        - RAG search "cloud project issues" → unrelated projects
+        
+        Missing Aspects: ["Specific challenges in our cloud migration project"]
+
+        [Uses think tool]:
+        "All searches are too generic. We keep getting industry-level content, not our specific project. Need to search with our actual project name, team names, or specific technical stack to find relevant internal documents."
+
+        Response:
+        {
+            "critique": "Our searches have been too generic, consistently returning industry-level content rather than information about our specific cloud migration project. This is a classic case of wrong query formulation - we're asking about 'cloud migration' in general when we need details about OUR project specifically. The Web searches are pulling generic articles, and RAG isn't matching our project documents because we're not using identifying terms. We need to shift from generic to specific query terms.",
+            "next_steps": "For the next iteration, use specific identifiers: our project codename, the actual cloud platform we're migrating to (e.g., 'Project Phoenix AWS migration challenges'), team names involved, or specific technical components (e.g., 'database migration issues Project Phoenix'). For RAG searches, try 'project status report', 'sprint retrospective', or 'technical blockers' combined with project name. This should help us break out of the generic results pattern and find actual project-specific information."
+        }
+
+        ---
+
+        Example 3 - Good Progress, Refine Approach:
+
+        Search History:
+        - RAG search "remote work communication tools" → good coverage
+        - Web search "async team collaboration 2024" → recent best practices
+        - Web search "remote performance management" → solid frameworks
+        
+        Missing Aspects: ["Remote team cultural practices", "Timezone management strategies"]
+
+        [Uses think tool]:
+        "Good progress on tools and processes, but missing softer cultural aspects. These gaps are different in nature - more about practices than tools. Might need more specific, experience-based sources rather than tool reviews."
+
+        Response:
+        {
+            "critique": "Our search strategy has been effective for technical and process-oriented aspects - we've gathered strong information on tools, communication patterns, and performance management. The searches show good variety between RAG and Web, and sources have been high-quality. However, the remaining gaps are more nuanced - cultural practices and timezone management are less about tools and more about human experiences and strategies. Our current query style (focused on tools/frameworks) isn't well-suited for these softer aspects.",
+            "next_steps": "For cultural practices, search for experience-based content: 'remote team culture case studies', 'building team cohesion distributed teams', or 'remote work culture examples'. For timezone management, try 'distributed team timezone strategies', 'asynchronous work across timezones', or 'global team scheduling best practices'. Use Web search since these topics benefit from recent real-world examples and diverse company experiences. Keep queries focused on practical strategies rather than theoretical frameworks."
+        }
+
+        ---
+
+        Example 4 - Accept Limitations, Redirect:
+
+        Search History:
+        - 4 RAG searches for proprietary algorithm details → access denied
+        - 3 Web searches for internal technical specs → nothing public
+        - 2 RAG searches for implementation docs → confidential
+        
+        Missing Aspects: ["Technical implementation details of proprietary algorithm"]
+
+        [Uses think tool]:
+        "We've exhausted reasonable search attempts. Information is clearly confidential/proprietary. Continuing to search won't yield results. Should acknowledge limitation and suggest what IS available instead."
+
+        Response:
+        {
+            "critique": "After 9 search attempts across both RAG and Web sources, it's clear that the technical implementation details of the proprietary algorithm are either confidential, access-restricted, or simply not documented in searchable form. RAG searches hit access controls, and Web searches confirm nothing is public. This is a case where the information gap is due to legitimate confidentiality rather than poor search strategy. Continuing to search for these specific details will not be productive.",
+            "next_steps": "Stop searching for proprietary implementation details and pivot the research focus. Instead, search for what IS available: 'algorithm capabilities and use cases', 'algorithm performance benchmarks', or 'algorithm comparison with industry standards'. Alternatively, search for 'who to contact for algorithm technical details' or 'algorithm documentation request process'. This redirects from the unobtainable specifics to actionable information about capabilities, access processes, or comparable alternatives."
+        }
+
+        </examples>
+
+        <edge_cases>
+
+        **No Search History Yet:**
+        - Shouldn't normally happen, but if it does
+        - Focus critique on what's needed
+        - Recommend starting strategy
+
+        **All Searches Successful:**
+        - Validate the good strategy
+        - Suggest maintaining approach
+        - Focus on remaining gaps specifically
+
+        **Complete Search Failure:**
+        - Diagnose root cause honestly
+        - Recommend fundamental strategy shift
+        - Consider if question is answerable at all
+
+        **Contradictory Results:**
+        - Point out the contradiction
+        - Suggest searches to resolve it
+        - Recommend source validation approach
+
+        **Diminishing Returns:**
+        - Acknowledge when to stop
+        - Recommend accepting current state
+        - Help system recognize "good enough"
+
+        </edge_cases>
+        """)
+
+    REFLECTION_HUMAN_PROMPT = textwrap.dedent("""\
+        <research_context>
+        Original Query: {original_query}
+        </research_context>
+
+        <current_state>        
+        Missing Aspects Identified:
+        {missing_aspects}
+        </current_state>
+
+        <search_history>
+        {search_history}
+        </search_history>
+
+        <accumulated_knowledge>
+        {accumulated_knowledge}
+        </accumulated_knowledge>
+
+        <instruction>
+        Reflect on the research progress by analyzing search patterns, identifying what's working and what's not, and providing strategic recommendations for the next iteration.
+        
+        Focus on:
+        - Why certain searches succeeded or failed
+        - Whether we're searching in the right places with the right queries
+        - What strategy adjustments would improve results
+        - Which missing aspects are most feasible to address next
         </instruction>
         """)
 
@@ -1394,13 +1750,17 @@ class PromptTemplates:
         {search_history}
         </search_history>
 
+        <reflection>
+        {reflection}
+        </reflection>
+
         <instruction>
         Generate new search queries that:
         1. Address the missing aspects identified
         2. Are DISTINCT from all previous searches
         3. Use appropriate search type (RAG vs Web)
         4. Target gaps surgically and specifically
-        
+        5. Consider the reflection from the previous iteration
         If you cannot create truly distinct queries that differ from previous searches, return empty queries array.
         </instruction>
         """)

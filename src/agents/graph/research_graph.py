@@ -12,6 +12,7 @@ from src.agents.graph.schemas import (
     SearchPlanSchema,
     VerificationSchema,
     DynamicQueriesSchema,
+    ReflectionSchema,
 )
 from src.llm.factory import get_llm
 from src.agents.basic.base import AgentBase
@@ -255,7 +256,7 @@ class ResearchGraph(AgentBase):
             logger.warning("[ProcessResults] No documents found in search result.")
             return {"should_retry_query": True, "search_results": {}}
 
-        overlap_threshold = 0.7
+        overlap_threshold = 0.5
 
         documents = state["search_results"]["documents"]
         search_type = state["search_results"]["search_type"]
@@ -341,32 +342,28 @@ class ResearchGraph(AgentBase):
             current_citation_index += 1
 
         accumulated_len = len(state["accumulated_knowledge"])
+        iteration = len(state.get("completed_queries", []))
 
-        # should_consolidate = (
-        #     ratio > overlap_threshold * 0.5
-        #     or iteration > 0
-        #     and iteration % consolidation_interval == 0
-        #     or accumulated_len > consolidation_threshold
-        # )
-        # logger.info(
-        #     f"[ProcessResults] Consolidation check: {should_consolidate} (ratio: {ratio:.1%}, iter: {iteration}, len: {accumulated_len})"
-        # )
-
-        # if should_consolidate and state["accumulated_knowledge"]:
-        #     logger.info(
-        #         "[ProcessResults] Consolidating new docs with existing knowledge."
-        #     )
-        #     new_merged = await compress_agent.ainvoke_with_merge(
-        #         query=current_query,
-        #         new_documents=docs_with_citation_markers,
-        #         existing_knowledge=state["accumulated_knowledge"],
-        #     )
-        #     merged = new_merged if new_merged else state["accumulated_knowledge"]
-        # else:
-        logger.info("[ProcessResults] Compressing new documents.")
-        compressed = await compress_agent.ainvoke(
-            query=current_query, reference=docs_with_citation_markers
+        should_consolidate = ratio > overlap_threshold * 0.5 or accumulated_len > 10000
+        logger.info(
+            f"[ProcessResults] Consolidation check: {should_consolidate} (ratio: {ratio:.1%}, iter: {iteration}, len: {accumulated_len})"
         )
+
+        if should_consolidate and state["accumulated_knowledge"]:
+            logger.info(
+                "[ProcessResults] Consolidating new docs with existing knowledge."
+            )
+            new_merged = await compress_agent.ainvoke_with_merge(
+                query=current_query,
+                new_documents=docs_with_citation_markers,
+                existing_knowledge=state["accumulated_knowledge"],
+            )
+            merged = new_merged if new_merged else state["accumulated_knowledge"]
+        else:
+            logger.info("[ProcessResults] Compressing new documents.")
+            compressed = await compress_agent.ainvoke(
+                query=current_query, reference=docs_with_citation_markers
+            )
 
         if state["accumulated_knowledge"]:
             merged = (
@@ -470,14 +467,10 @@ class ResearchGraph(AgentBase):
             }
 
         max_iterations = 3
-        remaining_iterations = state["max_searches"] - state["iteration_count"]
 
         prompt_input = PromptTemplates.VERIFICATION_HUMAN_PROMPT.format(
             original_query=state["contextualized_query"],
             accumulated_knowledge=state["accumulated_knowledge"],
-            iteration_count=state["iteration_count"],
-            remaining_iterations=remaining_iterations,
-            max_searches=state["max_searches"],
         )
 
         messages: List[BaseMessage] = [
@@ -515,6 +508,43 @@ class ResearchGraph(AgentBase):
 
         return {"verification_result": verification_dict}
 
+    async def reflection_node(self, state: ResearchState) -> Dict[str, Any]:
+        """
+        Critiques the current research state and suggests next steps.
+        """
+        logger.info("[Reflection] Starting...")
+
+        search_history_str = json.dumps(state.get("all_search_history", []), indent=2)
+
+        prompt_input = PromptTemplates.REFLECTION_HUMAN_PROMPT.format(
+            original_query=state["contextualized_query"],
+            accumulated_knowledge=state["accumulated_knowledge"],
+            missing_aspects=json.dumps(state["verification_result"]["missing_aspects"]),
+            search_history=search_history_str,
+        )
+
+        messages: List[BaseMessage] = [
+            SystemMessage(content=PromptTemplates.REFLECTION_PROMPT),
+            HumanMessage(content=prompt_input),
+        ]
+
+        reflection_llm = self.thinking_llm
+        reflection_result = await self.iterative_llm_call_structured(
+            messages=messages,
+            llm_with_tools=reflection_llm,
+            available_tools={"think": think},
+            max_iterations=3,
+            parse_fn=parse_reflection_response,
+            retry_prompt="Please provide the reflection in the correct JSON format.",
+        )
+
+        if not reflection_result:
+            logger.error("[Reflection] Failed to generate a valid reflection.")
+            return {"reflection_result": {"critique": "N/A", "next_steps": "N/A"}}
+
+        logger.info(f"[Reflection] Critique: {reflection_result['critique']}")
+        return {"reflection_result": reflection_result}
+
     async def dynamic_query_generator_node(
         self, state: ResearchState
     ) -> Dict[str, Any]:
@@ -550,11 +580,17 @@ class ResearchGraph(AgentBase):
             else "No previous searches"
         )
 
+        reflection = state.get(
+            "reflection_result", {"critique": "N/A", "next_steps": "N/A"}
+        )
+        reflection_str = f"Critique: {reflection['critique']}\nSuggested Next Steps: {reflection['next_steps']}"
+
         prompt_input = PromptTemplates.DYNAMIC_QUERY_GENERATOR_HUMAN_PROMPT.format(
             original_query=state["contextualized_query"],
             accumulated_knowledge=state["accumulated_knowledge"],
             missing_aspects=json.dumps(missing_aspects, indent=2),
             search_history=search_history_str,
+            reflection=reflection_str,
         )
 
         messages: List[BaseMessage] = [
@@ -658,7 +694,7 @@ class ResearchGraph(AgentBase):
         logger.info(
             "[Router] No pending queries, but knowledge is insufficient. Generating new queries."
         )
-        return "dynamic_query_generator"
+        return "reflection_node"
 
     def _build_graph(self) -> CompiledStateGraph:
         """Build research graph"""
@@ -670,6 +706,7 @@ class ResearchGraph(AgentBase):
         workflow.add_node("verification_agent", self.verification_agent_node)
         workflow.add_node("dynamic_query_generator", self.dynamic_query_generator_node)
         workflow.add_node("handle_no_plan", self.handle_no_plan_node)
+        workflow.add_node("reflection_node", self.reflection_node)
 
         workflow.set_entry_point("query_planner")
 
@@ -694,6 +731,8 @@ class ResearchGraph(AgentBase):
             },
         )
 
+        workflow.add_edge("reflection_node", "dynamic_query_generator")
+
         workflow.add_conditional_edges(
             "dynamic_query_generator",
             self.route_after_dynamic_generation,
@@ -708,7 +747,7 @@ class ResearchGraph(AgentBase):
             self.route_after_verification,
             {
                 "search_executor": "search_executor",
-                "dynamic_query_generator": "dynamic_query_generator",
+                "reflection_node": "reflection_node",
                 "__end__": END,
             },
         )
@@ -789,4 +828,21 @@ def parse_dynamic_query_generator_response(
             f"[Parser] Error parsing dynamic query generator response: {e}",
             exc_info=True,
         )
+        return None
+
+
+def parse_reflection_response(content: str) -> Optional[ReflectionSchema]:
+    """Parse reflection response"""
+    try:
+        parsed = parse_response(content)
+        if not parsed:
+            logger.warning(
+                "[Parser] Failed to parse reflection response (null result)."
+            )
+            return None
+        response = ReflectionSchema(**parsed)
+        dumped = response.model_dump()
+        return dumped
+    except Exception as e:
+        logger.error(f"[Parser] Error parsing reflection response: {e}", exc_info=True)
         return None

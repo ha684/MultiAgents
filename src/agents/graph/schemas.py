@@ -41,6 +41,13 @@ class DynamicQueriesSchema(BaseModel):
     )
 
 
+class ReflectionSchema(BaseModel):
+    """Reflection agent output schema"""
+
+    critique: str = Field(description="Critique of the research")
+    next_steps: str = Field(description="Next steps to take")
+
+
 # class Event(LlmResponse):
 #   """Represents an event in a conversation between agents and users.
 
