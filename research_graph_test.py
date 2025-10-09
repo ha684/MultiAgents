@@ -22,5 +22,4 @@ logger.info("ResearchGraph run complete.")
 end_time = time.time()
 logger.info(f"ResearchGraph run time: {end_time - start_time} seconds")
 
-logger.info(f"Final accumulated knowledge: {final_state['accumulated_knowledge']}")
-logger.info(f"Final all search history: {final_state['all_search_history']}")
+logger.info(f"Final accumulated knowledge: \n\n {final_state['accumulated_knowledge']}")

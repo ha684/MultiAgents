@@ -317,16 +317,23 @@ class ChatService:
             )
 
             urls = []
+            favicons = []
             for doc in retrieved_docs:
                 url = doc.metadata.get("original_filename", "")
                 if url:
                     urls.append(url)
-
+                favicon = doc.metadata.get("favicon", "")
+                if favicon:
+                    favicons.append(favicon)
             yield StreamEventBuilder.status_update(
                 StreamPhase.WEB_SEARCH,
                 "Found web sources",
                 progress=0.6,
-                metadata={"sources_count": len(retrieved_docs), "urls": urls},
+                metadata={
+                    "sources_count": len(retrieved_docs),
+                    "urls": urls,
+                    "favicons": favicons,
+                },
             )
         else:
             yield StreamEventBuilder.status_update(

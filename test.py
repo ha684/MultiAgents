@@ -50,14 +50,19 @@
 #     print(doc.page_content)
 #     print("-" * 100)
 
-from src.rag.processor.loader.images_loader import ImageLoader
+from src.services.web_search.tavily import TavilyService
 import asyncio
+from src.config.settings import settings
 
-image_agent = ImageLoader(r"C:\workspace\data\heza_data\0.jpg")
+tavily_service = TavilyService()
 
-try:
-    content = asyncio.run(image_agent.lazy_load())
-    print("Content: ", content)
-except Exception as e:
-    print("Error: ", e)
-    print("Error extracting image")
+result = asyncio.run(
+    tavily_service.search(
+        api_key=settings.tavily_api_key,
+        query="i want to know about the recent storm coming to viet nam",
+        include_answer=True,
+    )
+)
+# for doc in result:
+#     print(doc.page_content)
+#     print("-" * 100)

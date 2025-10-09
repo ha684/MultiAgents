@@ -1306,6 +1306,18 @@ grpc = [
 ]
 
 [[package]]
+name = "grandalf"
+version = "0.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyparsing" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/95/0e/4ac934b416857969f9135dec17ac80660634327e003a870835dd1f382659/grandalf-0.8.tar.gz", hash = "sha256:2813f7aab87f0d20f334a3162ccfbcbf085977134a17a5b516940a93a77ea974", size = 38128, upload-time = "2023-01-26T07:37:06.668Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/30/44c7eb0a952478dbb5f2f67df806686d6a7e4b19f6204e091c4f49dc7c69/grandalf-0.8-py3-none-any.whl", hash = "sha256:793ca254442f4a79252ea9ff1ab998e852c1e071b863593e5383afee906b4185", size = 41802, upload-time = "2023-01-10T15:16:19.753Z" },
+]
+
+[[package]]
 name = "graphiti-core"
 version = "0.3.21"
 source = { registry = "https://pypi.org/simple" }
@@ -1768,7 +1780,9 @@ dependencies = [
     { name = "fastembed" },
     { name = "fastmcp" },
     { name = "google-adk" },
+    { name = "grandalf" },
     { name = "graphiti-core" },
+    { name = "graphviz" },
     { name = "html-text" },
     { name = "html-to-markdown" },
     { name = "huggingface-hub" },
@@ -1833,7 +1847,9 @@ requires-dist = [
     { name = "fastembed", specifier = ">=0.7.0" },
     { name = "fastmcp", specifier = ">=2.12.4" },
     { name = "google-adk", specifier = ">=1.10.0" },
+    { name = "grandalf", specifier = ">=0.8" },
     { name = "graphiti-core", specifier = ">=0.3.21" },
+    { name = "graphviz", specifier = ">=0.21" },
     { name = "html-text", specifier = ">=0.7.0" },
     { name = "html-to-markdown", specifier = ">=1.4.0" },
     { name = "huggingface-hub", specifier = ">=0.32.4" },

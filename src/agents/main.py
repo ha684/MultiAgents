@@ -111,39 +111,8 @@ class OrchestratorGraph(AgentBase):
         return {
             "accumulated_knowledge": final_state.get("accumulated_knowledge", ""),
             "all_search_history": final_state.get("all_search_history", []),
+            "cited_documents": final_state.get("cited_documents", []),
         }
-
-    async def fact_checker_node(self, state: OrchestratorState) -> Dict[str, Any]:
-        """Fact check accumulated knowledge"""
-
-        if not state.get("accumulated_knowledge"):
-            logger.warning("No knowledge to fact check")
-            return {}
-
-        system_prompt = SystemMessage(
-            content="You are a fact-checking expert responsible for verifying and refining accumulated research knowledge before final synthesis."
-        )
-        user_prompt = HumanMessage(
-            content=PromptTemplates.FACT_CHECKER_PROMPT.format(
-                original_query=state["contextualized_query"],
-                accumulated_knowledge=state["accumulated_knowledge"],
-            )
-        )
-        messages = [system_prompt, user_prompt]
-
-        fact_check_llm = self.thinking_llm
-        fact_checked_knowledge = await self.iterative_llm_call_text(
-            messages=messages,
-            llm_with_tools=fact_check_llm,
-            available_tools={"think": think},
-            max_iterations=3,
-            retry_prompt="Please provide your answer again.",
-            fallback_value=state["accumulated_knowledge"],
-        )
-
-        logger.info("Fact checking complete")
-
-        return {"accumulated_knowledge": fact_checked_knowledge.content}
 
     async def final_synthesizer_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """Generate final response"""
@@ -174,6 +143,7 @@ class OrchestratorGraph(AgentBase):
                 "response_metadata": response_metadata,
             }
 
+        # Research Subgraph
         logger.info("Synthesizing research response")
         user_message = state["conversation"][-1].content
         system_prompt = SystemMessage(
@@ -214,7 +184,6 @@ class OrchestratorGraph(AgentBase):
         workflow.add_node("router", self.router_node)
         workflow.add_node("simple_search_subgraph", self.simple_search_subgraph_node)
         workflow.add_node("research_subgraph_node", self.research_subgraph_node)
-        workflow.add_node("fact_checker", self.fact_checker_node)
         workflow.add_node("final_synthesizer", self.final_synthesizer_node)
 
         # Entry point
@@ -233,8 +202,7 @@ class OrchestratorGraph(AgentBase):
             },
         )
 
-        workflow.add_edge("research_subgraph_node", "fact_checker")
-        workflow.add_edge("fact_checker", "final_synthesizer")
+        workflow.add_edge("research_subgraph_node", "final_synthesizer")
         workflow.add_edge("simple_search_subgraph", "final_synthesizer")
 
         workflow.set_finish_point("final_synthesizer")
@@ -266,7 +234,8 @@ class OrchestratorGraph(AgentBase):
                 contextualized_query="",
                 route_decision=None,
                 accumulated_knowledge="",
-                retrieval_contexts=[],
+                cited_documents=[],
+                retrieval_contexts={},
                 final_answer="",
                 response_metadata={},
             )
@@ -277,6 +246,16 @@ class OrchestratorGraph(AgentBase):
             metadata.update({"route": result.get("route_decision")})
             retrieval_contexts = result.get("retrieval_contexts", {})
             metadata.update({"retrieval_contexts": retrieval_contexts})
+
+            if not retrieval_contexts:
+                cited_documents = result.get("cited_documents", [])
+                retrieval_contexts = {
+                    "cited_chunks": cited_documents,
+                    "total_retrieved": 0,
+                    "total_cited": len(cited_documents),
+                    "original_query": original_query,
+                    "contextualized_query": result.get("contextualized_query", ""),
+                }
 
             message = Message(
                 parts=[TextPart(type="text", text=result["final_answer"])],

@@ -22,9 +22,9 @@ class TavilyService(BaseSearchService):
             time_range = kwargs.get("time_range", "day")
             start_date = kwargs.get("start_date", None)
             end_date = kwargs.get("end_date", None)
-            days = kwargs.get("days", 30)
+            days = kwargs.get("days", 365)
             include_answer = kwargs.get("include_answer", None)
-            include_raw_content = kwargs.get("include_raw_content", None)
+            include_raw_content = kwargs.get("include_raw_content", "text")
             country = kwargs.get("country", None)
 
             results = await client.search(
@@ -39,18 +39,21 @@ class TavilyService(BaseSearchService):
                 include_answer=include_answer,
                 include_raw_content=include_raw_content,
                 country=country,
+                include_favicon=True,
             )
-
             unique_results = {}
             for result in results.get("results", []):
                 url = result.get("url")
                 if url and url not in unique_results:
                     unique_results[url] = {
                         "title": result.get("title"),
-                        "content": result.get("content"),
+                        "content": result.get("raw_content")
+                        if result.get("raw_content")
+                        and len(result.get("raw_content")) < 10000
+                        else result.get("content"),
                         "url": url,
+                        "favicon": result.get("favicon"),
                     }
-
             if not unique_results:
                 logger.warning("Tavily search returned no unique results.")
                 return None
