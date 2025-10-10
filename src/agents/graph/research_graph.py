@@ -23,7 +23,6 @@ class ResearchGraph(AgentBase):
     """Research Subgraph - Deep research with iterative search loop"""
 
     def __init__(self):
-        logger.info("Initializing ResearchGraph...")
         self.llm = get_llm("nxchat")
         self.thinking_llm = self.llm.bind_tools([think])
         self.graph = self._build_graph()
@@ -33,13 +32,7 @@ class ResearchGraph(AgentBase):
 
     async def query_planner_node(self, state: ResearchState) -> Dict[str, Any]:
         """Create research plan"""
-        logger.info("[QueryPlanner] Starting...")
-        logger.info(
-            f"[QueryPlanner] Generating plan for query: '{state['contextualized_query']}'"
-        )
-
         max_iterations = 5
-
         system_prompt = SystemMessage(content=PromptTemplates.QUERY_PLANNER_PROMPT)
         prompt = HumanMessage(
             content=f"Create the plan for the following query: {state['contextualized_query']}"
@@ -83,9 +76,6 @@ class ResearchGraph(AgentBase):
         all_queries: List[SearchQuery] = queries
         all_queries.sort(key=lambda x: x.get("priority", 0), reverse=True)
 
-        logger.info(f"[QueryPlanner] Plan generated: {len(queries)} queries.")
-        logger.debug(f"[QueryPlanner] Full plan: {json.dumps(response, indent=2)}")
-
         return {
             "pending_queries": all_queries,
             "completed_queries": [],
@@ -105,16 +95,28 @@ class ResearchGraph(AgentBase):
             "should_retry_query": False,
         }
 
+    def decide_after_planner(self, state: ResearchState) -> str:
+        """Decides where to go after the query planner."""
+        if state.get("pending_queries"):
+            logger.info("[Router] Plan generated. Proceeding to search_executor.")
+            return "pre_flight_rag_check"
+        else:
+            logger.warning("[Router] No plan generated. Proceeding to handle_no_plan.")
+            return "handle_no_plan"
+
     async def pre_flight_rag_check_node(self, state: ResearchState) -> Dict[str, Any]:
         """
         Performs a single RAG check with the main query to determine if the
         entire RAG source is relevant for this session using the citation agent.
         """
-        logger.info(
-            "[PreFlightCheck] Checking global RAG relevance using citation agent..."
-        )
         original_query = state["contextualized_query"]
         context_metadata = state["context_metadata"]
+
+        have_rag_search_type = any(
+            query["search_type"] == "rag" for query in state["pending_queries"]
+        )
+        if not have_rag_search_type:
+            return {"is_rag_source_relevant": True}
 
         try:
             documents = await rag_search(
@@ -143,9 +145,6 @@ class ResearchGraph(AgentBase):
             )
             return {"is_rag_source_relevant": False, "rag_is_unavailable": True}
 
-        logger.info(
-            "[PreFlightCheck] RAG source appears relevant. Proceeding normally."
-        )
         return {"is_rag_source_relevant": True}
 
     async def handle_no_plan_node(self, state: ResearchState) -> Dict[str, Any]:
@@ -153,9 +152,6 @@ class ResearchGraph(AgentBase):
         Prepares the state to go directly to the dynamic query generator
         if the initial planner fails.
         """
-        logger.warning(
-            "[HandleNoPlan] No initial search plan was generated. Routing to dynamic query generator."
-        )
         verification_result = {
             "is_sufficient": False,
             "missing_aspects": [state["contextualized_query"]],
@@ -165,7 +161,6 @@ class ResearchGraph(AgentBase):
 
     async def search_executor_node(self, state: ResearchState) -> Dict[str, Any]:
         """Execute search query with robust failure handling"""
-        logger.info("[SearchExecutor] Starting...")
         if not state["pending_queries"]:
             logger.warning("[SearchExecutor] No pending queries. Skipping execution.")
             return {}
@@ -234,10 +229,6 @@ class ResearchGraph(AgentBase):
                     "pending_queries": remaining_queries,
                     "consecutive_search_failures": self.max_consecutive_failures,
                 }
-
-        logger.info(
-            f"[SearchExecutor] Executing search ({search_type.upper()}) for query: '{query_text}'"
-        )
 
         documents = []
         try:
@@ -310,7 +301,6 @@ class ResearchGraph(AgentBase):
 
     async def process_results_node(self, state: ResearchState) -> Dict[str, Any]:
         """Filter, compress, merge results with hybrid strategy"""
-        logger.info("[ProcessResults] Starting...")
         if not state.get("search_results") or not state["search_results"].get(
             "documents"
         ):
@@ -335,9 +325,6 @@ class ResearchGraph(AgentBase):
             ]
             overlap = set(source_ids) & set(state["used_web_urls"])
             ratio = len(overlap) / max(len(source_ids), 1)
-            logger.info(
-                f"[ProcessResults] Web source overlap check: {len(overlap)}/{len(source_ids)} ({ratio:.1%})"
-            )
             if ratio > overlap_threshold:
                 logger.warning(
                     f"[ProcessResults] High web source overlap ({ratio:.1%}). Switching to RAG."
@@ -352,9 +339,6 @@ class ResearchGraph(AgentBase):
             ]
             overlap = set(source_ids) & set(state["used_rag_ids"])
             ratio = len(overlap) / max(len(source_ids), 1)
-            logger.info(
-                f"[ProcessResults] RAG source overlap check: {len(overlap)}/{len(source_ids)} ({ratio:.1%})"
-            )
             if ratio > overlap_threshold:
                 logger.warning(
                     f"[ProcessResults] High RAG source overlap ({ratio:.1%}). Switching to Web."
@@ -367,9 +351,6 @@ class ResearchGraph(AgentBase):
             )
             return {"should_retry_query": True}
 
-        logger.info(
-            f"[ProcessResults] Filtering {len(new_documents)} new documents (from {len(documents)} total)."
-        )
         relevant_indices = await citation_agent.ainvoke(
             history=[HumanMessage(content=current_query)], reference=new_documents
         )
@@ -385,7 +366,6 @@ class ResearchGraph(AgentBase):
             for i in relevant_indices.indexes
             if 0 < i <= len(new_documents)
         ]
-        logger.info(f"[ProcessResults] Found {len(cited_docs)} relevant documents.")
 
         citation_start_index = state.get("citation_counter", 0)
         all_cited_docs_so_far = state.get("cited_documents", [])
@@ -403,17 +383,10 @@ class ResearchGraph(AgentBase):
             current_citation_index += 1
 
         accumulated_len = len(state["accumulated_knowledge"])
-        iteration = len(state.get("completed_queries", []))
 
         should_consolidate = ratio > overlap_threshold * 0.5 or accumulated_len > 10000
-        logger.info(
-            f"[ProcessResults] Consolidation check: {should_consolidate} (ratio: {ratio:.1%}, iter: {iteration}, len: {accumulated_len})"
-        )
 
         if should_consolidate and state["accumulated_knowledge"]:
-            logger.info(
-                "[ProcessResults] Consolidating new docs with existing knowledge."
-            )
             new_merged = await compress_agent.ainvoke_with_merge(
                 query=current_query,
                 new_documents=docs_with_citation_markers,
@@ -421,7 +394,6 @@ class ResearchGraph(AgentBase):
             )
             merged = new_merged if new_merged else state["accumulated_knowledge"]
         else:
-            logger.info("[ProcessResults] Compressing new documents.")
             compressed = await compress_agent.ainvoke(
                 query=current_query, reference=docs_with_citation_markers
             )
@@ -441,11 +413,6 @@ class ResearchGraph(AgentBase):
             new_rag_ids = list(set(state["used_rag_ids"] + source_ids))
         else:
             new_web_urls = list(set(state["used_web_urls"] + source_ids))
-
-        logger.info(
-            f"[ProcessResults] Knowledge updated from {accumulated_len} to {len(merged)} chars. "
-            f"Total sources used (RAG: {len(new_rag_ids)}, Web: {len(new_web_urls)})"
-        )
 
         last_search_result = state["search_results"]
         last_search_result["processed"] = True
@@ -470,10 +437,9 @@ class ResearchGraph(AgentBase):
         - If fallback is unavailable, skip the failed query and continue.
         """
         if not state.get("should_retry_query"):
-            logger.info("[Router] Processing successful. Proceeding to verification.")
             return "verification_agent"
 
-        logger.info(
+        logger.warning(
             "[Router] Soft failure detected. Evaluating retry for the last query."
         )
 
@@ -521,9 +487,6 @@ class ResearchGraph(AgentBase):
 
     async def verification_agent_node(self, state: ResearchState) -> Dict[str, Any]:
         """Verify sufficiency"""
-        logger.info(
-            f"[Verification] Starting... (Iteration {state['iteration_count']}/{state['max_searches']})"
-        )
         if not state.get("accumulated_knowledge"):
             logger.warning(
                 "[Verification] No accumulated knowledge to verify. Defaulting to insufficient."
@@ -570,19 +533,12 @@ class ResearchGraph(AgentBase):
                 }
             }
 
-        logger.info(
-            f"[Verification] Result: is_sufficient={verification_dict['is_sufficient']}, "
-            f"confidence={verification_dict['confidence']}, "
-            f"missing_aspects={len(verification_dict.get('missing_aspects', []))}"
-        )
-
         return {"verification_result": verification_dict}
 
     async def reflection_node(self, state: ResearchState) -> Dict[str, Any]:
         """
         Critiques the current research state and suggests next steps.
         """
-        logger.info("[Reflection] Starting...")
 
         search_history_str = json.dumps(state.get("all_search_history", []), indent=2)
 
@@ -612,14 +568,12 @@ class ResearchGraph(AgentBase):
             logger.error("[Reflection] Failed to generate a valid reflection.")
             return {"reflection_result": {"critique": "N/A", "next_steps": "N/A"}}
 
-        logger.info(f"[Reflection] Critique: {reflection_result['critique']}")
         return {"reflection_result": reflection_result}
 
     async def dynamic_query_generator_node(
         self, state: ResearchState
     ) -> Dict[str, Any]:
         """Generate dynamic queries with search history awareness"""
-        logger.info("[DynamicQueryGenerator] Starting...")
 
         max_iterations = 3
         verification = state["verification_result"]
@@ -631,9 +585,6 @@ class ResearchGraph(AgentBase):
             return {"pending_queries": []}
 
         missing_aspects = verification["missing_aspects"]
-        logger.info(
-            f"[DynamicQueryGenerator] Generating queries for {len(missing_aspects)} missing aspects"
-        )
 
         search_history = []
         for search_result in state.get("all_search_history", []):
@@ -692,28 +643,10 @@ class ResearchGraph(AgentBase):
             )
             return {"pending_queries": []}
 
-        logger.info(
-            f"[DynamicQueryGenerator] Generated {len(new_queries)} new distinct queries."
-        )
-        logger.debug(
-            f"[DynamicQueryGenerator] New queries: {json.dumps(new_queries, indent=2)}"
-        )
-
         return {"pending_queries": new_queries}
-
-    def decide_after_planner(self, state: ResearchState) -> str:
-        """Decides where to go after the query planner."""
-        logger.info("[Router] Deciding route after query planner.")
-        if state.get("pending_queries"):
-            logger.info("[Router] Plan generated. Proceeding to search_executor.")
-            return "pre_flight_rag_check"
-        else:
-            logger.warning("[Router] No plan generated. Proceeding to handle_no_plan.")
-            return "handle_no_plan"
 
     def route_after_dynamic_generation(self, state: ResearchState) -> str:
         """Decides where to go after attempting to generate new queries."""
-        logger.info("[Router] Deciding route after dynamic query generation.")
         if state.get("pending_queries"):
             logger.info(
                 "[Router] New queries generated. Proceeding to search_executor."
@@ -729,10 +662,6 @@ class ResearchGraph(AgentBase):
         """Smart routing based on verification + pending queries analysis"""
         iteration = state["iteration_count"]
         max_searches = state["max_searches"]
-
-        logger.info(
-            f"[Router] Evaluating route after iteration {iteration}/{max_searches}"
-        )
 
         if state.get("consecutive_search_failures", 0) >= self.max_consecutive_failures:
             logger.error(
@@ -761,9 +690,6 @@ class ResearchGraph(AgentBase):
             )
             return "search_executor"
 
-        logger.info(
-            "[Router] No pending queries, but knowledge is insufficient. Generating new queries."
-        )
         return "reflection_node"
 
     def _build_graph(self) -> CompiledStateGraph:

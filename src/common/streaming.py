@@ -20,8 +20,7 @@ class StreamEventBuilder:
 
         sse_data = json.dumps(
             {
-                "type": event.type,
-                "data": event.data,
+                **event.data,
                 "id": event.id,
                 "timestamp": event.timestamp,
             },

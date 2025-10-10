@@ -3,8 +3,6 @@ from typing import Any, AsyncGenerator, Dict, Generator, List, Tuple, Union, cas
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from qdrant_client.models import Filter, models
-
-from src.agents.researcher.main_agent import AgentInputState, MainAgent
 from src.agents.basic import (
     citation_agent,
     filename_agent,
@@ -173,6 +171,7 @@ class ChatService:
                     contextualized_query = await query_context_agent.ainvoke(
                         history=conversation
                     )
+                    contextualized_query = contextualized_query.content
                 span.set_attribute("contextualized_query", contextualized_query)
             if web_search_config.active:
                 with tracer.start_as_current_span("search_service.search"):
@@ -300,8 +299,7 @@ class ChatService:
             contextualized_query = await query_context_agent.ainvoke(
                 history=conversation
             )
-            logger.info(f"Contextualized query: {contextualized_query}")
-
+            contextualized_query = contextualized_query.content
         if web_search_config.active:
             yield StreamEventBuilder.status_update(
                 StreamPhase.WEB_SEARCH,
@@ -612,12 +610,8 @@ class ChatService:
         conversation = await self.sanitize_message(request.message)
 
         if request.agentic:
-            main_agent = MainAgent(kb_id=metadata.get("kb_id"))
-            initial_state: AgentInputState = {
-                "messages": conversation,
-                "web_search": web_search_config,
-            }
-            response = main_agent.generate_streaming_response(initial_state)
+            pass
+
         else:
             response = self.ask_stream(conversation, web_search_config, metadata)
         return response

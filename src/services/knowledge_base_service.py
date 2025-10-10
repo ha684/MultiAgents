@@ -44,10 +44,12 @@ class KnowledgeBaseService:
         logger.info(f"Creating knowledge base: {knowledge_base.name}")
         return await self.kb_repository.create(knowledge_base)
 
-    async def get_knowledge_base_by_id(self, kb_id: str) -> KnowledgeBaseResponse:
+    async def get_knowledge_base_by_id(
+        self, kb_id: str, user_id: str
+    ) -> KnowledgeBaseResponse:
         """Get a knowledge base by its ID."""
         logger.info(f"Fetching knowledge base with ID: {kb_id}")
-        kb = await self.kb_repository.get(UUID(kb_id))
+        kb = await self.kb_repository.get(UUID(kb_id), user_id)
         if not kb:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
         return kb

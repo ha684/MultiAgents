@@ -46,10 +46,12 @@ class DocumentService:
         self.qa_repository = qa_repository
         self.file_processor = FileProcessor()
 
-    async def _verify_knowledge_base_exists(self, knowledge_base_id: uuid.UUID) -> None:
+    async def _verify_knowledge_base_exists(
+        self, knowledge_base_id: uuid.UUID, user_id: str
+    ) -> None:
         """Verify that a knowledge base exists."""
         try:
-            await self.kb_repository.get(knowledge_base_id)
+            await self.kb_repository.get(knowledge_base_id, user_id)
         except Exception as e:
             logger.error(f"Error verifying knowledge base: {str(e)}")
             raise e
@@ -100,7 +102,7 @@ class DocumentService:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Tuple[Document, str]:
         """Upload a document and queue it for processing with retry support for failed documents."""
-        await self._verify_knowledge_base_exists(knowledge_base_id)
+        await self._verify_knowledge_base_exists(knowledge_base_id, tenant_id)
         content_hash = await calculate_hash_from_stream(file)
         existing_document = await self.document_repository.find_by_hash(
             knowledge_base_id, content_hash
@@ -220,9 +222,10 @@ class DocumentService:
         knowledge_base_id: uuid.UUID,
         pagination: PaginationParams,
         search: Optional[SearchParams] = None,
+        user_id: str = None,
     ) -> DocumentListResponse:
         """List documents in a knowledge base."""
-        await self._verify_knowledge_base_exists(knowledge_base_id)
+        await self._verify_knowledge_base_exists(knowledge_base_id, user_id)
 
         result = await self.document_repository.list(
             knowledge_base_id, pagination, search

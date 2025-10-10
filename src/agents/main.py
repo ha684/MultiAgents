@@ -143,7 +143,6 @@ class OrchestratorGraph(AgentBase):
                 "response_metadata": response_metadata,
             }
 
-        # Research Subgraph
         logger.info("Synthesizing research response")
         user_message = state["conversation"][-1].content
         system_prompt = SystemMessage(

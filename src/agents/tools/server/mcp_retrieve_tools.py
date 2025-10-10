@@ -72,5 +72,4 @@ async def think(thought: str) -> str:
                 - Self-reflection on reasoning quality and potential improvements
                 - Final completeness assessment before task completion
     """
-    logger.info(f"Think tool: {thought}")
     return thought

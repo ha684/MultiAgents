@@ -397,11 +397,11 @@ class PromptTemplates:
         <query_structure>
 
         Each query must follow this structure:
-        {{
+        {
             "query": "Specific, focused query (5-15 words, ONE clear topic)",
             "search_type": "rag" or "web",
             "priority": 1-5
-        }}
+        }
 
         **Query Text Guidelines:**
         - ONE specific aspect per query (not "challenges and benefits")
@@ -422,15 +422,15 @@ class PromptTemplates:
         
         2. THEN: Return valid JSON:
 
-        {{
+        {
             "queries": [
-                {{
+                {
                     "query": "...",
                     "search_type": "rag|web",
                     "priority": 1-5
-                }}
+                }
             ]
-        }}
+        }
 
         3. Final message = ONLY the JSON object (no markdown, no explanation)
         4. Ensure valid JSON syntax
@@ -473,50 +473,50 @@ class PromptTemplates:
         "
 
         Response:
-        {{
+        {
             "queries": [
-                {{
+                {
                     "query": "Zero-trust security architecture core principles and framework",
                     "search_type": "rag",
                     "priority": 5
-                }},
-                {{
+                },
+                {
                     "query": "Identity and access management continuous authentication implementation",
                     "search_type": "rag",
                     "priority": 5
-                }},
-                {{
+                },
+                {
                     "query": "Network microsegmentation implementation strategies and tools",
                     "search_type": "rag",
                     "priority": 4
-                }},
-                {{
+                },
+                {
                     "query": "Policy decision point and policy engine architecture design",
                     "search_type": "rag",
                     "priority": 4
-                }},
-                {{
+                },
+                {
                     "query": "Legacy system integration with zero-trust architecture",
                     "search_type": "rag",
                     "priority": 4
-                }},
-                {{
+                },
+                {
                     "query": "Enterprise zero-trust adoption rates and industry benchmarks 2024",
                     "search_type": "web",
                     "priority": 4
-                }},
-                {{
+                },
+                {
                     "query": "Perimeter-based security castle-and-moat model vulnerabilities comparison",
                     "search_type": "web",
                     "priority": 3
-                }},
-                {{
+                },
+                {
                     "query": "Zero-trust network access vendor comparison ZTNA 2024",
                     "search_type": "web",
                     "priority": 3
-                }}
+                }
             ]
-        }}
+        }
 
         </examples>
 
