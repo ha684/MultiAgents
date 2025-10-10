@@ -171,6 +171,13 @@ class SimpleSearchGraph:
         return workflow.compile()
 
     async def run(self, state: SimpleSearchState) -> SimpleSearchState:
-        """Execute simple search graph"""
-        result = await self.graph.ainvoke(state)
-        return result
+        """Execute simple search graph with streaming"""
+        final_state = None
+
+        async for event in self.graph.astream_events(state, version="v2"):
+            kind = event["event"]
+
+            if kind == "on_chain_end" and event.get("name") == "LangGraph":
+                final_state = event.get("data", {}).get("output")
+
+        return final_state if final_state else state

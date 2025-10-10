@@ -17,6 +17,7 @@ from src.agents.graph.schemas import (
 from src.llm.factory import get_llm
 from src.agents.basic.base import AgentBase
 from src.utils import parse_response
+import asyncio
 
 
 class ResearchGraph(AgentBase):
@@ -383,8 +384,11 @@ class ResearchGraph(AgentBase):
             current_citation_index += 1
 
         accumulated_len = len(state["accumulated_knowledge"])
+        iteration_count = state["iteration_count"]
 
-        should_consolidate = ratio > overlap_threshold * 0.5 or accumulated_len > 10000
+        should_consolidate = (
+            accumulated_len > 10000 and iteration_count > 1 and iteration_count % 3 == 0
+        )
 
         if should_consolidate and state["accumulated_knowledge"]:
             new_merged = await compress_agent.ainvoke_with_merge(
@@ -753,24 +757,53 @@ class ResearchGraph(AgentBase):
         return workflow.compile()
 
     async def run(self, state: ResearchState) -> ResearchState:
-        """Run research graph"""
-        logger.info(
-            f"--- Running ResearchGraph for query: '{state.get('contextualized_query')}' ---"
-        )
+        """
+        Run research graph with streaming, handling both timeouts and recursion limits.
+        """
         config = {"recursion_limit": 100}
-        result = await self.graph.ainvoke(state, config=config)
+        timeout_seconds = 600
 
-        accumulated_knowledge = result.get("accumulated_knowledge", "")
+        last_known_state = state
+        final_state = None
 
-        if not accumulated_knowledge:
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                async for event in self.graph.astream_events(
+                    state, config=config, version="v2"
+                ):
+                    kind = event["event"]
+
+                    if kind == "on_chain_end" and event["name"] != "LangGraph":
+                        node_output = event.get("data", {}).get("output")
+                        if node_output:
+                            last_known_state = node_output
+
+                    if kind == "on_chain_end" and event.get("name") == "LangGraph":
+                        final_state = event.get("data", {}).get("output")
+                        last_known_state = final_state
+
+        except RecursionError:
             logger.warning(
-                "--- ResearchGraph finished, but NO KNOWLEDGE was accumulated. The research process may have failed or found no relevant information. ---"
+                "🛑 Sub-graph 'ResearchGraph' was stopped by LangGraph due to reaching recursion limit (`recursion_limit`). "
+                "Returning the most recent accumulated result."
             )
-        else:
-            logger.info(
-                f"--- ResearchGraph finished. Final knowledge length: {len(accumulated_knowledge)} chars. ---\n\n"
+            return last_known_state
+
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"⚠️ Sub-graph 'ResearchGraph' timed out after {timeout_seconds} seconds. "
+                f"Returning the most recent accumulated result."
             )
-        return result
+            return last_known_state
+
+        except Exception as e:
+            logger.error(
+                f"❌ Sub-graph 'ResearchGraph' encountered an unexpected error: {e}. "
+                "Returning the most recent accumulated result."
+            )
+            return last_known_state
+
+        return final_state if final_state else last_known_state
 
 
 def parse_planner_response(content: str) -> Optional[SearchPlanSchema]:

@@ -13,13 +13,13 @@ from src.agents.graph.schemas import RouteDecision
 from src.agents.graph.simple_search_graph import SimpleSearchGraph
 from src.agents.graph.research_graph import ResearchGraph
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.services.types import Message
-from src.common.types import TextPart, RetrievalContext
 from src.utils import parse_response
 from src.services.conversation_service import ConversationService
 import tiktoken
 import uuid
 from src.db.models.conversation import MessageStatus
+from langchain_core.runnables.schema import StreamEvent
+from typing import AsyncGenerator
 
 
 class OrchestratorGraph(AgentBase):
@@ -208,23 +208,18 @@ class OrchestratorGraph(AgentBase):
 
         return workflow.compile()
 
-    async def run(self, conversation: List[BaseMessage]) -> Dict[str, Any]:
+    async def stream(
+        self, conversation: List[BaseMessage]
+    ) -> AsyncGenerator[StreamEvent, None]:
         """
         Execute orchestrator graph with full conversation
-
-        Args:
-            conversation: Full conversation history (List[BaseMessage])
-            metadata: The metadata of the search
-
-        Returns:
-            Dict with answer, metadata, contexts, and cited documents
         """
         try:
             original_query = conversation[-1].content
             conversation_metadata = conversation[-1].additional_kwargs.get(
                 "message_metadata", {}
             )
-            conversation_id = conversation_metadata.get("conversation_id")
+            # conversation_id = conversation_metadata.get("conversation_id")
             user_message_id = conversation_metadata.get("message_id")
 
             initial_state = OrchestratorState(
@@ -239,38 +234,43 @@ class OrchestratorGraph(AgentBase):
                 response_metadata={},
             )
 
-            result = await self.graph.ainvoke(initial_state)
+            async for event in self.graph.astream_events(initial_state, version="v2"):
+                yield event
+                if (
+                    event["event"] == "on_chain_end"
+                    and event.get("name") == "LangGraph"
+                ):
+                    final_state = event.get("data", {}).get("output")
 
-            metadata: Dict[str, Any] = result.get("response_metadata", {})
-            metadata.update({"route": result.get("route_decision")})
-            retrieval_contexts = result.get("retrieval_contexts", {})
+            metadata: Dict[str, Any] = final_state.get("response_metadata", {})
+            metadata.update({"route": final_state.get("route_decision")})
+            retrieval_contexts = final_state.get("retrieval_contexts", {})
             metadata.update({"retrieval_contexts": retrieval_contexts})
 
             if not retrieval_contexts:
-                cited_documents = result.get("cited_documents", [])
+                cited_documents = final_state.get("cited_documents", [])
                 retrieval_contexts = {
                     "cited_chunks": cited_documents,
                     "total_retrieved": 0,
                     "total_cited": len(cited_documents),
                     "original_query": original_query,
-                    "contextualized_query": result.get("contextualized_query", ""),
+                    "contextualized_query": final_state.get("contextualized_query", ""),
                 }
 
-            message = Message(
-                parts=[TextPart(type="text", text=result["final_answer"])],
-                role="agent",
-                metadata=metadata,
-                retrieval_context=RetrievalContext(**retrieval_contexts),
-            )
+            # message = Message(
+            #     parts=[TextPart(type="text", text=final_state["final_answer"])],
+            #     role="agent",
+            #     metadata=metadata,
+            #     retrieval_context=RetrievalContext(**retrieval_contexts),
+            # )
 
-            await self.conv_service.add_message(message, conversation_id)
+            # await self.conv_service.add_message(message, conversation_id)
 
-            if user_message_id:
-                await self.conv_service.update_message_status(
-                    uuid.UUID(user_message_id), MessageStatus.COMPLETED
-                )
+            # if user_message_id:
+            #     await self.conv_service.update_message_status(
+            #         uuid.UUID(user_message_id), MessageStatus.COMPLETED
+            #     )
 
-            return message
         except Exception as e:
             logger.error(f"Error running orchestrator graph: {e}")
             if user_message_id:
@@ -278,6 +278,14 @@ class OrchestratorGraph(AgentBase):
                     uuid.UUID(user_message_id), MessageStatus.FAILED
                 )
             raise e
+
+    async def invoke(self, conversation: List[BaseMessage]) -> Optional[Dict[str, Any]]:
+        """Non-streaming execution (backward compatible)"""
+        final_result = None
+        async for event in self.stream(conversation):
+            if event["event"] == "on_chain_end" and event.get("name") == "LangGraph":
+                final_result = event.get("data", {}).get("output")
+        return final_result
 
 
 def parse_route_decision(content: str) -> Optional[RouteDecision]:
