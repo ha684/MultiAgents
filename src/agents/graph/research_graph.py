@@ -754,7 +754,7 @@ class ResearchGraph(AgentBase):
             },
         )
 
-        return workflow.compile()
+        return workflow.compile(name="ResearchGraph")
 
     async def run(self, state: ResearchState) -> ResearchState:
         """

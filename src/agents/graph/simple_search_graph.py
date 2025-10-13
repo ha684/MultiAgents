@@ -8,6 +8,7 @@ from src.utils.logger_conf import logger
 from src.agents.graph.state import SimpleSearchState
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search
 import tiktoken
+import asyncio
 
 
 class SimpleSearchGraph:
@@ -168,16 +169,44 @@ class SimpleSearchGraph:
 
         workflow.set_finish_point("filter_citations")
 
-        return workflow.compile()
+        return workflow.compile(name="SimpleSearchGraph")
 
     async def run(self, state: SimpleSearchState) -> SimpleSearchState:
         """Execute simple search graph with streaming"""
+        config = {"recursion_limit": 2}
+        timeout_seconds = 180
+
+        last_known_state = state
         final_state = None
 
-        async for event in self.graph.astream_events(state, version="v2"):
-            kind = event["event"]
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                async for event in self.graph.astream_events(
+                    state, config=config, version="v2"
+                ):
+                    kind = event["event"]
 
-            if kind == "on_chain_end" and event.get("name") == "LangGraph":
-                final_state = event.get("data", {}).get("output")
+                    if kind == "on_chain_end" and event["name"] != "LangGraph":
+                        node_output = event.get("data", {}).get("output")
+                        if node_output:
+                            last_known_state = node_output
 
-        return final_state if final_state else state
+                    if kind == "on_chain_end" and event.get("name") == "LangGraph":
+                        final_state = event.get("data", {}).get("output")
+                        last_known_state = final_state
+
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"⚠️ Sub-graph 'SimpleSearchGraph' timed out after {timeout_seconds} seconds. "
+                f"Returning the most recent accumulated result."
+            )
+            return last_known_state
+
+        except Exception as e:
+            logger.error(
+                f"❌ Sub-graph 'SimpleSearchGraph' encountered an unexpected error: {e}. "
+                "Returning the most recent accumulated result."
+            )
+            return last_known_state
+
+        return final_state if final_state else last_known_state

@@ -1,25 +1,29 @@
 # src/agents/main.py
-from typing import Dict, Any, List, Optional
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langgraph.graph import StateGraph
-from langgraph.graph.state import CompiledStateGraph
-from src.agents.basic import response_agent, query_context_agent
-from src.agents.basic.base import AgentBase
-from src.llm.factory import get_llm
-from src.utils.logger_conf import logger
-from src.agents.graph.state import OrchestratorState, SimpleSearchState, ResearchState
-from src.agents.graph.prompts import PromptTemplates
-from src.agents.graph.schemas import RouteDecision
-from src.agents.graph.simple_search_graph import SimpleSearchGraph
-from src.agents.graph.research_graph import ResearchGraph
-from src.agents.tools.server.mcp_retrieve_tools import think
-from src.utils import parse_response
-from src.services.conversation_service import ConversationService
+import asyncio
 import tiktoken
 import uuid
-from src.db.models.conversation import MessageStatus
+from typing import Any, AsyncGenerator, Dict, List, Optional
+
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables.schema import StreamEvent
-from typing import AsyncGenerator
+from langgraph.graph import StateGraph
+from langgraph.graph.state import CompiledStateGraph
+
+
+from src.agents.basic import query_context_agent, response_agent
+from src.agents.basic.base import AgentBase
+from src.agents.graph.prompts import PromptTemplates
+from src.agents.graph.research_graph import ResearchGraph
+from src.agents.graph.schemas import RouteDecision
+from src.agents.graph.simple_search_graph import SimpleSearchGraph
+from src.agents.graph.state import OrchestratorState, ResearchState, SimpleSearchState
+from src.agents.tools.server.mcp_retrieve_tools import think
+from src.common.types import Message, RetrievalContext, TextPart
+from src.db.models.conversation import MessageStatus
+from src.llm.factory import get_llm
+from src.services.conversation_service import ConversationService
+from src.utils import parse_response
+from src.utils.logger_conf import logger
 
 
 class OrchestratorGraph(AgentBase):
@@ -28,7 +32,7 @@ class OrchestratorGraph(AgentBase):
     """
 
     def __init__(self):
-        self.llm = get_llm("nxchat")
+        self.llm = get_llm(provider="nxchat")  # spell-checker: disable-line
         self.thinking_llm = self.llm.bind_tools([think])
         tokenizer = tiktoken.encoding_for_model("gpt-4o")
         self.simple_search_graph = SimpleSearchGraph(tokenizer)
@@ -133,7 +137,7 @@ class OrchestratorGraph(AgentBase):
         if route == "simple_search":
             logger.info("Synthesizing simple search response")
             response = await response_agent.ainvoke(
-                contexts=state["retrieval_contexts"]["cited_chunks"],
+                contexts=state["retrieval_contexts"].get("cited_chunks", []),
                 history=state["conversation"],
             )
             response_metadata = state.get("response_metadata", {})
@@ -206,7 +210,7 @@ class OrchestratorGraph(AgentBase):
 
         workflow.set_finish_point("final_synthesizer")
 
-        return workflow.compile()
+        return workflow.compile(name="MainOrchestrator")
 
     async def stream(
         self, conversation: List[BaseMessage]
@@ -219,7 +223,7 @@ class OrchestratorGraph(AgentBase):
             conversation_metadata = conversation[-1].additional_kwargs.get(
                 "message_metadata", {}
             )
-            # conversation_id = conversation_metadata.get("conversation_id")
+            conversation_id = conversation_metadata.get("conversation_id")
             user_message_id = conversation_metadata.get("message_id")
 
             initial_state = OrchestratorState(
@@ -234,13 +238,42 @@ class OrchestratorGraph(AgentBase):
                 response_metadata={},
             )
 
-            async for event in self.graph.astream_events(initial_state, version="v2"):
-                yield event
-                if (
-                    event["event"] == "on_chain_end"
-                    and event.get("name") == "LangGraph"
-                ):
-                    final_state = event.get("data", {}).get("output")
+            config = {"recursion_limit": 100}
+            timeout_seconds = 600
+            last_known_state = initial_state
+            final_state = None
+            try:
+                async with asyncio.timeout(timeout_seconds):
+                    async for event in self.graph.astream_events(
+                        initial_state, config=config, version="v2"
+                    ):
+                        yield event
+                        if (
+                            event["event"] == "on_chain_end"
+                            and event.get("name") == "MainOrchestrator"
+                        ):
+                            final_state = event.get("data", {}).get("output")
+
+                        if (
+                            event["event"] == "on_chain_end"
+                            and event["name"] != "MainOrchestrator"
+                        ):
+                            node_output = event.get("data", {}).get("output")
+                            if node_output:
+                                last_known_state = node_output
+
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"⚠️ 'OrchestratorGraph' timed out after {timeout_seconds} seconds. "
+                    f"Returning the most recent accumulated result."
+                )
+                final_state = last_known_state
+            except Exception as e:
+                logger.error(
+                    f"❌ 'OrchestratorGraph' encountered an unexpected error: {e}. "
+                    "Returning the most recent accumulated result."
+                )
+                final_state = last_known_state
 
             metadata: Dict[str, Any] = final_state.get("response_metadata", {})
             metadata.update({"route": final_state.get("route_decision")})
@@ -257,19 +290,19 @@ class OrchestratorGraph(AgentBase):
                     "contextualized_query": final_state.get("contextualized_query", ""),
                 }
 
-            # message = Message(
-            #     parts=[TextPart(type="text", text=final_state["final_answer"])],
-            #     role="agent",
-            #     metadata=metadata,
-            #     retrieval_context=RetrievalContext(**retrieval_contexts),
-            # )
+            message = Message(
+                parts=[TextPart(type="text", text=final_state["final_answer"])],
+                role="agent",
+                metadata=metadata,
+                retrieval_context=RetrievalContext(**retrieval_contexts),
+            )
 
-            # await self.conv_service.add_message(message, conversation_id)
+            await self.conv_service.add_message(message, conversation_id)
 
-            # if user_message_id:
-            #     await self.conv_service.update_message_status(
-            #         uuid.UUID(user_message_id), MessageStatus.COMPLETED
-            #     )
+            if user_message_id:
+                await self.conv_service.update_message_status(
+                    uuid.UUID(user_message_id), MessageStatus.COMPLETED
+                )
 
         except Exception as e:
             logger.error(f"Error running orchestrator graph: {e}")

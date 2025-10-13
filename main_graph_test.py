@@ -55,9 +55,11 @@ class OrchestratorStreamer:
                 self._print_box(f"🔄 NODE: {name}", color="blue")
 
             elif kind == "on_chain_end":
-                if name == "LangGraph":
+                if name == "MainOrchestrator":
                     final_result = event.get("data", {}).get("output")
-                    self._print_box("✅ GRAPH COMPLETED", color="green")
+                    self._print_box("✅ Orchestrator Graph COMPLETED", color="green")
+                else:
+                    self._print_box(f"🔄 NODE: {name}", color="blue")
 
             elif kind == "on_chat_model_stream":
                 chunk = event["data"]["chunk"]
@@ -115,7 +117,7 @@ async def main():
     orchestrator = OrchestratorGraph()
 
     human_message = HumanMessage(
-        content="What are the best practices for implementing microservices architecture? use deep search",
+        content="What are the best practices for implementing microservices architecture?",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]
