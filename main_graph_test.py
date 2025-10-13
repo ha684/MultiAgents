@@ -1,4 +1,4 @@
-from src.agents.main import OrchestratorGraph
+from src.agents.main_graph import OrchestratorGraph
 from src.models.chat import SearchProvider, WebSearchConfig
 from langchain_core.messages import HumanMessage
 from src.config.settings import settings

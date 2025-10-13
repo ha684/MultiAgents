@@ -182,17 +182,14 @@ class OrchestratorGraph(AgentBase):
         """Build orchestrator graph"""
         workflow = StateGraph(OrchestratorState)
 
-        # Add nodes
         workflow.add_node("contextualize_query", self.contextualize_query_node)
         workflow.add_node("router", self.router_node)
         workflow.add_node("simple_search_subgraph", self.simple_search_subgraph_node)
         workflow.add_node("research_subgraph_node", self.research_subgraph_node)
         workflow.add_node("final_synthesizer", self.final_synthesizer_node)
 
-        # Entry point
         workflow.set_entry_point("contextualize_query")
 
-        # Flow
         workflow.add_edge("contextualize_query", "router")
 
         workflow.add_conditional_edges(

@@ -21,7 +21,7 @@ from src.services.web_search_service import web_search_service
 from src.tracking.observability import tracer
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
-from src.agents.main import OrchestratorGraph
+from src.agents.main_graph import OrchestratorGraph
 import tiktoken
 from src.db.models.conversation import MessageStatus
 
