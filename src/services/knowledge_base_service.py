@@ -49,7 +49,7 @@ class KnowledgeBaseService:
     ) -> KnowledgeBaseResponse:
         """Get a knowledge base by its ID."""
         logger.info(f"Fetching knowledge base with ID: {kb_id}")
-        kb = await self.kb_repository.get(UUID(kb_id), user_id)
+        kb = await self.kb_repository.get(kb_id, user_id)
         if not kb:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
         return kb
