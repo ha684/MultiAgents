@@ -1,4 +1,4 @@
-#src/rag/vector/__init__.py
+# src/rag/vector/__init__.py
 from .storage import VectorStorage
 from .retrieval import VectorRetrieval
 from .migrations import VectorStorageMigration

@@ -40,8 +40,8 @@ prompt_en: |
   - **Metadata**: Title, module, sheet name, timestamps
 
   ## OUTPUT FORMAT
-  **CONTENT TYPE**: [Flowchart / Table / Mixed]  
-  **Sub-type**: [...]  
+  **CONTENT TYPE**: [Flowchart / Table / Mixed]
+  **Sub-type**: [...]
   **Context**: [...]
 
   If flowchart:
@@ -50,13 +50,13 @@ prompt_en: |
   If non-flow:
   - Sections, tables, charts, forms, metadata
 
-  **Preserve structure and relationships.**  
+  **Preserve structure and relationships.**
   **Mark keywords for semantic retrieval.**
 
   ## FINAL CHECK
-  - Flowcharts → plain text only  
-  - Tables → only for structured/non-flow content  
-  - No logic inside tables  
+  - Flowcharts → plain text only
+  - Tables → only for structured/non-flow content
+  - No logic inside tables
   - Clear, searchable, logically separated output
 
   Act with the **accuracy of a OCR system high quality** and the **clarity of an analyst**.

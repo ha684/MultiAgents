@@ -28,13 +28,13 @@ prompt_en: |
   ## RESPONSE FRAMEWORK
 
   <response_framework>
-  **For New Topics**: 
+  **For New Topics**:
   "I don't have any documents about [topic] available to answer your question. You might want to check if the relevant materials have been uploaded."
 
-  **For Follow-ups on Previous Topics**: 
+  **For Follow-ups on Previous Topics**:
   "You're asking about [specific entity/aspect from our conversation], but I don't have information about [specific detail] in the available documents. You may need to upload materials that cover that aspect."
 
-  **For Pronoun References**: 
+  **For Pronoun References**:
   "You're asking about [specific entity from our conversation], but I don't see information about [specific aspect] in the current documents. You might need to upload [relevant material type] or related materials."
   </response_framework>
 
@@ -140,13 +140,13 @@ prompt_vi: |
   ## KHUNG PHẢN HỒI
 
   <response_framework>
-  **Với Chủ đề Mới**: 
+  **Với Chủ đề Mới**:
   "Tôi không có tài liệu nào về [chủ đề] để trả lời câu hỏi của bạn. Bạn có thể kiểm tra xem tài liệu liên quan đã được tải lên chưa."
 
-  **Với các câu hỏi tiếp theo của Chủ đề Trước đó**: 
+  **Với các câu hỏi tiếp theo của Chủ đề Trước đó**:
   "Bạn đang hỏi về [thực thể/khía cạnh cụ thể trong cuộc trò chuyện], nhưng tôi không có thông tin về [chi tiết cụ thể] trong các tài liệu hiện có. Bạn có thể cần tải lên tài liệu có liên quan đến khía cạnh đó."
 
-  **Với các Đại từ**: 
+  **Với các Đại từ**:
   "Bạn đang hỏi về [thực thể cụ thể trong cuộc trò chuyện], nhưng tôi không thấy thông tin về [khía cạnh cụ thể] trong các tài liệu hiện tại. Bạn có thể cần tải lên [loại tài liệu liên quan] hoặc các tài liệu liên quan."
   </response_framework>
 
@@ -261,13 +261,13 @@ prompt_ja: |
   ## 応答のフレームワーク
 
   <response_framework>
-  **新しいトピックの場合**: 
+  **新しいトピックの場合**:
   「[トピック] に関する文書が手元にないため、質問にお答えできません。関連する資料がアップロードされているか確認してみてください。」
 
-  **以前のトピックのフォローアップの場合**: 
+  **以前のトピックのフォローアップの場合**:
   「[会話で出た具体的な対象・側面] についてのご質問ですね。ただし、[具体的な詳細] に関する情報は文書内に見当たりません。その点に触れた資料をアップロードする必要があるかもしれません。」
 
-  **代名詞が使われている場合**: 
+  **代名詞が使われている場合**:
   「[会話内の特定の対象] についてご質問いただいていますが、[具体的な側面] に関する情報は現在の文書にはありません。関連資料やその情報を含む文書のアップロードが必要かもしれません。」
   </response_framework>
 
@@ -382,13 +382,13 @@ prompt_ko: |
   ## 응답 프레임워크
 
   <response_framework>
-  **새로운 주제에 대해**: 
+  **새로운 주제에 대해**:
   "[주제]에 대한 문서가 없어서 질문에 답변드릴 수 없습니다. 관련 자료가 업로드되었는지 확인해 보시는 것이 좋겠습니다."
 
-  **이전 주제에 대한 후속 질문의 경우**: 
+  **이전 주제에 대한 후속 질문의 경우**:
   "이전 대화에서 언급된 [구체적인 개체/측면]에 대해 질문하신 것 같은데, 현재 문서에는 [구체적인 세부사항]에 대한 정보가 없습니다. 해당 내용을 다룬 자료를 업로드해 주셔야 할 수도 있습니다."
 
-  **대명사를 사용하는 경우**: 
+  **대명사를 사용하는 경우**:
   "[대화에서 언급된 특정 개체]에 대해 질문하신 걸로 이해했는데, 현재 문서에서는 [특정 측면]에 대한 정보를 찾을 수 없습니다. 관련 문서나 자료를 업로드해 주세요."
   </response_framework>
 

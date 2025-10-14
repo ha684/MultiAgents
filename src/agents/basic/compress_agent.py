@@ -138,7 +138,7 @@ Example 1: Financial Query
 
 Documents:
 - [CITATION: 5] Q2 2024 Financial Results: Revenue $50M, profit $8M, driven by enterprise sales
-- [CITATION: 7] Annual Summary: Q2 revenue $50M, strong growth trajectory  
+- [CITATION: 7] Annual Summary: Q2 revenue $50M, strong growth trajectory
 - [CITATION: 12] CFO Report: Q2 details - $50M revenue (25% YoY), $8M profit (16% margin), enterprise segment grew 40%
 
 Query: "What were the Q2 2024 financial results?"
@@ -298,7 +298,7 @@ WRONG: Keep old + add new = two separate statements → SIZE DOUBLES
 **Example of CORRECT behavior:**
 ```
 Existing: "Revenue was $50M in Q2 ([Q2 Report][5])"
-New doc [18]: "Q2 revenue reached $50M"  
+New doc [18]: "Q2 revenue reached $50M"
 CORRECT: "Revenue was $50M in Q2 ([Q2 Report][5], [Q2 Update][18])" → SIZE UNCHANGED
 ```
 
@@ -314,7 +314,7 @@ For EVERY piece of information in new documents, classify as:
 - Definition: Same fact already exists in knowledge base
 - Action: ADD new citation to existing fact
 - DO NOT: Repeat the fact in a new location
-- Example: 
+- Example:
   - Existing: "Feature A provides real-time processing ([Spec][3])"
   - New [20]: "Feature A offers real-time processing"
   - Result: "Feature A provides real-time processing ([Spec][3], [Tech Doc][20])"
@@ -373,7 +373,7 @@ Growth: Minimal (just +citation)
 
 For COMPLEMENTARY:
 ```
-Old: "Revenue: $50M ([Q2][5])"  
+Old: "Revenue: $50M ([Q2][5])"
 New: [18] adds "driven by enterprise sales"
 Action: "Revenue: $50M, driven primarily by enterprise sales ([Q2][5], [Update][18])"
 Growth: Moderate (new detail)
@@ -454,7 +454,7 @@ New Documents:
 [Uses think tool]:
 "Classification:
 - [18] revenue $50M: DUPLICATE of existing
-- [18] profit $8M: DUPLICATE of existing  
+- [18] profit $8M: DUPLICATE of existing
 - [22] revenue $50M: DUPLICATE of existing
 - [22] 'strong performance': Too vague, don't add
 
@@ -547,7 +547,7 @@ The project has two key dates. The internal QA completion deadline is June 15, 2
 1. **Always use 'think' tool first** - classify all new info before consolidating
 2. **Eliminate all redundancy** - same fact appears MAX once
 3. **Merge citations for duplicates** - don't repeat content
-4. **Enhance, don't duplicate** - add details to existing facts when appropriate  
+4. **Enhance, don't duplicate** - add details to existing facts when appropriate
 5. **Only grow when justified** - by novel information
 6. **Preserve all existing citations** - never remove
 7. **Maintain organization** - clear structure, easy to reference

@@ -40,7 +40,7 @@ class A2AClient:
         elif url:
             self.url = url
         else:
-            raise ValueError('Must provide either agent_card or url')
+            raise ValueError("Must provide either agent_card or url")
         self.timeout = timeout
 
     async def send_task(self, payload: dict[str, Any]) -> SendTaskResponse:
@@ -53,7 +53,7 @@ class A2AClient:
         request = SendTaskStreamingRequest(params=payload)
         async with httpx.AsyncClient(timeout=None) as client:
             async with aconnect_sse(
-                client, 'POST', self.url, json=request.model_dump()
+                client, "POST", self.url, json=request.model_dump()
             ) as event_source:
                 print(f"Event source: {event_source}")
                 try:
@@ -89,14 +89,10 @@ class A2AClient:
         self, payload: dict[str, Any]
     ) -> SetTaskPushNotificationResponse:
         request = SetTaskPushNotificationRequest(params=payload)
-        return SetTaskPushNotificationResponse(
-            **await self._send_request(request)
-        )
+        return SetTaskPushNotificationResponse(**await self._send_request(request))
 
     async def get_task_callback(
         self, payload: dict[str, Any]
     ) -> GetTaskPushNotificationResponse:
         request = GetTaskPushNotificationRequest(params=payload)
-        return GetTaskPushNotificationResponse(
-            **await self._send_request(request)
-        )
+        return GetTaskPushNotificationResponse(**await self._send_request(request))

@@ -65,7 +65,12 @@ class ConversationService:
         return await self.conv_repository.update_conversation(conversation, user_id)
 
     async def update_message_status(
-        self, message_id: uuid.UUID, status: MessageStatus
+        self,
+        message_id: uuid.UUID,
+        status: MessageStatus,
+        error_details: str | None = None,
     ) -> bool:
         """Update message status"""
-        return await self.conv_repository.update_message_status(message_id, status)
+        return await self.conv_repository.update_message_status(
+            message_id, status, error_details
+        )

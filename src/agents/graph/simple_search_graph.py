@@ -173,7 +173,7 @@ class SimpleSearchGraph:
 
     async def run(self, state: SimpleSearchState) -> SimpleSearchState:
         """Execute simple search graph with streaming"""
-        config = {"recursion_limit": 2}
+        config = {"recursion_limit": 10}
         timeout_seconds = 180
 
         last_known_state = state

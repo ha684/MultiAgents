@@ -1,3 +1,4 @@
+# src/common/streaming.py
 from typing import Dict, Any, Optional, Union
 import json
 from src.models.streaming import StreamEventType, StreamEvent, StreamPhase

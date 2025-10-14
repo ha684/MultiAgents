@@ -32,7 +32,7 @@ class OrchestratorGraph(AgentBase):
     """
 
     def __init__(self):
-        self.llm = get_llm(provider="nxchat")  # spell-checker: disable-line
+        self.llm = get_llm(provider="nxchat")
         self.thinking_llm = self.llm.bind_tools([think])
         tokenizer = tiktoken.encoding_for_model("gpt-4o")
         self.simple_search_graph = SimpleSearchGraph(tokenizer)
@@ -51,6 +51,7 @@ class OrchestratorGraph(AgentBase):
             contextualized = await query_context_agent.ainvoke(
                 history=state["conversation"]
             )
+            contextualized = contextualized.content
             logger.info(f"Contextualized: '{original_query}' → '{contextualized}'")
         else:
             contextualized = original_query
@@ -220,8 +221,8 @@ class OrchestratorGraph(AgentBase):
             conversation_metadata = conversation[-1].additional_kwargs.get(
                 "message_metadata", {}
             )
-            conversation_id = conversation_metadata.get("conversation_id")
-            user_message_id = conversation_metadata.get("message_id")
+            conversation_metadata.get("conversation_id")
+            conversation_metadata.get("message_id")
 
             initial_state = OrchestratorState(
                 conversation=conversation,
@@ -287,35 +288,70 @@ class OrchestratorGraph(AgentBase):
                     "contextualized_query": final_state.get("contextualized_query", ""),
                 }
 
-            message = Message(
+            Message(
                 parts=[TextPart(type="text", text=final_state["final_answer"])],
                 role="agent",
                 metadata=metadata,
                 retrieval_context=RetrievalContext(**retrieval_contexts),
             )
 
-            await self.conv_service.add_message(message, conversation_id)
+            # await self.conv_service.add_message(message, conversation_id)
 
-            if user_message_id:
-                await self.conv_service.update_message_status(
-                    uuid.UUID(user_message_id), MessageStatus.COMPLETED
-                )
+            # if user_message_id:
+            #     await self.conv_service.update_message_status(
+            #         uuid.UUID(user_message_id), MessageStatus.COMPLETED
+            #     )
 
         except Exception as e:
             logger.error(f"Error running orchestrator graph: {e}")
-            if user_message_id:
-                await self.conv_service.update_message_status(
-                    uuid.UUID(user_message_id), MessageStatus.FAILED
-                )
+            # if user_message_id:
+            #     await self.conv_service.update_message_status(
+            #         uuid.UUID(user_message_id), MessageStatus.FAILED, str(e)
+            #     )
             raise e
 
-    async def invoke(self, conversation: List[BaseMessage]) -> Optional[Dict[str, Any]]:
+    async def ainvoke(
+        self, conversation: List[BaseMessage]
+    ) -> Optional[Dict[str, Any]]:
         """Non-streaming execution (backward compatible)"""
-        final_result = None
-        async for event in self.stream(conversation):
-            if event["event"] == "on_chain_end" and event.get("name") == "LangGraph":
-                final_result = event.get("data", {}).get("output")
-        return final_result
+        try:
+            final_result = None
+            conversation_metadata = conversation[-1].additional_kwargs.get(
+                "message_metadata", {}
+            )
+            async for event in self.stream(conversation):
+                if (
+                    event["event"] == "on_chain_end"
+                    and event.get("name") == "LangGraph"
+                ):
+                    final_result = event.get("data", {}).get("output")
+
+            message = Message(
+                parts=[TextPart(type="text", text=final_result["final_answer"])],
+                role="agent",
+                metadata=final_result["response_metadata"],
+                retrieval_context=RetrievalContext(
+                    **final_result["retrieval_contexts"]
+                ),
+            )
+            await self.conv_service.add_message(
+                message, conversation_metadata.get("conversation_id")
+            )
+            if conversation_metadata.get("message_id"):
+                await self.conv_service.update_message_status(
+                    uuid.UUID(conversation_metadata.get("message_id")),
+                    MessageStatus.COMPLETED,
+                )
+            return final_result
+        except Exception as e:
+            logger.error(f"Error running orchestrator graph: {e}")
+            if conversation_metadata.get("message_id"):
+                await self.conv_service.update_message_status(
+                    uuid.UUID(conversation_metadata.get("message_id")),
+                    MessageStatus.FAILED,
+                    str(e),
+                )
+            raise e
 
 
 def parse_route_decision(content: str) -> Optional[RouteDecision]:

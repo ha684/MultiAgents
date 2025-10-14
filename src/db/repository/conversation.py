@@ -204,7 +204,10 @@ class ConversationRepository:
             raise e
 
     async def update_message_status(
-        self, message_id: uuid.UUID, status: MessageStatus
+        self,
+        message_id: uuid.UUID,
+        status: MessageStatus,
+        error_details: str | None = None,
     ) -> bool:
         """Update message status"""
         try:
@@ -215,6 +218,7 @@ class ConversationRepository:
                 if not message:
                     return False
                 message.status = status
+                message.error_details = error_details
                 await session.flush()
                 await session.refresh(message)
             return True

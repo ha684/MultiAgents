@@ -7,6 +7,7 @@ class StdoutWrapper(TextIO):
     """
     `sys.stdout` wrapper for both Google Colab and local environment.
     """
+
     def __init__(self) -> None:
         self.temp_file = tempfile.NamedTemporaryFile(
             mode="w+", delete=False, encoding="utf-8"

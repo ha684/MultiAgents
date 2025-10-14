@@ -25,7 +25,7 @@ loggers:
     level: INFO
     handlers: [default]
     propagate: no # Ngăn không cho log lan truyền lên logger gốc
-    
+
   # Cấu hình cho logger báo access của uvicorn
   uvicorn.access:
     level: INFO

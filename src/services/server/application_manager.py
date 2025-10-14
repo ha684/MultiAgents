@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from ...common.types import AgentCard, Message, Task
 from ...services.types import Conversation, Event
 
+
 class ApplicationManager(ABC):
     @abstractmethod
     async def create_conversation(self, user_id: str) -> Conversation:

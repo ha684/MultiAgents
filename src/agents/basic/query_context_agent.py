@@ -56,7 +56,7 @@ User's Latest Query: "What about their market share?"
 Reformulated Query: "What is Tesla's electric vehicle market share in Q4 2023?"
 
 **Example 2 - Complex Multi-Topic (Thinking Helpful):**
-Conversation Context: 
+Conversation Context:
 - Discussed noise in SFT data for LLMs
 - Talked about overfitting challenges
 - Mentioned data selection strategies
@@ -69,7 +69,7 @@ User's Latest Query: "what else can we do?"
 Reformulated Query: "What additional strategies and methods can be used to mitigate the impact of noise in SFT supervised fine-tuning data for LLMs beyond careful data selection, noise injection strategies, language-specific considerations, and larger training sets?"
 
 **Example 3 - Ambiguous Reference (Thinking Helpful):**
-Conversation Context: 
+Conversation Context:
 - Discussed Microsoft's AI initiatives and Azure
 - Then talked about Google's AI products and cloud
 - Then discussed Amazon's AWS services

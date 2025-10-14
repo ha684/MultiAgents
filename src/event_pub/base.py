@@ -46,7 +46,7 @@ class BaseEventPublisher(abc.ABC):
 
         Args:
             channel (str): The name of the channel/topic to subscribe to.
-            
+
         Yields:
             dict: Event data received from the channel.
         """

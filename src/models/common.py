@@ -48,4 +48,3 @@ class BulkOperationResponse(BaseModel):
     success_count: int
     failure_count: int
     errors: Optional[List[dict]] = None
-

@@ -15,7 +15,7 @@ class InferenceAPIEmbeddings(BaseModel, Embeddings):
     """
 
     model_config = ConfigDict(extra="allow", protected_namespaces=())
-    
+
     api_key: str
     model_name: str
     api_url: str
@@ -43,7 +43,7 @@ class InferenceAPIEmbeddings(BaseModel, Embeddings):
             model_name=model_name,
             api_url=api_url,
             retries=retries,
-            batch_size=batch_size
+            batch_size=batch_size,
         )
 
     @property
@@ -65,12 +65,12 @@ class InferenceAPIEmbeddings(BaseModel, Embeddings):
 
                     data = response.json()
                     embeddings = [e["embedding"] for e in data.get("data", [])]
-                    
+
                     if len(embeddings) != len(texts):
                         raise ValueError(
                             f"Expected {len(texts)} embeddings, got {len(embeddings)}"
                         )
-                    
+
                     return embeddings
 
             except (httpx.RequestError, httpx.HTTPStatusError, ValueError) as e:
@@ -102,12 +102,12 @@ class InferenceAPIEmbeddings(BaseModel, Embeddings):
         for i in range(0, len(texts), batch_size):
             batch = texts[i : i + batch_size]
             tasks.append(self.embed(batch))
-        
+
         batch_results = await asyncio.gather(*tasks)
-        
+
         for batch_embeddings in batch_results:
             all_embeddings.extend(batch_embeddings)
-            
+
         return all_embeddings
 
     def embed_query_sync(self, text: str) -> List[float]:

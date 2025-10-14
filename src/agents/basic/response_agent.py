@@ -33,13 +33,13 @@ HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research as
    - Use format: `([descriptive text][number])` immediately after each factual claim
    - The number MUST be the document index (1, 2, 3, etc.) from the <documents> section
    - The descriptive text should briefly describe the source content
-   
+
    Examples:
    ✓ Good: "Revenue increased by 15% ([Annual Report 2023][1])"
    ✓ Good: "CEO announced expansion ([Q3 Earnings Call][2])"
    ✗ Bad: "Revenue increased 15% ([Document 1][1])"
    ✗ Bad: "CEO announced expansion ([Doc 2][2])"
-   
+
    - Multiple sources: "Sales grew across regions ([Q1 Report][1], [Market Analysis][3])"
    - CRITICAL: Numbers [1], [2], [3] must exactly match document indexes
 

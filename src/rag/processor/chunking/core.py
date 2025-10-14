@@ -1,10 +1,10 @@
 import numpy as np
-import torch
 from sklearn.metrics.pairwise import cosine_similarity
 from typing import List, Dict, Any
 from collections import defaultdict
 from ...embeding.api_inference import InferenceAPIEmbeddings
 from tiktoken import get_encoding
+
 
 class SemanticChunker:
     def __init__(
@@ -57,7 +57,9 @@ class SemanticChunker:
         cluster_map = {cid: idx for idx, cid in enumerate(sorted(set(clusters)))}
         return [cluster_map[c] for c in clusters]
 
-    def merge_chunks(self, chunks: List[Dict[str, Any]], clusters: List[int]) -> List[Dict[str, Any]]:
+    def merge_chunks(
+        self, chunks: List[Dict[str, Any]], clusters: List[int]
+    ) -> List[Dict[str, Any]]:
         if not chunks or not clusters:
             return []
 
@@ -78,10 +80,9 @@ class SemanticChunker:
                     num_tokens = len(next_text.split())
 
                 if num_tokens > self.max_tokens and current_text:
-                    merged_chunks.append({
-                        "text": current_text,
-                        "metadata": current_meta
-                    })
+                    merged_chunks.append(
+                        {"text": current_text, "metadata": current_meta}
+                    )
                     current_text = chunk["text"]
                     current_meta = [chunk]
                 else:
@@ -89,15 +90,14 @@ class SemanticChunker:
                     current_meta.append(chunk)
 
             if current_text:
-                merged_chunks.append({
-                    "text": current_text,
-                    "metadata": current_meta
-                })
+                merged_chunks.append({"text": current_text, "metadata": current_meta})
 
         return merged_chunks
 
     def chunk(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         embeddings = self.get_embeddings(chunks)
         similarity_matrix = self.compute_similarity(embeddings)
-        clusters = self.cluster_chunks(similarity_matrix, threshold=self.cluster_threshold)
+        clusters = self.cluster_chunks(
+            similarity_matrix, threshold=self.cluster_threshold
+        )
         return self.merge_chunks(chunks, clusters)

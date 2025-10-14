@@ -62,7 +62,7 @@ Therefore:
 **Strategy:** Include documents that discuss the topic or contain related information
 **Example:** "What is the Q2 revenue?" : Financial documents, quarterly reports, budget docs
 
-### Type B: Negative/Absence Query  
+### Type B: Negative/Absence Query
 **Indicators:** "NOT", "haven't", "which ones don't...", "excluding...", "without..."
 **Strategy:** VERY PERMISSIVE - include all documents about relevant entities/topics
 **Example:** "Which companies have NOT been hacked?" : Include ALL company security/tech documents

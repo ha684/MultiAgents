@@ -43,6 +43,8 @@ class OrchestratorStreamer:
         llm_buffer = ""
         final_result = None
 
+        is_graph_completed = False
+
         stats = {"nodes": [], "tokens": 0, "tools": 0, "start_time": time.time()}
 
         async for event in orchestrator.stream(conversation):
@@ -52,23 +54,38 @@ class OrchestratorStreamer:
 
             if kind == "on_chain_start":
                 stats["nodes"].append(name)
-                self._print_box(f"🔄 NODE: {name}", color="blue")
-
-            elif kind == "on_chain_end":
-                if name == "MainOrchestrator":
-                    final_result = event.get("data", {}).get("output")
-                    self._print_box("✅ Orchestrator Graph COMPLETED", color="green")
+                if name in ["SimpleSearchGraph", "ResearchGraph", "MainOrchestrator"]:
+                    self._print_box(f"🔄 Graph: {name}", color="blue")
                 else:
                     self._print_box(f"🔄 NODE: {name}", color="blue")
 
+            elif kind == "on_chain_end":
+                output = event.get("data", {}).get("output")
+
+                if name == "MainOrchestrator" and not is_graph_completed:
+                    is_graph_completed = True
+                    final_result = output
+                    continue
+
+                if name in ["SimpleSearchGraph", "ResearchGraph"]:
+                    self._print_box(f"✅ Graph: {name} COMPLETED", color="green")
+                    continue
+
+                if output and name not in [
+                    "RunnableSequence",
+                    "RunnableLambda",
+                    "route_after_router",
+                ]:
+                    self._print_box(
+                        f"✅ NODE: {name}", content=str(output), color="green"
+                    )
+
             elif kind == "on_chat_model_stream":
                 chunk = event["data"]["chunk"]
-
                 if chunk.content:
                     print(chunk.content, end="", flush=True)
                     llm_buffer += chunk.content
                     stats["tokens"] += len(chunk.content) // 4
-
                 if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
                     for tc in chunk.tool_call_chunks:
                         tool_name = tc.get("name")
@@ -79,17 +96,12 @@ class OrchestratorStreamer:
                         if args:
                             stats["tokens"] += len(args) // 4
                             print(args, end="", flush=True)
-
             elif kind == "on_chat_model_end":
                 if llm_buffer:
                     print("\n")
                     llm_buffer = ""
 
-            elif kind == "on_tool_start":
-                event.get("name", "")
-
-            elif kind == "on_tool_end":
-                event.get("data", {}).get("output", "")
+        self._print_box("✅ Orchestrator Graph COMPLETED", color="green")
 
         duration = time.time() - stats["start_time"]
         self._print_box(
@@ -124,16 +136,7 @@ async def main():
 
     logger.info("OrchestratorGraph initialized successfully.\n")
     streamer = OrchestratorStreamer()
-    final_result = await streamer.stream_orchestrator(orchestrator, conversation)
-
-    if final_result:
-        print("\n" + "=" * 70)
-        print("🎯 FINAL RESULT:")
-        print("=" * 70)
-        print(f"\nAnswer: {final_result.get('final_answer', 'N/A')}...")
-        print(f"\nRoute: {final_result.get('route_decision', 'N/A')}")
-        print(f"Metadata: {final_result.get('response_metadata', {})}")
-        print("=" * 70 + "\n")
+    await streamer.stream_orchestrator(orchestrator, conversation)
 
 
 if __name__ == "__main__":

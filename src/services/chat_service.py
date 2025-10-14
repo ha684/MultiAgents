@@ -1,3 +1,4 @@
+# src/services/chat_service.py
 import uuid
 from typing import Any, AsyncGenerator, Dict, Generator, List, Tuple, Union, cast
 
@@ -24,6 +25,7 @@ from src.utils.logger_conf import logger
 from src.agents.main_graph import OrchestratorGraph
 import tiktoken
 from src.db.models.conversation import MessageStatus
+from src.agents.stream_handler import AgenticStreamHandler
 
 
 @singleton
@@ -470,7 +472,7 @@ class ChatService:
         except Exception as e:
             if user_message_id:
                 await self.conv_service.update_message_status(
-                    uuid.UUID(user_message_id), MessageStatus.FAILED
+                    uuid.UUID(user_message_id), MessageStatus.FAILED, str(e)
                 )
             raise e
 
@@ -559,9 +561,116 @@ class ChatService:
             logger.exception(
                 f"An error occurred during the streaming chat response: {e}"
             )
+            await self.conv_service.update_message_status(
+                user_message_id, MessageStatus.FAILED, str(e)
+            )
             yield StreamEventBuilder.error(
                 error_type="generation_error",
                 message=f"An internal error occurred: {str(e)}",
+                code=500,
+            )
+
+    async def _stream_agentic_workflow(
+        self,
+        conversation: List[BaseMessage],
+        metadata: Dict[str, Any],
+    ) -> AsyncGenerator[str, None]:
+        """Stream agentic workflow with clean, focused updates"""
+        try:
+            yield StreamEventBuilder.message_start()
+
+            handler = AgenticStreamHandler()
+            content_index = 0
+            final_state = None
+            user_message_id = _extract_message_id(conversation[-1])
+            conversation_id = metadata.get("conversation_id")
+
+            # Stream all events from orchestrator
+            async for event in self.orchestrator_graph.stream(conversation):
+                # Let handler process the event
+                result = await handler.handle_event(event)
+
+                if result:
+                    # If it's a string content (LLM response), stream as content delta
+                    if (
+                        isinstance(result, str)
+                        and event["event"] == "on_chat_model_stream"
+                    ):
+                        yield StreamEventBuilder.content_delta(
+                            result, index=content_index
+                        )
+                        content_index += 1
+                    else:
+                        # Otherwise it's a status update
+                        yield result
+
+                # Capture final state
+                if (
+                    event["event"] == "on_chain_end"
+                    and event.get("name") == "MainOrchestrator"
+                ):
+                    final_state = event.get("data", {}).get("output")
+
+            if not final_state:
+                raise Exception("Orchestrator graph did not complete properly")
+
+            # Final completion
+            yield StreamEventBuilder.status_update(
+                StreamPhase.COMPLETE,
+                "Response complete",
+            )
+
+            # Prepare and save message
+            response_metadata = final_state.get("response_metadata", {})
+            retrieval_contexts = final_state.get("retrieval_contexts", {})
+
+            cited_chunks = retrieval_contexts.get("cited_chunks", [])
+            if not cited_chunks:
+                cited_chunks = final_state.get("cited_documents", [])
+
+            references = [
+                doc.model_dump() if hasattr(doc, "model_dump") else doc
+                for doc in cited_chunks
+            ]
+
+            message = Message(
+                role="agent",
+                parts=[TextPart(type="text", text=final_state["final_answer"])],
+                metadata=response_metadata,
+                retrieval_context=RetrievalContext(
+                    original_query=retrieval_contexts.get(
+                        "original_query", conversation[-1].content
+                    ),
+                    contextualized_query=retrieval_contexts.get(
+                        "contextualized_query", ""
+                    ),
+                    total_retrieved=retrieval_contexts.get("total_retrieved", 0),
+                    total_cited=len(cited_chunks),
+                    cited_chunks=cited_chunks,
+                ),
+            )
+
+            await self.conv_service.add_message(message, conversation_id)
+            await self.conv_service.update_message_status(
+                user_message_id, MessageStatus.COMPLETED
+            )
+
+            yield StreamEventBuilder.message_stop(
+                references=references,
+                metadata=response_metadata,
+            )
+
+        except Exception as e:
+            logger.exception(f"Error in agentic workflow streaming: {e}")
+
+            if user_message_id:
+                await self.conv_service.update_message_status(
+                    user_message_id, MessageStatus.FAILED, str(e)
+                )
+
+            yield StreamEventBuilder.error(
+                error_type="agentic_workflow_error",
+                message=f"An error occurred: {str(e)}",
                 code=500,
             )
 
@@ -584,7 +693,7 @@ class ChatService:
             metadata.update({"web_search_config": web_search_config.model_dump()})
             conversation = await self.sanitize_message(request.message)
             if request.agentic:
-                response = await self.orchestrator_graph.run(conversation)
+                response = await self.orchestrator_graph.ainvoke(conversation)
 
             else:
                 response = await self.ask_normal(
@@ -610,8 +719,7 @@ class ChatService:
         conversation = await self.sanitize_message(request.message)
 
         if request.agentic:
-            pass
-
+            response = self.orchestrator_graph.stream(conversation)
         else:
             response = self.ask_stream(conversation, web_search_config, metadata)
         return response

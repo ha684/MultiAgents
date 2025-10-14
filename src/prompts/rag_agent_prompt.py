@@ -128,7 +128,7 @@ For every query:
 
 **FORBIDDEN FORMATS** (You must NEVER use these):
 - `[1]` or `[2]` or any numbers
-- `[doc1]` or `[doc2]` or generic references  
+- `[doc1]` or `[doc2]` or generic references
 - `[citation_1]` or `[ref_1]` or similar patterns
 - `(1)` or `(2)` or parenthetical numbers
 - Any format that doesn't include the actual file path

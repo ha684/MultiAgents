@@ -131,7 +131,7 @@ class PromptTemplates:
 
         **Step 2: Assess Information Need Clarity**
         Ask yourself:
-        - Is the information need **well-defined and focused**? 
+        - Is the information need **well-defined and focused**?
         - Can I formulate a good search query that will likely return relevant results?
         - Will one retrieval pass with comprehensive results be sufficient?
 
@@ -245,7 +245,7 @@ class PromptTemplates:
         - Plan queries that build on each other progressively
         - Ensure each query targets a unique information need
         - Verify no two queries will return similar results
-        
+
         CRITICAL: Check for redundancy - if two queries would likely return the same information, merge or remove one.
         </thinking_requirement>
 
@@ -255,7 +255,7 @@ class PromptTemplates:
 
         ### Identify Non-Overlapping Dimensions:
         Break the question into ORTHOGONAL (independent) aspects:
-        
+
         **For Technical Questions:**
         - Core concepts/definitions (what it is)
         - Architecture/design patterns (how it's structured)
@@ -263,15 +263,15 @@ class PromptTemplates:
         - Tools/technologies (what to use)
         - Performance/scalability (how it scales)
         - Security/compliance (safety aspects)
-        
+
         **For Comparative Questions:**
         - Approach A's specific characteristics
-        - Approach B's specific characteristics  
+        - Approach B's specific characteristics
         - Direct comparison metrics (A vs B)
         - Use cases where A excels
         - Use cases where B excels
         - Migration/transition considerations
-        
+
         **For Challenge/Analysis Questions:**
         - Technical barriers (tech-specific obstacles)
         - Process/workflow challenges (operational issues)
@@ -285,7 +285,7 @@ class PromptTemplates:
         - "Technical challenges in X" + "Organizational challenges in X" (too similar)
         - "Benefits of X" + "Advantages of X" (same thing)
         - "Cost of X" + "Financial impact of X" (redundant)
-        
+
         INSTEAD, BE SPECIFIC:
         - "Identity verification challenges in zero-trust implementation"
         - "Network segmentation strategies for zero-trust"
@@ -322,14 +322,14 @@ class PromptTemplates:
         ### Decision Framework:
 
         Ask yourself for each query:
-        1. "Could this information exist in the user's internal documents?" 
+        1. "Could this information exist in the user's internal documents?"
         - If YES or MAYBE → RAG
         - If CLEARLY NO → Web
-        
+
         2. "Is this about time-sensitive external events?"
         - If YES → Web
         - If NO → RAG
-        
+
         3. "Does this require aggregated industry perspectives?"
         - If YES → Web
         - If NO → RAG
@@ -419,7 +419,7 @@ class PromptTemplates:
         - For each aspect, determine if it's likely in internal data or requires web
         - Verify each query targets a UNIQUE aspect
         - Check for and eliminate redundancy
-        
+
         2. THEN: Return valid JSON:
 
         {
@@ -445,7 +445,7 @@ class PromptTemplates:
 
         [Uses think tool]:
         "Let me break this into DISTINCT, non-overlapping aspects:
-        
+
         DISTINCT ASPECTS TO COVER:
         1. Zero-trust core principles - likely in internal docs
         2. Identity/authentication architecture - internal implementation details
@@ -455,17 +455,17 @@ class PromptTemplates:
         6. Industry adoption patterns and benchmarks - requires external data
         7. Perimeter security model comparison - general knowledge
         8. Zero-trust vendor landscape 2024 - current market data
-        
+
         SEARCH TYPE REASONING:
         - Internal technical implementation: RAG
         - Industry trends and comparisons: Web
         - Balanced distribution: 5 RAG, 3 Web
-        
+
         REDUNDANCY CHECK:
         - Each query targets ONE specific component
         - No overlap between queries
         - Progressive from internal specifics to external context
-        
+
         PRIORITIZATION:
         - P5: Core architecture concepts (RAG first)
         - P4: Key implementation challenges (RAG) + industry context (Web)
@@ -548,7 +548,7 @@ class PromptTemplates:
         </edge_cases>
 
         <final_reminders>
-        
+
         KEY SUCCESS CRITERIA:
         1. Each query must target a UNIQUE aspect (no overlap)
         2. Use SPECIFIC terminology (not generic phrases)
@@ -556,16 +556,16 @@ class PromptTemplates:
         4. Maintain strategic balance - not all RAG, not all web
         5. Let the system handle switching if RAG is insufficient
         6. Think progressive: Internal context → External validation → Synthesis
-        
+
         AVOID: Generic queries like "challenges in X", "benefits of Y", "best practices for Z"
         USE: Specific queries like "microsegmentation strategies", "ROI calculation methods", "compliance audit procedures"
-        
+
         SEARCH TYPE PHILOSOPHY:
         - RAG FIRST: Trust that users have relevant internal knowledge
         - WEB STRATEGIC: Use for clearly external/recent information
         - SYSTEM HANDLES: Automatic switching if RAG yields insufficient results
         - BALANCED MIX: Combine both sources intelligently, not all one type
-        
+
         </final_reminders>
     """)
 
@@ -579,7 +579,7 @@ class PromptTemplates:
         1. Whether the research is complete and sufficient to answer the question
         2. What specific aspects (if any) are still missing
         3. Your confidence level in the sufficiency assessment
-        
+
         You should NOT worry about what to do next - your ONLY job is to assess if we have enough information.
         </task>
 
@@ -894,7 +894,7 @@ class PromptTemplates:
         2. Identifying patterns in what worked and what didn't
         3. Analyzing why certain information gaps persist
         4. Providing strategic recommendations for the next search iteration
-        
+
         Your reflection should help the system make smarter, more targeted searches rather than repeating ineffective patterns.
         </task>
 
@@ -906,7 +906,7 @@ class PromptTemplates:
         - Identify if we need to change search strategy or query formulation
         - Reason about what type of sources might have the missing information
         - Assess if missing aspects are actually findable or if we need to pivot
-        
+
         This thinking process ensures actionable and insightful reflection.
         </thinking_requirement>
 
@@ -921,7 +921,7 @@ class PromptTemplates:
         - What made those queries effective?
         - What search type (RAG/Web) worked best?
         - What query formulation style worked?
-        
+
         - **Quality of results:**
         - Were results comprehensive or surface-level?
         - Did sources directly address the question?
@@ -932,7 +932,7 @@ class PromptTemplates:
         - Why did they fail? (wrong keywords, wrong source, wrong scope)
         - Were queries too broad or too narrow?
         - Did we search the right type of source?
-        
+
         - **Repeated failures:**
         - Are we hitting the same dead-ends repeatedly?
         - Is information simply not available in current sources?
@@ -943,7 +943,7 @@ class PromptTemplates:
         - Which source type has been more productive?
         - Are we overusing one and underusing the other?
         - Do missing aspects require internal (RAG) or external (Web) knowledge?
-        
+
         - **Source overlap issues:**
         - Are we getting repetitive results?
         - Have we exhausted certain source types?
@@ -1106,10 +1106,10 @@ class PromptTemplates:
 
         Example 1 - Ineffective RAG, Recommend Web Pivot:
 
-        Search History: 
+        Search History:
         - 3 RAG searches for "Q2 2024 sales by region" → generic sales methodology docs
         - 2 RAG searches for "regional performance Q2" → high-level summaries only
-        
+
         Missing Aspects: ["Detailed Q2 2024 regional sales breakdown"]
 
         [Uses think tool]:
@@ -1129,7 +1129,7 @@ class PromptTemplates:
         - Web search "cloud migration challenges" → generic articles
         - Web search "cloud migration best practices" → generic guides
         - RAG search "cloud project issues" → unrelated projects
-        
+
         Missing Aspects: ["Specific challenges in our cloud migration project"]
 
         [Uses think tool]:
@@ -1149,7 +1149,7 @@ class PromptTemplates:
         - RAG search "remote work communication tools" → good coverage
         - Web search "async team collaboration 2024" → recent best practices
         - Web search "remote performance management" → solid frameworks
-        
+
         Missing Aspects: ["Remote team cultural practices", "Timezone management strategies"]
 
         [Uses think tool]:
@@ -1169,7 +1169,7 @@ class PromptTemplates:
         - 4 RAG searches for proprietary algorithm details → access denied
         - 3 Web searches for internal technical specs → nothing public
         - 2 RAG searches for implementation docs → confidential
-        
+
         Missing Aspects: ["Technical implementation details of proprietary algorithm"]
 
         [Uses think tool]:
@@ -1218,7 +1218,7 @@ class PromptTemplates:
         Original Query: {original_query}
         </research_context>
 
-        <current_state>        
+        <current_state>
         Missing Aspects Identified:
         {missing_aspects}
         </current_state>
@@ -1233,7 +1233,7 @@ class PromptTemplates:
 
         <instruction>
         Reflect on the research progress by analyzing search patterns, identifying what's working and what's not, and providing strategic recommendations for the next iteration.
-        
+
         Focus on:
         - Why certain searches succeeded or failed
         - Whether we're searching in the right places with the right queries
@@ -1271,15 +1271,15 @@ class PromptTemplates:
 
         1. **Original Query**: The user's original research question
         - Your north star - all queries must serve this goal
-        
+
         2. **Accumulated Knowledge**: All information gathered so far
         - What HAS been found and covered
         - Quality and depth of current information
-        
+
         3. **Missing Aspects**: Specific gaps identified by verification
         - These are your PRIMARY targets
         - Each represents a concrete knowledge gap
-        
+
         4. **Search History**: All previous search queries and their types
         - CRITICAL: Learn what was already tried
         - Understand what worked and what didn't
@@ -1472,7 +1472,7 @@ class PromptTemplates:
         - Verify new queries are DISTINCT from all previous
         - Confirm strategic search type selection
         - Check that new queries don't overlap with each other
-        
+
         2. THEN: Return valid JSON object:
 
         {
@@ -1519,21 +1519,21 @@ class PromptTemplates:
         - Previous searches: All 3 were RAG, all about internal implementation
         - Accumulated knowledge: Has internal challenges covered
         - Missing aspects: Both require EXTERNAL information (industry benchmarks, compliance standards)
-        
+
         ROOT CAUSE DIAGNOSIS:
         - Gap 1 (industry benchmarks): Never searched, needs Web (external data)
         - Gap 2 (compliance): Never searched, needs Web (regulatory standards)
-        
+
         DISTINCTIVENESS CHECK:
         - Previous searches: Internal implementation focus
         - New queries: External standards/benchmarks focus
         - No overlap with previous or each other ✓
-        
+
         SEARCH TYPE REASONING:
         - Industry benchmarks: Public data → Web
         - Compliance requirements: Regulatory standards → Web
         - Previous all RAG → Balance with Web
-        
+
         Generate 2 queries, both Web, priority 4-5"
 
         Response:
@@ -1567,20 +1567,20 @@ class PromptTemplates:
         "ANALYSIS:
         - Previous searches: Too generic, likely returned overall numbers only
         - Missing aspects: Need SPECIFIC breakdowns that generic searches missed
-        
+
         ROOT CAUSE DIAGNOSIS:
         - Previous query 1: 'sales performance metrics' too broad
         - Previous query 2: 'sales revenue trends' also broad, wrong angle
         - Both gaps need SPECIFIC decomposition queries
-        
+
         SOLUTION:
         - Make queries highly specific with exact dimensions
         - Use concrete terms: product category names, region names
         - Still RAG (internal data) but MORE SPECIFIC
-        
+
         DISTINCTIVENESS:
-        - New queries target specific dimensions vs previous generic searches 
-        
+        - New queries target specific dimensions vs previous generic searches
+
         Generate 2 queries, both RAG, high priority"
 
         Response:
@@ -1620,16 +1620,16 @@ class PromptTemplates:
         - Missing aspects are MINOR details, not strategic info
         - 'Exact retention rate last month': Too granular, likely not documented or in dashboard
         - 'VP of HR contact info': Not relevant to strategy question, out of scope
-        
+
         ROOT CAUSE DIAGNOSIS:
         - Gap 1: Not really a gap - tactical metric not needed for strategy question
         - Gap 2: Out of scope - contact info irrelevant to strategy analysis
-        
+
         CONCLUSION:
         - Cannot create meaningful queries for these minor/irrelevant gaps
         - Previous 4 searches adequately covered the actual question
         - More searches would be diminishing returns
-        
+
         Return empty queries array"
 
         Response:
@@ -1654,23 +1654,23 @@ class PromptTemplates:
         - Have internal process (RAG searches 1-2)
         - Have general best practices (Web search 3)
         - Missing: SPECIFIC competitor processes and comparative metrics
-        
+
         ROOT CAUSE DIAGNOSIS:
         - Previous web search was too generic (best practices, not specific competitors)
         - Need SPECIFIC competitor intelligence and comparison data
-        
+
         SOLUTION:
         - Query 1: Target specific competitor processes (Web - public info)
         - Query 2: Target comparative metrics (Web - industry analysis/reports)
-        
+
         DISTINCTIVENESS:
         - Previous: Generic best practices
         - New: Specific competitor analysis ✓
-        
+
         SEARCH TYPE:
         - Competitor processes: Public info, case studies → Web
         - Time-to-value benchmarks: Industry reports → Web
-        
+
         Generate 2 queries, both Web, priority 4-5"
 
         Response:
@@ -1780,7 +1780,7 @@ class PromptTemplates:
 
         CRITICAL: Detect the language of the user's message and respond in THAT EXACT LANGUAGE.
         - If user writes in Vietnamese → Respond entirely in Vietnamese
-        - If user writes in English → Respond entirely in English  
+        - If user writes in English → Respond entirely in English
         - If user writes in Chinese → Respond entirely in Chinese
         - Apply this to ALL parts: main text, section headers, citations, everything
 
@@ -1831,7 +1831,7 @@ class PromptTemplates:
         * State clearly what information is available (with citations)
         * Explicitly note what information is missing
         * Do NOT speculate or fill gaps with general knowledge
-        
+
         - Format for gaps (adjust language accordingly):
         * English: "Based on the available research, [known fact] ([Citation][N]). However, information about [missing aspect] was not found in the sources."
         * Vietnamese: "Dựa trên nghiên cứu hiện có, [thông tin đã biết] ([Nguồn][N]). Tuy nhiên, thông tin về [khía cạnh còn thiếu] không được tìm thấy trong các nguồn."

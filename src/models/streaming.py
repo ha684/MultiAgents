@@ -35,9 +35,8 @@ class StreamEvent:
 class StreamPhase(Enum):
     """Process phases for status tracking"""
 
-    CONTEXT_ANALYSIS = "context_analysis"
-    DOCUMENT_RETRIEVAL = "document_retrieval"
-    WEB_SEARCH = "web_search"
-    CITATION_EXTRACTION = "citation_extraction"
-    RESPONSE_GENERATION = "response_generation"
+    ANALYSIS = "analysis"
+    RETRIEVAL = "retrieval"
+    PROCESSING = "processing"
+    SYNTHESIS = "synthesis"
     COMPLETE = "complete"

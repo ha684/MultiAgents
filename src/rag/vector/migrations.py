@@ -3,15 +3,16 @@ from qdrant_client import AsyncQdrantClient, models
 from src.config.settings import settings
 from src.utils.logger_conf import logger
 
+
 class VectorStorageMigration:
     def __init__(self, client: AsyncQdrantClient):
         self.client = client
-    
+
     async def run_migrations(self):
         """Run all necessary migrations/setup"""
         await self._ensure_collection_exists()
         await self._create_payload_indexes()
-    
+
     async def _ensure_collection_exists(self):
         if not await self.client.collection_exists(settings.vector_collection_name):
             logger.info(f"Creating collection '{settings.vector_collection_name}'")
@@ -29,7 +30,7 @@ class VectorStorageMigration:
                     )
                 },
             )
-    
+
     async def _create_payload_indexes(self):
         await self.client.create_payload_index(
             collection_name=settings.vector_collection_name,

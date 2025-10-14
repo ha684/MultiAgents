@@ -328,7 +328,7 @@ setTimeout(async () => {
     const flights = await getFlights(conversationId);
     const hotels = await getHotels(conversationId);
     const activities = await getActivities(conversationId);
-    
+
     // Hiển thị kết quả cho người dùng
 }, 5000); // Chờ 5 giây cho việc xử lý
 ```

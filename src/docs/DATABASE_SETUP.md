@@ -189,4 +189,4 @@ If migrating from the previous in-memory version:
 5. Import existing data (if applicable)
 6. Start the application
 
-The new database-backed system maintains the same API interface, so no client-side changes are required. 
+The new database-backed system maintains the same API interface, so no client-side changes are required.

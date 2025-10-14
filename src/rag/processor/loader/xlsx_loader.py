@@ -112,14 +112,16 @@ class CustomXlsxLoader(BaseLoader):
         data_rows = []
         for line in lines:
             line = line.strip()
-            if line and not all(c in "|-: " for c in line):  # Skip empty lines and separator lines
+            if line and not all(
+                c in "|-: " for c in line
+            ):  # Skip empty lines and separator lines
                 data_rows.append(line)
 
         if not data_rows:
             return [table_value]
 
         # Count columns in header for consistent formatting
-        header_cols = len([col.strip() for col in header.split('|') if col.strip()])
+        header_cols = len([col.strip() for col in header.split("|") if col.strip()])
 
         chunks: List[str] = []
         current_chunk_rows: List[str] = []
@@ -137,7 +139,9 @@ class CustomXlsxLoader(BaseLoader):
 
             if test_size > self.chunk_size and current_chunk_rows:
                 # Save current chunk
-                chunk_table = self._build_table_chunk(header, current_chunk_rows, header_cols)
+                chunk_table = self._build_table_chunk(
+                    header, current_chunk_rows, header_cols
+                )
                 chunks.append(chunk_table)
                 current_chunk_rows = [row]
             else:
@@ -145,18 +149,20 @@ class CustomXlsxLoader(BaseLoader):
 
         # Add remaining rows
         if current_chunk_rows:
-            chunk_table = self._build_table_chunk(header, current_chunk_rows, header_cols)
+            chunk_table = self._build_table_chunk(
+                header, current_chunk_rows, header_cols
+            )
             chunks.append(chunk_table)
 
         return chunks if chunks else [table_value]
-    
+
     def _build_table_chunk(self, header: str, rows: List[str], header_cols: int) -> str:
         """Build a properly formatted table chunk with consistent column count"""
         formatted_rows = []
         for row in rows:
-            if '|' in row:
+            if "|" in row:
                 # Already has | separators, normalize them
-                cells = [cell.strip() for cell in row.split('|')]
+                cells = [cell.strip() for cell in row.split("|")]
                 # Remove empty cells at start/end
                 while cells and not cells[0]:
                     cells.pop(0)
@@ -165,17 +171,17 @@ class CustomXlsxLoader(BaseLoader):
             else:
                 # Split by whitespace or other separators
                 cells = [cell.strip() for cell in row.split() if cell.strip()]
-            
+
             # Ensure proper column count
             while len(cells) < header_cols:
-                cells.append('')
+                cells.append("")
             cells = cells[:header_cols]  # Trim excess columns
-            
+
             # Create a proper table row with | separators
-            formatted_row = '| ' + ' | '.join(cells) + ' |'
+            formatted_row = "| " + " | ".join(cells) + " |"
             formatted_rows.append(formatted_row)
-        
-        return '\n'.join(formatted_rows)
+
+        return "\n".join(formatted_rows)
 
     def _process_table_element(
         self,
@@ -186,10 +192,10 @@ class CustomXlsxLoader(BaseLoader):
     ) -> Tuple[str, str]:
         """Process table element and return updated content and header"""
         table_html_type = convert_to_markdown(dict_el["text_as_html"])
-        
+
         # Clean and normalize the table
         table_html_type = self.normalize_markdown_table(table_html_type)
-        
+
         data_loader = table_html_type.strip().splitlines()
 
         if not data_loader:
@@ -198,14 +204,14 @@ class CustomXlsxLoader(BaseLoader):
         # Find the header row (first non-separator row)
         header_row = None
         data_rows = []
-        
+
         for row in data_loader:
             if row.strip() and not all(c in "|-: " for c in row.strip()):
                 if header_row is None:
                     header_row = row.replace("NaT", "").strip()
                 else:
                     data_rows.append(row.replace("NaT", "").strip())
-        
+
         if not header_row:
             return current_content, ""
 
@@ -254,7 +260,11 @@ class CustomXlsxLoader(BaseLoader):
         return current_content, first_header
 
     def _process_text_element(
-        self, element: Element, current_content: str, sheet_name: str, documents: List[Document]
+        self,
+        element: Element,
+        current_content: str,
+        sheet_name: str,
+        documents: List[Document],
     ) -> str:
         """Process text element and return updated content"""
         text_content = f"\n{element.text}"
@@ -279,15 +289,15 @@ class CustomXlsxLoader(BaseLoader):
     def create_table_tag(self, table_content: str, header: str) -> str:
         """Create properly formatted markdown table with headers and separators"""
         # Ensure header is properly formatted as markdown table row
-        if not header.startswith('|'):
-            header = '| ' + header.replace('|', ' | ') + ' |'
-        
+        if not header.startswith("|"):
+            header = "| " + header.replace("|", " | ") + " |"
+
         # Count the number of columns in the header
-        header_cols = len([col.strip() for col in header.split('|') if col.strip()])
-        
+        header_cols = len([col.strip() for col in header.split("|") if col.strip()])
+
         # Create the separator line
-        separator = '| ' + ' | '.join(['---'] * header_cols) + ' |'
-        
+        separator = "| " + " | ".join(["---"] * header_cols) + " |"
+
         # Process table content rows
         formatted_rows = []
         if table_content.strip():
@@ -295,37 +305,39 @@ class CustomXlsxLoader(BaseLoader):
             for row in rows:
                 if row.strip():
                     # Ensure each row is properly formatted as markdown table row
-                    if not row.startswith('|'):
+                    if not row.startswith("|"):
                         # Split by | and reformat, handling empty cells
-                        cells = row.split('|')
+                        cells = row.split("|")
                         # Pad with empty cells if needed
                         while len(cells) < header_cols:
-                            cells.append('')
+                            cells.append("")
                         # Trim to match header columns
                         cells = cells[:header_cols]
-                        formatted_row = '| ' + ' | '.join(cell.strip() for cell in cells) + ' |'
+                        formatted_row = (
+                            "| " + " | ".join(cell.strip() for cell in cells) + " |"
+                        )
                     else:
                         # Already formatted, parse cells properly
                         row_content = row.strip()
-                        if row_content.startswith('|'):
+                        if row_content.startswith("|"):
                             row_content = row_content[1:]  # Remove leading |
-                        if row_content.endswith('|'):
+                        if row_content.endswith("|"):
                             row_content = row_content[:-1]  # Remove trailing |
-                        
-                        cells = [cell.strip() for cell in row_content.split('|')]
+
+                        cells = [cell.strip() for cell in row_content.split("|")]
                         # Pad with empty cells if needed
                         while len(cells) < header_cols:
-                            cells.append('')
+                            cells.append("")
                         # Trim to match header columns
                         cells = cells[:header_cols]
-                        formatted_row = '| ' + ' | '.join(cells) + ' |'
+                        formatted_row = "| " + " | ".join(cells) + " |"
                     formatted_rows.append(formatted_row)
-        
+
         # Combine all parts - just clean markdown table
         result = f"\n{header}\n{separator}"
         if formatted_rows:
             result += "\n" + "\n".join(formatted_rows)
-        
+
         return result
 
     def normalize_markdown_table(self, table_str: str) -> str:
@@ -357,14 +369,14 @@ class CustomXlsxLoader(BaseLoader):
             line = line.strip()
             if not line:
                 continue
-            
+
             # Skip separator lines
             if all(c in "|-: " for c in line):
                 continue
-                
+
             # Split by | and clean cells
-            if '|' in line:
-                cells = line.split('|')
+            if "|" in line:
+                cells = line.split("|")
                 # Remove empty cells at beginning and end (common in markdown tables)
                 while cells and not cells[0].strip():
                     cells.pop(0)
@@ -374,7 +386,7 @@ class CustomXlsxLoader(BaseLoader):
             else:
                 # Handle space-separated or other formats
                 cells = [cell.strip() for cell in line.split() if cell.strip()]
-            
+
             if cells:  # Only add non-empty rows
                 rows.append(cells)
 

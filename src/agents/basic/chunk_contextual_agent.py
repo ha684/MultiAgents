@@ -13,7 +13,7 @@ You will receive surrounding chunks from a document and a target chunk. You must
 <input_format>
 You will receive:
 - Chunks that come BEFORE the target chunk (if any exist)
-- Chunks that come AFTER the target chunk (if any exist)  
+- Chunks that come AFTER the target chunk (if any exist)
 - The TARGET CHUNK that needs contextualization
 
 The surrounding chunks give you the document's flow, topic, and structure so you can understand exactly what role the target chunk plays.
