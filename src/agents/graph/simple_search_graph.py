@@ -25,7 +25,6 @@ class SimpleSearchGraph:
 
     async def extract_filename_node(self, state: SimpleSearchState) -> Dict[str, Any]:
         """Extract filename from query if mentioned"""
-        logger.info("Simple Search - Extracting filename")
         requested_filename = await filename_agent.ainvoke(
             query=state["contextualized_query"]
         )
@@ -38,7 +37,6 @@ class SimpleSearchGraph:
         """
         Retrieve documents from RAG or web search based on config
         """
-        logger.info("Simple Search - Retrieving documents")
         conversation: List[BaseMessage] = state["conversation"]
         last_human_message = conversation[-1]
         kb_id = last_human_message.additional_kwargs["message_metadata"]["kb_id"]
@@ -59,16 +57,14 @@ class SimpleSearchGraph:
             retrieved_docs = await web_search(
                 query=contextualized_query,
             )
-
-            search_method = "web_search"
+            search_method = "web"
 
         else:
             logger.info("Using RAG search")
             retrieved_docs = await rag_search(
                 query=contextualized_query, context_metadata=context_metadata
             )
-
-            search_method = "database_search"
+            search_method = "rag"
 
         logger.info(f"Retrieved {len(retrieved_docs)} documents")
 
@@ -108,10 +104,10 @@ class SimpleSearchGraph:
                 "total_retrieved": len(retrieved_docs),
                 "total_cited": 0,
                 "cited_chunks": retrieved_docs,
+                "search_method": search_method,
             },
             "response_metadata": {
                 **state.get("response_metadata", {}),
-                "search_method": search_method,
             },
         }
 

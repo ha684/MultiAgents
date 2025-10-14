@@ -72,7 +72,6 @@ class AgentBase:
             messages.append(response)
 
             if response.content:
-                logger.info(f"{error_context}: Got response in iteration {iteration}")
                 return response
 
             if response.tool_calls:
@@ -145,9 +144,6 @@ class AgentBase:
             if response.content:
                 parsed_result = parse_fn(str(response.content))
                 if parsed_result:
-                    logger.info(
-                        f"{error_context}: Successfully parsed response in iteration {iteration}"
-                    )
                     return parsed_result
 
             if not response.tool_calls:

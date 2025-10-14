@@ -1,9 +1,11 @@
 # src/services/chat_service.py
 import uuid
-from typing import Any, AsyncGenerator, Dict, Generator, List, Tuple, Union, cast
+from typing import Any, AsyncGenerator, Dict, Generator, List, Union, cast
 
+import tiktoken
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from qdrant_client.models import Filter, models
+
 from src.agents.basic import (
     citation_agent,
     filename_agent,
@@ -11,9 +13,12 @@ from src.agents.basic import (
     response_agent,
     summary_agent,
 )
+from src.agents.main_graph import OrchestratorGraph
+from src.agents.stream_handler import AgenticStreamHandler
 from src.common.streaming import StreamEventBuilder, StreamPhase
 from src.common.types import Message, RetrievalContext, TextPart
 from src.config.settings import settings
+from src.db.models.conversation import MessageStatus
 from src.exceptions.chat_exceptions import ConversationNotFoundError, ValidationError
 from src.models.chat import ChatRequest, SearchProvider, WebSearchConfig
 from src.rag.vector import vector_retrieval
@@ -22,10 +27,6 @@ from src.services.web_search_service import web_search_service
 from src.tracking.observability import tracer
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
-from src.agents.main_graph import OrchestratorGraph
-import tiktoken
-from src.db.models.conversation import MessageStatus
-from src.agents.stream_handler import AgenticStreamHandler
 
 
 @singleton
@@ -294,7 +295,7 @@ class ChatService:
 
         if len(conversation) > 2:
             yield StreamEventBuilder.status_update(
-                StreamPhase.CONTEXT_ANALYSIS,
+                StreamPhase.ANALYSIS,
                 "Analyzing conversation context...",
                 progress=0.1,
             )
@@ -304,7 +305,7 @@ class ChatService:
             contextualized_query = contextualized_query.content
         if web_search_config.active:
             yield StreamEventBuilder.status_update(
-                StreamPhase.WEB_SEARCH,
+                StreamPhase.RETRIEVAL,
                 "Performing web search...",
                 progress=0.3,
                 metadata={"provider": web_search_config.provider.value},
@@ -326,7 +327,7 @@ class ChatService:
                 if favicon:
                     favicons.append(favicon)
             yield StreamEventBuilder.status_update(
-                StreamPhase.WEB_SEARCH,
+                StreamPhase.RETRIEVAL,
                 "Found web sources",
                 progress=0.6,
                 metadata={
@@ -337,7 +338,7 @@ class ChatService:
             )
         else:
             yield StreamEventBuilder.status_update(
-                StreamPhase.DOCUMENT_RETRIEVAL,
+                StreamPhase.RETRIEVAL,
                 "Searching for relevant documents...",
                 progress=0.3,
             )
@@ -354,7 +355,6 @@ class ChatService:
                     )
                 )
 
-            logger.info(f"Filter applied: {filters}")
             retrieved_docs = await vector_retrieval.retrieve(
                 kb_id=str(kb_id),
                 query=contextualized_query,
@@ -363,7 +363,7 @@ class ChatService:
                 top_n=rerank_top,
             )
             yield StreamEventBuilder.status_update(
-                StreamPhase.DOCUMENT_RETRIEVAL,
+                StreamPhase.RETRIEVAL,
                 "Found relevant documents",
                 progress=0.6,
                 metadata={"sources_count": len(retrieved_docs)},
@@ -396,7 +396,7 @@ class ChatService:
 
         if retrieved_docs:
             yield StreamEventBuilder.status_update(
-                StreamPhase.CITATION_EXTRACTION,
+                StreamPhase.PROCESSING,
                 "Extracting relevant citations...",
                 progress=0.8,
             )
@@ -411,7 +411,7 @@ class ChatService:
                         cited_docs.append(retrieved_docs[i - 1])
 
             yield StreamEventBuilder.status_update(
-                StreamPhase.CITATION_EXTRACTION,
+                StreamPhase.PROCESSING,
                 "Extracted relevant citations",
                 progress=1.0,
                 metadata={"sources_count": len(cited_docs)},
@@ -430,7 +430,7 @@ class ChatService:
         conversation: List[BaseMessage],
         web_search_config: WebSearchConfig,
         metadata: Dict[str, Any],
-    ) -> Tuple[Message, List[Dict]]:
+    ) -> Message:
         """Handles non-streaming (full text) response."""
         user_message_id = _extract_message_id(conversation[-1])
 
@@ -449,7 +449,14 @@ class ChatService:
                 response_dict["response_metadata"]["search_method"] = "web_search"
             else:
                 response_dict["response_metadata"]["search_method"] = "database_search"
-            response_dict["response_metadata"].update(metadata)
+
+            clean_metadata = metadata.copy()
+            if "web_search_config" in clean_metadata:
+                web_config_copy = clean_metadata["web_search_config"].copy()
+                web_config_copy.pop("api_key", None)
+                clean_metadata["web_search_config"] = web_config_copy
+
+            response_dict["response_metadata"].update(clean_metadata)
 
             message = Message(
                 role="agent",
@@ -498,7 +505,7 @@ class ChatService:
                     yield event
 
             yield StreamEventBuilder.status_update(
-                StreamPhase.RESPONSE_GENERATION, "Generating response...", progress=0.0
+                StreamPhase.PROCESSING, "Generating response...", progress=0.0
             )
 
             response_generator = response_agent.astream(
@@ -578,49 +585,39 @@ class ChatService:
         """Stream agentic workflow with clean, focused updates"""
         try:
             yield StreamEventBuilder.message_start()
-
             handler = AgenticStreamHandler()
-            content_index = 0
             final_state = None
             user_message_id = _extract_message_id(conversation[-1])
             conversation_id = metadata.get("conversation_id")
 
-            # Stream all events from orchestrator
             async for event in self.orchestrator_graph.stream(conversation):
-                # Let handler process the event
                 result = await handler.handle_event(event)
 
                 if result:
-                    # If it's a string content (LLM response), stream as content delta
-                    if (
-                        isinstance(result, str)
-                        and event["event"] == "on_chat_model_stream"
-                    ):
-                        yield StreamEventBuilder.content_delta(
-                            result, index=content_index
-                        )
-                        content_index += 1
-                    else:
-                        # Otherwise it's a status update
-                        yield result
+                    yield result
 
-                # Capture final state
                 if (
                     event["event"] == "on_chain_end"
                     and event.get("name") == "MainOrchestrator"
                 ):
                     final_state = event.get("data", {}).get("output")
 
-            if not final_state:
-                raise Exception("Orchestrator graph did not complete properly")
+                if (
+                    event["event"] == "on_chain_end"
+                    and event["name"] != "MainOrchestrator"
+                ):
+                    node_output = event.get("data", {}).get("output")
+                    if node_output:
+                        last_known_state = node_output
 
-            # Final completion
+            if not final_state:
+                final_state = last_known_state
+
             yield StreamEventBuilder.status_update(
                 StreamPhase.COMPLETE,
                 "Response complete",
             )
 
-            # Prepare and save message
             response_metadata = final_state.get("response_metadata", {})
             retrieval_contexts = final_state.get("retrieval_contexts", {})
 
@@ -647,6 +644,7 @@ class ChatService:
                     total_retrieved=retrieval_contexts.get("total_retrieved", 0),
                     total_cited=len(cited_chunks),
                     cited_chunks=cited_chunks,
+                    search_method=retrieval_contexts.get("search_method", "rag"),
                 ),
             )
 
@@ -674,7 +672,7 @@ class ChatService:
                 code=500,
             )
 
-    async def ask(self, request: ChatRequest) -> Tuple[Message, List[Dict]]:
+    async def ask(self, request: ChatRequest) -> Message:
         """Process a chat request and return a response."""
         with tracer.start_as_current_span("ChatService.ask") as span:
             span.set_attribute("user.id", request.message.metadata.get("user_id"))
@@ -692,9 +690,9 @@ class ChatService:
             metadata = request.message.metadata
             metadata.update({"web_search_config": web_search_config.model_dump()})
             conversation = await self.sanitize_message(request.message)
+            conversation[-1].additional_kwargs["message_metadata"] = metadata
             if request.agentic:
                 response = await self.orchestrator_graph.ainvoke(conversation)
-
             else:
                 response = await self.ask_normal(
                     conversation, web_search_config, metadata
@@ -707,19 +705,22 @@ class ChatService:
         """Process a chat request and return a streaming response."""
         request = self.sanitize_request(request)
         if settings.enable_websearch and request.web_search:
+            api_key = _get_api_key_for_provider(settings.websearch_provider)
             web_search_config = WebSearchConfig(
                 provider=settings.websearch_provider,
                 active=True,
-                api_key=_get_api_key_for_provider(settings.websearch_provider),
+                api_key=api_key,
             )
         else:
             web_search_config = WebSearchConfig(active=False)
 
         metadata = request.message.metadata
-        conversation = await self.sanitize_message(request.message)
 
+        conversation = await self.sanitize_message(request.message)
+        metadata.update({"web_search_config": web_search_config.model_dump()})
+        conversation[-1].additional_kwargs["message_metadata"] = metadata
         if request.agentic:
-            response = self.orchestrator_graph.stream(conversation)
+            response = self._stream_agentic_workflow(conversation, metadata)
         else:
             response = self.ask_stream(conversation, web_search_config, metadata)
         return response
@@ -727,10 +728,12 @@ class ChatService:
 
 def _get_api_key_for_provider(provider: SearchProvider) -> str:
     """Get API key based on the selected provider."""
-    if provider == SearchProvider.TAVILY:
+    if provider == SearchProvider.TAVILY.value:
         return settings.tavily_api_key
-    elif provider == SearchProvider.FIRECRAWL:
+    elif provider == SearchProvider.FIRECRAWL.value:
         return settings.firecrawl_api_key
+    else:
+        return ""
 
 
 def _extract_message_id(message: BaseMessage) -> str | None:

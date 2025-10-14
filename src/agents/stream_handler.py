@@ -1,6 +1,6 @@
 from typing import Optional
 from src.models.streaming import StreamPhase
-from src.config.graph_configs import GRAPH_CONFIGS, NodeMetadata
+from src.config.graph_configs import GRAPH_CONFIGS
 from src.common.streaming import StreamEventBuilder
 
 
@@ -12,6 +12,8 @@ class AgenticStreamHandler:
         self.graph_stack: list[str] = []
         self.last_phase: Optional[StreamPhase] = None
         self.last_emitted_message: Optional[str] = None
+        self.content_index: int = 0
+        self.last_phase = None
 
     async def handle_event(self, event: dict) -> Optional[str]:
         """Process a single event and return SSE event if needed"""
@@ -25,7 +27,7 @@ class AgenticStreamHandler:
             return await self._handle_chain_end(name, event)
 
         elif kind == "on_chat_model_stream":
-            return await self._handle_llm_stream(event)
+            return await self._handle_llm_stream(name, event)
 
         return None
 
@@ -58,6 +60,8 @@ class AgenticStreamHandler:
 
     async def _handle_chain_end(self, name: str, event: dict) -> Optional[str]:
         """Handle chain/node end"""
+        self.last_phase = None
+
         if name in GRAPH_CONFIGS:
             if self.graph_stack:
                 self.graph_stack.pop()
@@ -71,36 +75,47 @@ class AgenticStreamHandler:
             if config:
                 node_meta = config.get_node_meta(name)
                 if node_meta and node_meta.emit_on_complete:
-                    return await self._emit_completion_status(name, output, node_meta)
+                    return await self._emit_completion_status(output)
 
         return await self._emit_rich_feedback(output)
 
-    async def _emit_completion_status(
-        self, node_name: str, output: dict, node_meta: NodeMetadata
-    ) -> Optional[str]:
+    async def _emit_completion_status(self, output: dict) -> Optional[str]:
         """Emit status based on node completion"""
 
         if "retrieval_contexts" in output:
             retrieval = output["retrieval_contexts"]
             total_cited = retrieval.get("total_cited", 0)
             total_retrieved = retrieval.get("total_retrieved", 0)
-
-            if total_cited > 0:
+            cited_chunks = retrieval.get("cited_chunks", [])
+            if total_cited > 0 and retrieval.get("search_method") == "web":
+                urls = []
+                favicons = []
+                for chunk in cited_chunks:
+                    url = chunk.metadata.get("original_filename", "")
+                    if url:
+                        urls.append(url)
+                    favicon = chunk.metadata.get("favicon", "")
+                    if favicon:
+                        favicons.append(favicon)
                 return StreamEventBuilder.status_update(
-                    phase=StreamPhase.PROCESSING,
+                    phase=StreamPhase.RETRIEVAL,
                     message=f"Found {total_cited} relevant sources",
-                    metadata={"sources_count": total_cited},
+                    metadata={
+                        "sources_count": total_cited,
+                        "urls": urls,
+                        "favicons": favicons,
+                    },
                 )
             elif total_retrieved > 0:
                 return StreamEventBuilder.status_update(
                     phase=StreamPhase.RETRIEVAL,
-                    message=f"Retrieved {total_retrieved} documents",
+                    message=f"Retrieved total {total_retrieved} documents",
                     metadata={"sources_count": total_retrieved},
                 )
             else:
                 return StreamEventBuilder.status_update(
                     phase=StreamPhase.RETRIEVAL,
-                    message="No documents found in knowledge base",
+                    message="No documents found",
                 )
 
         return None
@@ -132,23 +147,40 @@ class AgenticStreamHandler:
 
         return None
 
-    async def _handle_llm_stream(self, event: dict) -> Optional[str]:
+    async def _handle_llm_stream(self, name: str, event: dict) -> Optional[str]:
         """Handle LLM streaming"""
         chunk = event["data"]["chunk"]
 
-        if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
-            for tc in chunk.tool_call_chunks:
-                tool_name = tc.get("name")
-                if tool_name == "think":
-                    args = tc.get("args", "")
-                    if args:
-                        return StreamEventBuilder.status_update(
-                            phase=StreamPhase.ANALYSIS,
-                            message="Thinking...",
-                            metadata={"thought": args},
-                        )
+        if self.current_graph:
+            config = GRAPH_CONFIGS.get(self.current_graph)
+            if config:
+                node_meta = config.get_node_meta(name)
+                if node_meta and node_meta.stream_phase == StreamPhase.SYNTHESIS:
+                    self.last_phase = StreamPhase.SYNTHESIS
 
-        elif chunk.content:
-            return chunk.content
+        if self.last_phase == StreamPhase.SYNTHESIS:
+            if chunk.content:
+                sse_event = StreamEventBuilder.content_delta(
+                    chunk.content, index=self.content_index
+                )
+                self.content_index += 1
+                return sse_event
+
+        else:
+            if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
+                for tc in chunk.tool_call_chunks:
+                    tool_name = tc.get("name")
+                    if tool_name == "think":
+                        args = tc.get("args", "")
+                        if args:
+                            return StreamEventBuilder.status_update(
+                                phase=StreamPhase.ANALYSIS,
+                                message=args,
+                            )
+            elif chunk.content:
+                return StreamEventBuilder.status_update(
+                    phase=StreamPhase.ANALYSIS,
+                    message=chunk.content,
+                )
 
         return None

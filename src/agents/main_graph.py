@@ -216,14 +216,52 @@ class OrchestratorGraph(AgentBase):
         """
         Execute orchestrator graph with full conversation
         """
+        original_query = conversation[-1].content
+
+        initial_state = OrchestratorState(
+            conversation=conversation,
+            original_query=original_query,
+            contextualized_query="",
+            route_decision=None,
+            accumulated_knowledge="",
+            cited_documents=[],
+            retrieval_contexts={},
+            final_answer="",
+            response_metadata={},
+        )
+
+        config = {"recursion_limit": 100}
+        timeout_seconds = 600
+
         try:
-            original_query = conversation[-1].content
+            async with asyncio.timeout(timeout_seconds):
+                async for event in self.graph.astream_events(
+                    initial_state, config=config, version="v2"
+                ):
+                    last_known_state = event
+                    yield event
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"⚠️ 'OrchestratorGraph' timed out after {timeout_seconds} seconds. "
+                f"Returning the most recent accumulated result."
+            )
+            yield last_known_state
+        except Exception as e:
+            logger.error(
+                f"❌ 'OrchestratorGraph' encountered an unexpected error: {e}. "
+                "Returning the most recent accumulated result."
+            )
+            yield last_known_state
+
+    async def ainvoke(
+        self, conversation: List[BaseMessage]
+    ) -> Optional[Dict[str, Any]]:
+        """Non-streaming execution (backward compatible)"""
+        try:
             conversation_metadata = conversation[-1].additional_kwargs.get(
                 "message_metadata", {}
             )
-            conversation_metadata.get("conversation_id")
-            conversation_metadata.get("message_id")
-
+            original_query = conversation[-1].content
             initial_state = OrchestratorState(
                 conversation=conversation,
                 original_query=original_query,
@@ -235,103 +273,15 @@ class OrchestratorGraph(AgentBase):
                 final_answer="",
                 response_metadata={},
             )
-
-            config = {"recursion_limit": 100}
-            timeout_seconds = 600
-            last_known_state = initial_state
-            final_state = None
-            try:
-                async with asyncio.timeout(timeout_seconds):
-                    async for event in self.graph.astream_events(
-                        initial_state, config=config, version="v2"
-                    ):
-                        yield event
-                        if (
-                            event["event"] == "on_chain_end"
-                            and event.get("name") == "MainOrchestrator"
-                        ):
-                            final_state = event.get("data", {}).get("output")
-
-                        if (
-                            event["event"] == "on_chain_end"
-                            and event["name"] != "MainOrchestrator"
-                        ):
-                            node_output = event.get("data", {}).get("output")
-                            if node_output:
-                                last_known_state = node_output
-
-            except asyncio.TimeoutError:
-                logger.warning(
-                    f"⚠️ 'OrchestratorGraph' timed out after {timeout_seconds} seconds. "
-                    f"Returning the most recent accumulated result."
-                )
-                final_state = last_known_state
-            except Exception as e:
-                logger.error(
-                    f"❌ 'OrchestratorGraph' encountered an unexpected error: {e}. "
-                    "Returning the most recent accumulated result."
-                )
-                final_state = last_known_state
-
-            metadata: Dict[str, Any] = final_state.get("response_metadata", {})
-            metadata.update({"route": final_state.get("route_decision")})
-            retrieval_contexts = final_state.get("retrieval_contexts", {})
-            metadata.update({"retrieval_contexts": retrieval_contexts})
-
-            if not retrieval_contexts:
-                cited_documents = final_state.get("cited_documents", [])
-                retrieval_contexts = {
-                    "cited_chunks": cited_documents,
-                    "total_retrieved": 0,
-                    "total_cited": len(cited_documents),
-                    "original_query": original_query,
-                    "contextualized_query": final_state.get("contextualized_query", ""),
-                }
-
-            Message(
-                parts=[TextPart(type="text", text=final_state["final_answer"])],
-                role="agent",
-                metadata=metadata,
-                retrieval_context=RetrievalContext(**retrieval_contexts),
-            )
-
-            # await self.conv_service.add_message(message, conversation_id)
-
-            # if user_message_id:
-            #     await self.conv_service.update_message_status(
-            #         uuid.UUID(user_message_id), MessageStatus.COMPLETED
-            #     )
-
-        except Exception as e:
-            logger.error(f"Error running orchestrator graph: {e}")
-            # if user_message_id:
-            #     await self.conv_service.update_message_status(
-            #         uuid.UUID(user_message_id), MessageStatus.FAILED, str(e)
-            #     )
-            raise e
-
-    async def ainvoke(
-        self, conversation: List[BaseMessage]
-    ) -> Optional[Dict[str, Any]]:
-        """Non-streaming execution (backward compatible)"""
-        try:
-            final_result = None
-            conversation_metadata = conversation[-1].additional_kwargs.get(
-                "message_metadata", {}
-            )
-            async for event in self.stream(conversation):
-                if (
-                    event["event"] == "on_chain_end"
-                    and event.get("name") == "LangGraph"
-                ):
-                    final_result = event.get("data", {}).get("output")
-
+            final_result = await self.graph.ainvoke(initial_state)
             message = Message(
-                parts=[TextPart(type="text", text=final_result["final_answer"])],
+                parts=[
+                    TextPart(type="text", text=final_result.get("final_answer", ""))
+                ],
                 role="agent",
-                metadata=final_result["response_metadata"],
+                metadata=final_result.get("response_metadata", {}),
                 retrieval_context=RetrievalContext(
-                    **final_result["retrieval_contexts"]
+                    **final_result.get("retrieval_contexts", {})
                 ),
             )
             await self.conv_service.add_message(
@@ -342,7 +292,7 @@ class OrchestratorGraph(AgentBase):
                     uuid.UUID(conversation_metadata.get("message_id")),
                     MessageStatus.COMPLETED,
                 )
-            return final_result
+            return message
         except Exception as e:
             logger.error(f"Error running orchestrator graph: {e}")
             if conversation_metadata.get("message_id"):

@@ -73,7 +73,7 @@ class RetrievalContext(BaseModel):
     total_retrieved: int
     total_cited: int
     cited_chunks: List[Document]
-
+    search_method: Literal["rag", "web"]
     model_config = {"arbitrary_types_allowed": True}
 
     @field_serializer("cited_chunks")

@@ -84,10 +84,7 @@ class FilenameAgent:
 
             response: Filename = await chain.ainvoke({})
             if not response.filename:
-                logger.warning("No content returned from LLM response")
                 return None
-
-            logger.info(f"Response: {response}")
             filename = response.filename
 
             return filename if filename else None

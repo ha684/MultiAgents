@@ -37,6 +37,7 @@ class RetrievalContext(TypedDict):
     total_retrieved: int
     total_cited: int
     cited_chunks: List[Document]
+    search_method: Literal["rag", "web"]
 
 
 class OrchestratorState(TypedDict):
