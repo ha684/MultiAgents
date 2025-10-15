@@ -1,7 +1,6 @@
 # src/agents/main.py
 import asyncio
 import tiktoken
-import uuid
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
@@ -19,7 +18,6 @@ from src.agents.graph.simple_search_graph import SimpleSearchGraph
 from src.agents.graph.state import OrchestratorState, ResearchState, SimpleSearchState
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.common.types import Message, RetrievalContext, TextPart
-from src.db.models.conversation import MessageStatus
 from src.llm.factory import get_llm
 from src.services.conversation_service import ConversationService
 from src.utils import parse_response
@@ -112,7 +110,6 @@ class OrchestratorGraph(AgentBase):
         )
 
         final_state: ResearchState = await self.research_graph.run(research_state)
-
         return {
             "accumulated_knowledge": final_state.get("accumulated_knowledge", ""),
             "all_search_history": final_state.get("all_search_history", []),
@@ -161,8 +158,9 @@ class OrchestratorGraph(AgentBase):
         )
         messages = [system_prompt] + state["conversation"][-1:] + [user_prompt]
 
+        llm_for_stream = self.llm.with_config({"run_name": "final_synthesizer"})
         final_synthesizer_response = await self.simple_llm_call(
-            messages=messages, llm=self.llm
+            messages=messages, llm=llm_for_stream
         )
 
         return {
@@ -258,9 +256,6 @@ class OrchestratorGraph(AgentBase):
     ) -> Optional[Dict[str, Any]]:
         """Non-streaming execution (backward compatible)"""
         try:
-            conversation_metadata = conversation[-1].additional_kwargs.get(
-                "message_metadata", {}
-            )
             original_query = conversation[-1].content
             initial_state = OrchestratorState(
                 conversation=conversation,
@@ -284,23 +279,9 @@ class OrchestratorGraph(AgentBase):
                     **final_result.get("retrieval_contexts", {})
                 ),
             )
-            await self.conv_service.add_message(
-                message, conversation_metadata.get("conversation_id")
-            )
-            if conversation_metadata.get("message_id"):
-                await self.conv_service.update_message_status(
-                    uuid.UUID(conversation_metadata.get("message_id")),
-                    MessageStatus.COMPLETED,
-                )
             return message
         except Exception as e:
             logger.error(f"Error running orchestrator graph: {e}")
-            if conversation_metadata.get("message_id"):
-                await self.conv_service.update_message_status(
-                    uuid.UUID(conversation_metadata.get("message_id")),
-                    MessageStatus.FAILED,
-                    str(e),
-                )
             raise e
 
 

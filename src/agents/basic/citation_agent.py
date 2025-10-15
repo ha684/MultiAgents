@@ -229,7 +229,6 @@ class CitationAgent(AgentBase):
                 parse_fn=parse_citation_response,
                 retry_prompt='Please provide your final answer as a JSON object with the exact format: {"indexes": [1, 2, 3]}',
             )
-            logger.info(f"Citation response: {response}")
             return CitationIndexes(indexes=response["indexes"])
 
         except Exception as e:

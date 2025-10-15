@@ -241,6 +241,8 @@ def upgrade() -> None:
             "user_id", sa.VARCHAR(length=255), autoincrement=False, nullable=False
         ),
         sa.Column("is_active", sa.BOOLEAN(), autoincrement=False, nullable=True),
+        sa.Column("summary", sa.TEXT(), autoincrement=False, nullable=True),
+        sa.Column("summarized_up_to_message_order", sa.INTEGER(), autoincrement=False, nullable=True),
         sa.Column(
             "created_at",
             postgresql.TIMESTAMP(timezone=True),

@@ -3,7 +3,7 @@ import uuid
 from typing import Any, AsyncGenerator, Dict, Generator, List, Union, cast
 
 import tiktoken
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from qdrant_client.models import Filter, models
 
 from src.agents.basic import (
@@ -18,8 +18,7 @@ from src.agents.stream_handler import AgenticStreamHandler
 from src.common.streaming import StreamEventBuilder, StreamPhase
 from src.common.types import Message, RetrievalContext, TextPart
 from src.config.settings import settings
-from src.db.models.conversation import MessageStatus
-from src.exceptions.chat_exceptions import ConversationNotFoundError, ValidationError
+from src.exceptions.chat_exceptions import ValidationError
 from src.models.chat import ChatRequest, SearchProvider, WebSearchConfig
 from src.rag.vector import vector_retrieval
 from src.services.conversation_service import ConversationService
@@ -27,6 +26,7 @@ from src.services.web_search_service import web_search_service
 from src.tracking.observability import tracer
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
+from src.services.types import Conversation
 
 
 @singleton
@@ -86,11 +86,15 @@ class ChatService:
         return request
 
     async def _manage_conversation_length(
-        self, conversation: List[BaseMessage]
+        self,
+        conversation: List[BaseMessage],
+        num_recent_messages: int,
+        conversation_details: Conversation,
+        user_id: str,
     ) -> List[BaseMessage]:
         """Manage conversation length using token counting and summarization."""
         min_messages_to_keep = 4
-        max_conversation_tokens = 8192
+        max_conversation_tokens = 4096
         if len(conversation) <= min_messages_to_keep:
             return conversation
         total_tokens = summary_agent.count_tokens(conversation)
@@ -98,53 +102,92 @@ class ChatService:
         if total_tokens <= max_conversation_tokens:
             return conversation
 
-        if total_tokens > max_conversation_tokens:
-            messages_to_keep = max(min_messages_to_keep, len(conversation) // 3)
-            recent_messages = conversation[-messages_to_keep:]
+        start_index = 1 if isinstance(conversation[0], SystemMessage) else 0
+        messages_to_summarize = conversation[start_index:-min_messages_to_keep]
+        recent_messages = conversation[-min_messages_to_keep:]
 
-            messages_to_summarize = conversation[:-messages_to_keep]
+        if messages_to_summarize:
+            try:
+                summary_obj = await summary_agent.summarize_conversation(
+                    messages_to_summarize
+                )
+                new_summary_text = summary_obj.summary
 
-            if messages_to_summarize:
-                try:
-                    summary = await summary_agent.summarize_conversation(
-                        messages_to_summarize
-                    )
+                last_summarized_message_model = await self.conv_service.list_messages(
+                    conversation_id=conversation_details.conversation_id,
+                    last_summarized_order=num_recent_messages - min_messages_to_keep,
+                )
 
-                    if recent_messages and isinstance(
-                        recent_messages[-1], HumanMessage
-                    ):
-                        recent_messages[-1] = (
-                            summary_agent.append_summary_to_user_message(
-                                recent_messages[-1], summary
-                            )
-                        )
+                new_checkpoint_order = last_summarized_message_model[-1].metadata[
+                    "message_order"
+                ]
 
-                    return recent_messages
-                except Exception as e:
-                    logger.warning(f"Failed to summarize conversation: {e}")
-                    return recent_messages
+                conversation_obj = Conversation(
+                    conversation_id=conversation_details.conversation_id,
+                    is_active=True,
+                    name=conversation_details.name,
+                    summary=new_summary_text,
+                    summarized_up_to_message_order=new_checkpoint_order,
+                )
+                await self.conv_service.update_conversation(
+                    conversation=conversation_obj,
+                    user_id=user_id,
+                )
+
+                return [
+                    SystemMessage(content=f"Conversation Summary:\n{new_summary_text}")
+                ] + recent_messages
+            except Exception as e:
+                logger.warning(f"Failed to summarize conversation: {e}")
+                return recent_messages
         return conversation
 
-    async def sanitize_message(self, message: Message) -> List[BaseMessage]:
-        """Sanitize the message and manage conversation length."""
-        conversation_id = message.metadata.get("conversation_id")
-        user_id = message.metadata.get("user_id")
+    async def prepare_conversation(self, user_message: Message) -> List[BaseMessage]:
+        """Prepare conversation history without saving the user message yet."""
+        conversation_id = user_message.metadata.get("conversation_id")
+        user_id = user_message.metadata.get("user_id")
+
         try:
-            conversation_history = await self.conv_service.list_messages(
+            conversation_details = await self.conv_service.get_conversation(
                 conversation_id, user_id
             )
-            if conversation_history is None:
-                raise ConversationNotFoundError(conversation_id=conversation_id)
-            message_id = await self.conv_service.add_message(message, conversation_id)
-            message.metadata["message_id"] = message_id
-            conversation_history.append(message)  # type: ignore
-            formatted_conversation = self._format_history(conversation_history)
+            last_summarized_order = conversation_details.summarized_up_to_message_order
+
+            conversation_history = await self.conv_service.list_messages(
+                conversation_id, last_summarized_order
+            )
+
+            summary_text = conversation_details.summary
+            formatted_conversation = []
+            if summary_text:
+                formatted_conversation.append(
+                    SystemMessage(content=f"Conversation Summary:\n{summary_text}")
+                )
+
+            conversation_history.append(user_message)  # type: ignore
+            formatted_conversation.extend(self._format_history(conversation_history))
+
             managed_conversation = await self._manage_conversation_length(
-                formatted_conversation
+                conversation=formatted_conversation,
+                num_recent_messages=len(conversation_history),
+                conversation_details=conversation_details,
+                user_id=user_id,
             )
             return managed_conversation
 
         except Exception as e:
+            raise e
+
+    async def _save_message_pair(
+        self, user_message: Message, agent_message: Message, conversation_id: uuid.UUID
+    ) -> None:
+        """Save both user and agent messages in a single batch operation."""
+        try:
+            messages = [user_message, agent_message]
+            await self.conv_service.add_messages(messages, conversation_id)
+            logger.info(f"Saved message pair for conversation {conversation_id}")
+        except Exception as e:
+            logger.error(f"Error saving message pair: {e}")
             raise e
 
     async def _retrieve(
@@ -427,13 +470,12 @@ class ChatService:
 
     async def ask_normal(
         self,
+        user_message: Message,
         conversation: List[BaseMessage],
         web_search_config: WebSearchConfig,
         metadata: Dict[str, Any],
     ) -> Message:
         """Handles non-streaming (full text) response."""
-        user_message_id = _extract_message_id(conversation[-1])
-
         try:
             retrieval_context = await self._retrieve(
                 conversation, web_search_config, metadata
@@ -458,33 +500,26 @@ class ChatService:
 
             response_dict["response_metadata"].update(clean_metadata)
 
-            message = Message(
+            agent_message = Message(
                 role="agent",
                 parts=[TextPart(type="text", text=response_dict["content"])],
                 metadata=response_dict["response_metadata"],
                 retrieval_context=retrieval_context,
             )
 
-            await self.conv_service.add_message(
-                message, metadata.get("conversation_id")
+            await self._save_message_pair(
+                user_message, agent_message, metadata.get("conversation_id")
             )
 
-            if user_message_id:
-                await self.conv_service.update_message_status(
-                    uuid.UUID(user_message_id), MessageStatus.COMPLETED
-                )
-
-            return message
+            return agent_message
 
         except Exception as e:
-            if user_message_id:
-                await self.conv_service.update_message_status(
-                    uuid.UUID(user_message_id), MessageStatus.FAILED, str(e)
-                )
+            logger.error(f"Error in ask_normal: {e}")
             raise e
 
     async def ask_stream(
         self,
+        user_message: Message,
         conversation: List[BaseMessage],
         web_search_config: WebSearchConfig,
         metadata: Dict[str, Any],
@@ -544,21 +579,18 @@ class ChatService:
                 response_metadata = final_response.get("response_metadata")
                 final_metadata.update(response_metadata)
 
-            message = Message(
+            agent_message = Message(
                 role="agent",
                 parts=[TextPart(type="text", text=final_response.get("content"))],
                 metadata=final_metadata,
                 retrieval_context=retrieval_context,
             )
 
-            user_message_id = _extract_message_id(conversation[-1])
+            # Save both messages together
+            await self._save_message_pair(
+                user_message, agent_message, metadata.get("conversation_id")
+            )
 
-            await self.conv_service.add_message(
-                message, metadata.get("conversation_id")
-            )
-            await self.conv_service.update_message_status(
-                user_message_id, MessageStatus.COMPLETED
-            )
             yield StreamEventBuilder.message_stop(
                 references=references,
                 metadata=final_metadata,
@@ -568,9 +600,6 @@ class ChatService:
             logger.exception(
                 f"An error occurred during the streaming chat response: {e}"
             )
-            await self.conv_service.update_message_status(
-                user_message_id, MessageStatus.FAILED, str(e)
-            )
             yield StreamEventBuilder.error(
                 error_type="generation_error",
                 message=f"An internal error occurred: {str(e)}",
@@ -579,6 +608,7 @@ class ChatService:
 
     async def _stream_agentic_workflow(
         self,
+        user_message: Message,
         conversation: List[BaseMessage],
         metadata: Dict[str, Any],
     ) -> AsyncGenerator[str, None]:
@@ -587,7 +617,6 @@ class ChatService:
             yield StreamEventBuilder.message_start()
             handler = AgenticStreamHandler()
             final_state = None
-            user_message_id = _extract_message_id(conversation[-1])
             conversation_id = metadata.get("conversation_id")
 
             async for event in self.orchestrator_graph.stream(conversation):
@@ -630,7 +659,7 @@ class ChatService:
                 for doc in cited_chunks
             ]
 
-            message = Message(
+            agent_message = Message(
                 role="agent",
                 parts=[TextPart(type="text", text=final_state["final_answer"])],
                 metadata=response_metadata,
@@ -648,10 +677,7 @@ class ChatService:
                 ),
             )
 
-            await self.conv_service.add_message(message, conversation_id)
-            await self.conv_service.update_message_status(
-                user_message_id, MessageStatus.COMPLETED
-            )
+            await self._save_message_pair(user_message, agent_message, conversation_id)
 
             yield StreamEventBuilder.message_stop(
                 references=references,
@@ -660,12 +686,6 @@ class ChatService:
 
         except Exception as e:
             logger.exception(f"Error in agentic workflow streaming: {e}")
-
-            if user_message_id:
-                await self.conv_service.update_message_status(
-                    user_message_id, MessageStatus.FAILED, str(e)
-                )
-
             yield StreamEventBuilder.error(
                 error_type="agentic_workflow_error",
                 message=f"An error occurred: {str(e)}",
@@ -678,24 +698,22 @@ class ChatService:
             span.set_attribute("user.id", request.message.metadata.get("user_id"))
             span.set_attribute("kb.id", request.message.metadata.get("kb_id"))
             request = self.sanitize_request(request)
-            if settings.enable_websearch and request.web_search:
-                web_search_config = WebSearchConfig(
-                    provider=settings.websearch_provider,
-                    active=True,
-                    api_key=_get_api_key_for_provider(settings.websearch_provider),
-                )
-            else:
-                web_search_config = WebSearchConfig(active=False)
+            web_search_config = _setup_web_search_config(request)
 
             metadata = request.message.metadata
             metadata.update({"web_search_config": web_search_config.model_dump()})
-            conversation = await self.sanitize_message(request.message)
+
+            conversation = await self.prepare_conversation(request.message)
             conversation[-1].additional_kwargs["message_metadata"] = metadata
+
             if request.agentic:
                 response = await self.orchestrator_graph.ainvoke(conversation)
+                await self._save_message_pair(
+                    request.message, response, metadata.get("conversation_id")
+                )
             else:
                 response = await self.ask_normal(
-                    conversation, web_search_config, metadata
+                    request.message, conversation, web_search_config, metadata
                 )
             return response
 
@@ -704,25 +722,22 @@ class ChatService:
     ) -> AsyncGenerator[str | BaseMessage, None]:
         """Process a chat request and return a streaming response."""
         request = self.sanitize_request(request)
-        if settings.enable_websearch and request.web_search:
-            api_key = _get_api_key_for_provider(settings.websearch_provider)
-            web_search_config = WebSearchConfig(
-                provider=settings.websearch_provider,
-                active=True,
-                api_key=api_key,
-            )
-        else:
-            web_search_config = WebSearchConfig(active=False)
+        web_search_config = _setup_web_search_config(request)
 
         metadata = request.message.metadata
-
-        conversation = await self.sanitize_message(request.message)
         metadata.update({"web_search_config": web_search_config.model_dump()})
+
+        conversation = await self.prepare_conversation(request.message)
         conversation[-1].additional_kwargs["message_metadata"] = metadata
+
         if request.agentic:
-            response = self._stream_agentic_workflow(conversation, metadata)
+            response = self._stream_agentic_workflow(
+                request.message, conversation, metadata
+            )
         else:
-            response = self.ask_stream(conversation, web_search_config, metadata)
+            response = self.ask_stream(
+                request.message, conversation, web_search_config, metadata
+            )
         return response
 
 
@@ -736,7 +751,14 @@ def _get_api_key_for_provider(provider: SearchProvider) -> str:
         return ""
 
 
-def _extract_message_id(message: BaseMessage) -> str | None:
-    """Extract message_id from LangChain message's metadata."""
-    metadata = message.additional_kwargs.get("message_metadata", {})
-    return metadata.get("message_id")
+def _setup_web_search_config(request: ChatRequest) -> WebSearchConfig:
+    """Setup web search config based on the request."""
+    if settings.enable_websearch and request.web_search:
+        web_search_config = WebSearchConfig(
+            provider=settings.websearch_provider,
+            active=True,
+            api_key=_get_api_key_for_provider(settings.websearch_provider),
+        )
+    else:
+        web_search_config = WebSearchConfig(active=False)
+    return web_search_config

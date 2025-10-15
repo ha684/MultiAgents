@@ -83,7 +83,7 @@ GRAPH_CONFIGS = {
             ),
             "pre_flight_rag_check": NodeMetadata(
                 display_message="Checking knowledge base...",
-                stream_phase=StreamPhase.RETRIEVAL,
+                stream_phase=StreamPhase.PROCESSING,
             ),
             "search_executor": NodeMetadata(
                 display_message="Gathering information...",

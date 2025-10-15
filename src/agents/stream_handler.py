@@ -2,6 +2,7 @@ from typing import Optional
 from src.models.streaming import StreamPhase
 from src.config.graph_configs import GRAPH_CONFIGS
 from src.common.streaming import StreamEventBuilder
+from src.utils.logger_conf import logger
 
 
 class AgenticStreamHandler:
@@ -13,7 +14,6 @@ class AgenticStreamHandler:
         self.last_phase: Optional[StreamPhase] = None
         self.last_emitted_message: Optional[str] = None
         self.content_index: int = 0
-        self.last_phase = None
 
     async def handle_event(self, event: dict) -> Optional[str]:
         """Process a single event and return SSE event if needed"""
@@ -60,8 +60,6 @@ class AgenticStreamHandler:
 
     async def _handle_chain_end(self, name: str, event: dict) -> Optional[str]:
         """Handle chain/node end"""
-        self.last_phase = None
-
         if name in GRAPH_CONFIGS:
             if self.graph_stack:
                 self.graph_stack.pop()
@@ -82,41 +80,77 @@ class AgenticStreamHandler:
     async def _emit_completion_status(self, output: dict) -> Optional[str]:
         """Emit status based on node completion"""
 
+        def extract_urls_and_favicons(items):
+            """Extract URLs and favicons from chunks or documents"""
+            urls = []
+            favicons = []
+            for item in items:
+                if url := item.metadata.get("original_filename", ""):
+                    urls.append(url)
+                if favicon := item.metadata.get("favicon", ""):
+                    favicons.append(favicon)
+            return urls, favicons
+
+        def build_retrieval_status(message, sources_count, urls=None, favicons=None):
+            """Build retrieval status with optional web metadata"""
+            metadata = {"sources_count": sources_count}
+            if urls and favicons:
+                metadata.update({"urls": urls, "favicons": favicons})
+            return StreamEventBuilder.status_update(
+                phase=StreamPhase.RETRIEVAL,
+                message=message,
+                metadata=metadata,
+            )
+
         if "retrieval_contexts" in output:
             retrieval = output["retrieval_contexts"]
             total_cited = retrieval.get("total_cited", 0)
             total_retrieved = retrieval.get("total_retrieved", 0)
-            cited_chunks = retrieval.get("cited_chunks", [])
+
             if total_cited > 0 and retrieval.get("search_method") == "web":
-                urls = []
-                favicons = []
-                for chunk in cited_chunks:
-                    url = chunk.metadata.get("original_filename", "")
-                    if url:
-                        urls.append(url)
-                    favicon = chunk.metadata.get("favicon", "")
-                    if favicon:
-                        favicons.append(favicon)
-                return StreamEventBuilder.status_update(
-                    phase=StreamPhase.RETRIEVAL,
-                    message=f"Found {total_cited} relevant sources",
-                    metadata={
-                        "sources_count": total_cited,
-                        "urls": urls,
-                        "favicons": favicons,
-                    },
+                urls, favicons = extract_urls_and_favicons(
+                    retrieval.get("cited_chunks", [])
+                )
+                return build_retrieval_status(
+                    f"Found {total_cited} relevant sources",
+                    total_cited,
+                    urls,
+                    favicons,
                 )
             elif total_retrieved > 0:
-                return StreamEventBuilder.status_update(
-                    phase=StreamPhase.RETRIEVAL,
-                    message=f"Retrieved total {total_retrieved} documents",
-                    metadata={"sources_count": total_retrieved},
+                return build_retrieval_status(
+                    f"Retrieved total {total_retrieved} documents",
+                    total_retrieved,
                 )
             else:
-                return StreamEventBuilder.status_update(
-                    phase=StreamPhase.RETRIEVAL,
-                    message="No documents found",
-                )
+                return build_retrieval_status("No documents found", 0)
+
+        if "search_results" in output:
+            search_results = output["search_results"]
+            documents = search_results.get("documents", [])
+            search_type = search_results.get("search_type", "")
+            doc_count = len(documents)
+
+            if doc_count == 0:
+                return build_retrieval_status("No documents found", 0)
+
+            message = f"Searched: {search_results.get('query', '')}"
+
+            if search_type == "web":
+                urls, favicons = extract_urls_and_favicons(documents)
+                metadata = {
+                    "search_count": doc_count,
+                    "urls": urls,
+                    "favicons": favicons,
+                }
+            else:
+                metadata = {"search_count": doc_count}
+
+            return StreamEventBuilder.status_update(
+                phase=StreamPhase.RETRIEVAL,
+                message=message,
+                metadata=metadata,
+            )
 
         return None
 
@@ -155,6 +189,7 @@ class AgenticStreamHandler:
             config = GRAPH_CONFIGS.get(self.current_graph)
             if config:
                 node_meta = config.get_node_meta(name)
+                logger.info(f"Node meta: {node_meta}")
                 if node_meta and node_meta.stream_phase == StreamPhase.SYNTHESIS:
                     self.last_phase = StreamPhase.SYNTHESIS
 

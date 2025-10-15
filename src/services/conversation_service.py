@@ -21,16 +21,22 @@ class ConversationService:
         c = await self.conv_repository.create_conversation(app_name, user_id)
         return c
 
-    async def list_messages(
+    async def get_conversation(
         self, conversation_id: uuid.UUID, user_id: str
-    ) -> Optional[List[Message]]:
+    ) -> Conversation:
         conversation = await self.conv_repository.get_conversation(
             conversation_id, user_id
         )
         if not conversation:
             raise ConversationNotFoundError(conversation_id=conversation_id)
+        return conversation
 
-        messages = await self.conv_repository.get_messages(conversation_id)
+    async def list_messages(
+        self, conversation_id: uuid.UUID, last_summarized_order: int | None = None
+    ) -> Optional[List[Message]]:
+        messages = await self.conv_repository.get_messages(
+            conversation_id, last_summarized_order
+        )
         return messages if messages is not None else []
 
     async def list_conversation(self, user_id: str) -> List[Conversation]:
@@ -47,21 +53,18 @@ class ConversationService:
             raise ConversationNotFoundError(conversation_id=conversation_id)
         return result
 
-    async def add_message(self, message: Message, conversation_id: uuid.UUID) -> str:
-        """Add a message to the conversation"""
-        return await self.conv_repository.add_message(message, conversation_id)
+    async def add_messages(
+        self, messages: List[Message], conversation_id: uuid.UUID
+    ) -> List[str]:
+        """Add multiple messages to the conversation"""
+        return await self.conv_repository.add_messages(messages, conversation_id)
 
     async def update_conversation(
-        self, conversation_id: uuid.UUID, user_id: str, active: bool, name: str
+        self,
+        conversation: Conversation,
+        user_id: str,
     ) -> Conversation:
         """Update a conversation"""
-        conversation = await self.conv_repository.get_conversation(
-            conversation_id, user_id
-        )
-        if not conversation:
-            raise ConversationNotFoundError(conversation_id=conversation_id)
-        conversation.is_active = active
-        conversation.name = name
         return await self.conv_repository.update_conversation(conversation, user_id)
 
     async def update_message_status(

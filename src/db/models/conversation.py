@@ -33,6 +33,9 @@ class ConversationModel(Base):
     user_id = Column(String(255), nullable=False)
     is_active = Column(Boolean, default=True)
 
+    summary = Column(Text, nullable=True)
+    summarized_up_to_message_order = Column(Integer, nullable=True)
+
     created_at = Column(
         DateTime(timezone=True),
         nullable=False,
@@ -82,6 +85,7 @@ class MessageModel(Base):
     )
     message_order = Column(Integer, nullable=False)
     retrieval_context = Column(JSONB, nullable=True)
+
     conversation = relationship("ConversationModel", back_populates="messages")
 
     __table_args__ = (

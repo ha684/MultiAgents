@@ -6,7 +6,7 @@ from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
 from pydantic import BaseModel
-import tiktoken
+from langchain_core.messages import get_buffer_string
 
 
 class ConversationSummary(BaseModel):
@@ -49,17 +49,11 @@ class SummaryAgent:
     def __init__(self):
         self.llm = get_llm("nxchat")
         self.structured_llm = self.llm.with_structured_output(ConversationSummary)
-        self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
         logger.info("Summary Agent initialized successfully.")
 
     def count_tokens(self, messages: List[Message]) -> int:
         """Count tokens in conversation history."""
-        total_tokens = 0
-        for message in messages:
-            content = getattr(message, "content", "")
-            if content:
-                total_tokens += len(self.tokenizer.encode(str(content)))
-        return total_tokens
+        return self.llm.get_num_tokens(get_buffer_string(messages))
 
     async def summarize_conversation(
         self, messages: List[Message]
