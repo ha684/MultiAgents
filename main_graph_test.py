@@ -129,7 +129,7 @@ async def main():
     orchestrator = OrchestratorGraph()
 
     human_message = HumanMessage(
-        content="Analyze the geopolitical impact of the latest G7 summit decisions on energy trading.",
+        content="Analyze the geopolitical impact of the latest G7 summit decisions on energy trading. Use deep research",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]

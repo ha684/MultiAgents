@@ -6,10 +6,15 @@ from src.utils.logger_conf import logger
 
 
 class AgenticStreamHandler:
-    """Handles streaming events from graph execution"""
+    """Handles streaming events from graph execution
+
+    Design principle: GRAPH_CONFIGS is the single source of truth.
+    No need to maintain separate node lists.
+    """
 
     def __init__(self):
         self.current_graph: Optional[str] = None
+        self.current_node: Optional[str] = None
         self.graph_stack: list[str] = []
         self.last_phase: Optional[StreamPhase] = None
         self.last_emitted_message: Optional[str] = None
@@ -32,7 +37,10 @@ class AgenticStreamHandler:
         return None
 
     async def _handle_chain_start(self, name: str, event: dict) -> Optional[str]:
-        """Handle chain/node start"""
+        """Handle chain/node start
+
+        Key insight: name here is the node name (e.g., "final_synthesizer")
+        """
         if name in GRAPH_CONFIGS:
             self.graph_stack.append(name)
             self.current_graph = name
@@ -42,20 +50,40 @@ class AgenticStreamHandler:
             config = GRAPH_CONFIGS.get(self.current_graph)
             if config:
                 node_meta = config.get_node_meta(name)
-                if node_meta and node_meta.show_in_ui:
-                    phase_changed = node_meta.stream_phase != self.last_phase
-                    message_changed = (
-                        node_meta.display_message != self.last_emitted_message
-                    )
 
-                    if phase_changed or message_changed:
-                        self.last_phase = node_meta.stream_phase
-                        self.last_emitted_message = node_meta.display_message
-
-                        return StreamEventBuilder.status_update(
-                            phase=node_meta.stream_phase,
-                            message=node_meta.display_message,
+                if node_meta:
+                    self.current_node = name
+                    self.last_phase = node_meta.stream_phase
+                    if node_meta.show_in_ui:
+                        message_changed = (
+                            node_meta.display_message != self.last_emitted_message
                         )
+
+                        if message_changed:
+                            self.last_emitted_message = node_meta.display_message
+                            return StreamEventBuilder.status_update(
+                                phase=node_meta.stream_phase,
+                                message=node_meta.display_message,
+                            )
+                    return None
+
+        for graph_name, config in GRAPH_CONFIGS.items():
+            node_meta = config.get_node_meta(name)
+            if node_meta:
+                self.current_graph = graph_name
+                self.current_node = name
+                self.last_phase = node_meta.stream_phase
+
+                self.graph_stack = [graph_name]
+
+                if node_meta.show_in_ui:
+                    self.last_emitted_message = node_meta.display_message
+                    return StreamEventBuilder.status_update(
+                        phase=node_meta.stream_phase,
+                        message=node_meta.display_message,
+                    )
+                return None
+
         return None
 
     async def _handle_chain_end(self, name: str, event: dict) -> Optional[str]:
@@ -64,6 +92,10 @@ class AgenticStreamHandler:
             if self.graph_stack:
                 self.graph_stack.pop()
             self.current_graph = self.graph_stack[-1] if self.graph_stack else None
+
+            if not self.current_graph:
+                self.current_node = None
+                self.last_phase = None
             return None
 
         output = event.get("data", {}).get("output", {})
@@ -182,14 +214,32 @@ class AgenticStreamHandler:
         return None
 
     async def _handle_llm_stream(self, name: str, event: dict) -> Optional[str]:
-        """Handle LLM streaming"""
+        """Handle LLM streaming
+
+        Key insight: name here is the model name (e.g., "ChatOpenAI"),
+        NOT the node name. We must use self.current_node instead.
+        """
         chunk = event["data"]["chunk"]
 
-        if self.current_graph:
+        if self.current_graph and self.current_node:
             config = GRAPH_CONFIGS.get(self.current_graph)
             if config:
-                node_meta = config.get_node_meta(name)
-                logger.info(f"Node meta: {node_meta}")
+                node_meta = config.get_node_meta(self.current_node)
+
+                if not node_meta:
+                    logger.warning(
+                        f"Node '{self.current_node}' not found in graph '{self.current_graph}'. "
+                        f"Possible orphaned state from terminated subgraph."
+                    )
+                    for graph_name, cfg in GRAPH_CONFIGS.items():
+                        if cfg.get_node_meta(self.current_node):
+                            logger.info(f"Correcting graph context to '{graph_name}'")
+                            self.current_graph = graph_name
+                            self.graph_stack = [graph_name]
+                            config = cfg
+                            node_meta = cfg.get_node_meta(self.current_node)
+                            break
+
                 if node_meta and node_meta.stream_phase == StreamPhase.SYNTHESIS:
                     self.last_phase = StreamPhase.SYNTHESIS
 

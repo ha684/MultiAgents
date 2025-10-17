@@ -760,7 +760,7 @@ class ResearchGraph(AgentBase):
         """
         Run research graph with streaming, handling both timeouts and recursion limits.
         """
-        config = {"recursion_limit": 10}
+        config = {"recursion_limit": 100}
         timeout_seconds = 600
 
         last_known_state = state

@@ -1,21 +1,27 @@
-# src/agents/main.py
+# src/agents/main_graph.py
 import asyncio
-import tiktoken
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
+import tiktoken
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables.schema import StreamEvent
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-
 from src.agents.basic import query_context_agent, response_agent
 from src.agents.basic.base import AgentBase
+from src.agents.com.manager import execution_manager
 from src.agents.graph.prompts import PromptTemplates
 from src.agents.graph.research_graph import ResearchGraph
 from src.agents.graph.schemas import RouteDecision
 from src.agents.graph.simple_search_graph import SimpleSearchGraph
-from src.agents.graph.state import OrchestratorState, ResearchState, SimpleSearchState
+from src.agents.graph.sql_graph import SqlGraph
+from src.agents.graph.state import (
+    OrchestratorState,
+    ResearchState,
+    SimpleSearchState,
+    SqlState,
+)
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.common.types import Message, RetrievalContext, TextPart
 from src.llm.factory import get_llm
@@ -35,6 +41,7 @@ class OrchestratorGraph(AgentBase):
         tokenizer = tiktoken.encoding_for_model("gpt-4o")
         self.simple_search_graph = SimpleSearchGraph(tokenizer)
         self.research_graph = ResearchGraph()
+        self.sql_graph = SqlGraph()
         self.conv_service = ConversationService()
         self.graph = self._build_graph()
 
@@ -108,12 +115,58 @@ class OrchestratorGraph(AgentBase):
             contextualized_query=state["contextualized_query"],
             context_metadata=context_metadata,
         )
+        execution = execution_manager.get_execution(
+            state["conversation"][-1].additional_kwargs.get("conversation_id")
+        )
 
-        final_state: ResearchState = await self.research_graph.run(research_state)
+        research_task = asyncio.create_task(self.research_graph.run(research_state))
+
+        done, pending = await asyncio.wait(
+            [research_task, asyncio.create_task(execution.skip_event.wait())],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        for task in pending:
+            task.cancel()
+
+        if execution.should_skip():
+            logger.warning("⏭️ User requested skip")
+            research_task.cancel()
+
+            partial = execution.partial_state or research_state
+            return ResearchState(
+                contextualized_query=research_state.contextualized_query,
+                context_metadata=research_state.context_metadata,
+                accumulated_knowledge=partial.get(
+                    "accumulated_knowledge", "[Research skipped by user]"
+                ),
+                all_search_history=partial.get("all_search_history", []),
+                cited_documents=partial.get("cited_documents", []),
+            )
+
+        return await research_task
+
+    async def sql_subgraph_node(self, state: OrchestratorState) -> Dict[str, Any]:
+        """Execute SQL query graph"""
+
+        sql_state = SqlState(
+            conversation=state["conversation"],
+            original_query=state["original_query"],
+            contextualized_query=state["contextualized_query"],
+            database_schema=None,
+            generated_sql=None,
+            validation_result=None,
+            sql_error=None,
+            query_results=None,
+            result_summary=None,
+            response_metadata={},
+        )
+
+        result = await self.sql_graph.run(sql_state)
+
         return {
-            "accumulated_knowledge": final_state.get("accumulated_knowledge", ""),
-            "all_search_history": final_state.get("all_search_history", []),
-            "cited_documents": final_state.get("cited_documents", []),
+            "final_answer": result.get("result_summary", ""),
+            "response_metadata": result.get("response_metadata", {}),
         }
 
     async def final_synthesizer_node(self, state: OrchestratorState) -> Dict[str, Any]:
@@ -130,6 +183,14 @@ class OrchestratorGraph(AgentBase):
             return {
                 "final_answer": response.content,
                 "response_metadata": response_metadata,
+            }
+
+        if route == "sql_query":
+            logger.info("SQL query already processed - returning result")
+            # SQL subgraph already generated the final answer
+            return {
+                "final_answer": state.get("final_answer", ""),
+                "response_metadata": state.get("response_metadata", {}),
             }
 
         if route == "simple_search":
@@ -158,9 +219,8 @@ class OrchestratorGraph(AgentBase):
         )
         messages = [system_prompt] + state["conversation"][-1:] + [user_prompt]
 
-        llm_for_stream = self.llm.with_config({"run_name": "final_synthesizer"})
         final_synthesizer_response = await self.simple_llm_call(
-            messages=messages, llm=llm_for_stream
+            messages=messages, llm=self.llm
         )
 
         return {
@@ -185,6 +245,7 @@ class OrchestratorGraph(AgentBase):
         workflow.add_node("router", self.router_node)
         workflow.add_node("simple_search_subgraph", self.simple_search_subgraph_node)
         workflow.add_node("research_subgraph_node", self.research_subgraph_node)
+        workflow.add_node("sql_subgraph_node", self.sql_subgraph_node)
         workflow.add_node("final_synthesizer", self.final_synthesizer_node)
 
         workflow.set_entry_point("contextualize_query")
@@ -198,11 +259,13 @@ class OrchestratorGraph(AgentBase):
                 "chitchat": "final_synthesizer",
                 "simple_search": "simple_search_subgraph",
                 "deep_research": "research_subgraph_node",
+                "sql_query": "sql_subgraph_node",
             },
         )
 
         workflow.add_edge("research_subgraph_node", "final_synthesizer")
         workflow.add_edge("simple_search_subgraph", "final_synthesizer")
+        workflow.add_edge("sql_subgraph_node", "final_synthesizer")
 
         workflow.set_finish_point("final_synthesizer")
 
@@ -230,6 +293,8 @@ class OrchestratorGraph(AgentBase):
 
         config = {"recursion_limit": 100}
         timeout_seconds = 600
+        conversation_id = conversation[-1].additional_kwargs.get("conversation_id")
+        execution_manager.start_execution(conversation_id)
 
         try:
             async with asyncio.timeout(timeout_seconds):
@@ -250,6 +315,8 @@ class OrchestratorGraph(AgentBase):
                 "Returning the most recent accumulated result."
             )
             yield last_known_state
+        finally:
+            execution_manager.finish_execution(conversation_id)
 
     async def ainvoke(
         self, conversation: List[BaseMessage]

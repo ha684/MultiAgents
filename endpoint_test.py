@@ -14,18 +14,18 @@ PAYLOAD = {
         "parts": [
             {
                 "type": "text",
-                "text": "Analyze the geopolitical impact of the latest G7 summit decisions on energy trading. Use deep research and provide complete citations for all claims.",
+                "text": "tell me in details about how attention works in transformer model, use deep research",
             }
         ],
         "metadata": {
-            "conversation_id": "068ef452-0b6a-72bb-8000-2e23093ae04a",
-            "kb_id": "068e7efb-fd5b-7523-8000-3e54cd74ff34",
+            "conversation_id": "068f1efc-54ce-7458-8000-b1feb4d87359",
+            "kb_id": "068f1c8d-a3c6-74ad-8000-bb169bc0fe48",
             "user_id": "ha",
             "app_name": "ha",
         },
     },
     "agentic": True,
-    "web_search": True,
+    "web_search": False,
 }
 
 print(f"--- Sending request to: {STREAMING_URL} (agentic=True) ---")

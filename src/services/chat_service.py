@@ -13,8 +13,8 @@ from src.agents.basic import (
     response_agent,
     summary_agent,
 )
-from src.agents.main_graph import OrchestratorGraph
-from src.agents.stream_handler import AgenticStreamHandler
+from src.agents import Agent
+from src.agents.com.stream_handler import AgenticStreamHandler
 from src.common.streaming import StreamEventBuilder, StreamPhase
 from src.common.types import Message, RetrievalContext, TextPart
 from src.config.settings import settings
@@ -33,7 +33,7 @@ from src.services.types import Conversation
 class ChatService:
     def __init__(self):
         self.conv_service = ConversationService()
-        self.orchestrator_graph = OrchestratorGraph()
+        self.agent = Agent()
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
 
     def _format_history(self, history: List[Message]) -> List[BaseMessage]:
@@ -227,6 +227,7 @@ class ChatService:
                         api_key=web_search_config.api_key,
                         max_results=rerank_top,
                     )
+                    search_method = "web"
             else:
                 with tracer.start_as_current_span("FilenameAgent.extract_filename"):
                     requested_filename = await filename_agent.ainvoke(
@@ -253,6 +254,7 @@ class ChatService:
                         top_k=embed_top,
                         top_n=rerank_top,
                     )
+                    search_method = "rag"
 
             logger.info(
                 f"Retrieved {len(retrieved_docs)} documents for query: {contextualized_query} in knowledgebase: {kb_id}"
@@ -312,6 +314,7 @@ class ChatService:
                 total_retrieved=len(retrieved_docs),
                 total_cited=len(cited_docs),
                 cited_chunks=cited_docs,
+                search_method=search_method,
             )
 
             return retrieval_context
@@ -379,6 +382,7 @@ class ChatService:
                     "favicons": favicons,
                 },
             )
+            search_method = "web"
         else:
             yield StreamEventBuilder.status_update(
                 StreamPhase.RETRIEVAL,
@@ -405,6 +409,7 @@ class ChatService:
                 top_k=embed_top,
                 top_n=rerank_top,
             )
+            search_method = "rag"
             yield StreamEventBuilder.status_update(
                 StreamPhase.RETRIEVAL,
                 "Found relevant documents",
@@ -465,6 +470,7 @@ class ChatService:
             total_retrieved=len(retrieved_docs),
             total_cited=len(cited_docs),
             cited_chunks=cited_docs,
+            search_method=search_method,
         )
         yield retrieval_context
 
@@ -619,7 +625,7 @@ class ChatService:
             final_state = None
             conversation_id = metadata.get("conversation_id")
 
-            async for event in self.orchestrator_graph.stream(conversation):
+            async for event in self.agent.stream(conversation):
                 result = await handler.handle_event(event)
 
                 if result:
@@ -707,7 +713,7 @@ class ChatService:
             conversation[-1].additional_kwargs["message_metadata"] = metadata
 
             if request.agentic:
-                response = await self.orchestrator_graph.ainvoke(conversation)
+                response = await self.agent.ainvoke(conversation)
                 await self._save_message_pair(
                     request.message, response, metadata.get("conversation_id")
                 )
