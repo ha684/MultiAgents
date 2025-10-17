@@ -1,21 +1,21 @@
 # {
-#     "message": {
-#         "role": "user",
-#         "parts": [
-#             {
-#                 "type": "text",
-#                 "text": "i want to know about the recent storm coming to viet nam",
-#             }
-#         ],
-#         "metadata": {
-#             "conversation_id": "068d35e5-9423-716b-8000-5cd0aeb06bdc",
-#             "kb_id": "068da9ca-5467-713d-8000-edc609d6fcfb",
-#             "user_id": "123",
-#             "app_name": "test",
-#         },
-#     },
-#     "agentic": false,
-#     "web_search": false,
+#   "message": {
+#     "role": "user",
+#     "parts": [
+#       {
+#         "type": "text",
+#         "text": "i want to know about the recent storm coming to viet nam"
+#       }
+#     ],
+#     "metadata": {
+#       "conversation_id": "068f1c40-5a4d-7b74-8000-8f6f76ec074b",
+#       "kb_id": "068e7efb-fd5b-7523-8000-3e54cd74ff34",
+#       "user_id": "ha",
+#       "app_name": "ha"
+#     }
+#   },
+#   "agentic": false,
+#   "web_search": false
 # }
 
 
@@ -50,3 +50,15 @@
 # for doc in docs:
 #     print(doc.page_content)
 #     print("-" * 100)
+
+from src.llm.factory import get_llm
+
+llm = get_llm("nxchat")
+messages = [
+    {
+        "role": "user",
+        "content": "Bạn có biết cách tạo một JSON theo đặc tả của Vega-Lite để vẽ biểu đồ cột không?",
+    }
+]
+response = llm.invoke(messages)
+print(response)

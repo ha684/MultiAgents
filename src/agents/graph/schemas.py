@@ -1,12 +1,13 @@
 # src/agents/graph/schemas.py
+from typing import Any, Dict, List, Literal
+
 from pydantic import BaseModel, Field
-from typing import List, Literal, Dict, Any
 
 
 class RouteDecision(BaseModel):
     """Router output schema"""
 
-    route: Literal["chitchat", "simple_search", "deep_research"] = Field(
+    route: Literal["chitchat", "simple_search", "deep_research", "sql_query"] = Field(
         description="The route to take based on query complexity"
     )
 
@@ -46,6 +47,58 @@ class ReflectionSchema(BaseModel):
 
     critique: str = Field(description="Critique of the research")
     next_steps: str = Field(description="Next steps to take")
+
+
+class SqlGenerationSchema(BaseModel):
+    """SQL generation output schema"""
+
+    sql_query: str = Field(description="The generated SQL SELECT query")
+
+
+class SqlValidationSchema(BaseModel):
+    """SQL validation output schema"""
+
+    is_valid: bool = Field(description="Whether the SQL query is valid and safe")
+    is_select_only: bool = Field(
+        description="Whether the query is SELECT-only (no mutations)"
+    )
+    issues: List[str] = Field(
+        description="List of validation issues found", default_factory=list
+    )
+    sanitized_query: str = Field(
+        description="The sanitized/validated SQL query if valid"
+    )
+
+
+class SqlAnalysisSchema(BaseModel):
+    """SQL analysis output schema"""
+
+    needs_chart: bool = Field(description="Whether the query needs a chart")
+    required_queries: List[Dict[str, Any]] = Field(
+        description="List of required queries"
+    )
+
+
+class ChartGenerationSchema(BaseModel):
+    """Chart generation output schema"""
+
+    vega_spec: str = Field(description="The generated Vega-Lite specification")
+    chart_type: Literal[
+        "bar",
+        "line",
+        "pie",
+        "scatter",
+        "area",
+        "histogram",
+        "boxplot",
+        "heatmap",
+        "treemap",
+        "sunburst",
+        "funnel",
+        "gauge",
+        "radial",
+        "map",
+    ] = Field(description="The type of chart")
 
 
 # class Event(LlmResponse):

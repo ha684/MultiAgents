@@ -12,10 +12,11 @@ class PromptTemplates:
         </role>
 
         <task>
-        Analyze the user's query and conversation context, then classify it into one of three routes:
+        Analyze the user's query and conversation context, then classify it into one of four routes:
         1. **chitchat** - Conversational, greeting, or non-informational queries
         2. **simple_search** - Queries that can be answered with a single-pass document retrieval flow
         3. **deep_research** - Queries requiring iterative research, multi-step reasoning, or agentic exploration
+        4. **sql_query** - Queries requesting data from a database using natural language
         </task>
 
         <optional_thinking>
@@ -121,6 +122,52 @@ class PromptTemplates:
 
         **Note:** deep_research is NOT about complexity, but about whether the query benefits from **iterative, agentic exploration** vs. a single retrieval pass.
 
+        ---
+
+        ## Route: sql_query
+        **When to use:**
+        - Queries explicitly requesting data from a database
+        - Questions about structured data that would benefit from SQL queries
+        - Requests for specific data points, counts, aggregations from database tables
+        - Questions that clearly indicate database querying intent
+        - Queries asking for reports, statistics, or analytics from structured data
+
+        **Key principle:** Does the query need:
+        - Direct access to database tables?
+        - Structured query operations (filtering, aggregation, joins)?
+        - Precise data retrieval from relational database?
+
+        If YES : sql_query
+
+        **Flow characteristics:**
+        - Convert natural language to SQL SELECT query
+        - Execute query against database (READ-ONLY)
+        - Return structured results
+        - Safety-first: Only SELECT queries allowed
+
+        **Examples:**
+        "Show me all users registered in the last month"
+        "What's the total revenue by product category?"
+        "List the top 10 customers by order value"
+        "How many active subscriptions do we have?"
+        "Get me the average order value per region"
+        "Show user activity data for user ID 12345"
+        "What are the most frequently ordered products?"
+        "Count the number of failed transactions yesterday"
+
+        **Key indicators:**
+        - Asking for specific data points from database
+        - Using database terminology (tables, records, fields)
+        - Requesting counts, sums, averages, or other aggregations
+        - Questions that clearly map to SQL operations
+        - Need for precise structured data rather than document-based info
+
+        **When NOT to use:**
+        - Questions about unstructured documents or text
+        - Queries needing semantic search or contextual understanding
+        - Questions requiring external web information
+        - Queries about concepts, explanations, or analysis (use simple_search or deep_research)
+
         </routing_criteria>
 
         <decision_framework>
@@ -167,7 +214,7 @@ class PromptTemplates:
         <output_format>
         Return ONLY a JSON object with the following structure:
         {
-        "route": "chitchat" | "simple_search" | "deep_research"
+        "route": "chitchat" | "simple_search" | "deep_research" | "sql_query"
         }
 
         Do NOT include any explanations, reasoning, or additional text outside the JSON object.
@@ -200,29 +247,44 @@ class PromptTemplates:
         Output: {"route": "deep_research"}
         [May use think tool: Need to first find what dropped (search satisfaction data), then investigate causes (search for issues), then solutions.]
 
+        **Example 6 - SQL Query - Database Request:**
+        User: "How many users signed up last week?"
+        Output: {"route": "sql_query"}
+        [Clear database query: needs to count records from user table with date filter. Direct SQL operation.]
+
+        **Example 7 - SQL Query - Aggregation:**
+        User: "Show me the top 5 products by sales volume"
+        Output: {"route": "sql_query"}
+        [Database aggregation query: needs to group, sum, and sort data from sales tables.]
+
         </examples>
 
         <critical_rules>
         1. You MAY use the 'think' tool for ambiguous cases, but it's optional
         2. **Default to simple_search when uncertain** - it handles most queries effectively
         3. Only route to deep_research when you can clearly explain why iteration/exploration is needed
-        4. Complexity of answer ≠ deep_research (complex answers can come from simple_search)
-        5. deep_research is about **process** (iterative/agentic) not **difficulty**
-        6. Consider the FULL conversation context when routing follow-up questions
-        7. Output MUST be valid JSON with only the "route" key
-        8. No explanations or additional text outside the JSON object
-        9. Greetings and social queries ALWAYS go to chitchat
+        4. Only route to sql_query when query clearly requests structured database data
+        5. Complexity of answer ≠ deep_research (complex answers can come from simple_search)
+        6. deep_research is about **process** (iterative/agentic) not **difficulty**
+        7. sql_query is for **structured data retrieval**, not document search or analysis
+        8. Consider the FULL conversation context when routing follow-up questions
+        9. Output MUST be valid JSON with only the "route" key
+        10. No explanations or additional text outside the JSON object
+        11. Greetings and social queries ALWAYS go to chitchat
         </critical_rules>
 
         <key_insight>
         Think of it this way:
+        - **chitchat**: "No information request, just conversation"
         - **simple_search**: "I know what I'm looking for, I just need to find and synthesize it" (linear retrieval flow)
         - **deep_research**: "I need to explore and discover what's relevant as I go" (iterative agentic flow)
+        - **sql_query**: "I need specific data from the database" (structured query execution)
 
         Most queries, even complex ones, fit simple_search because the information need is clear.
+        Use sql_query only when the user clearly needs structured database data.
         </key_insight>
 
-        Remember: Your goal is to route efficiently. Most queries should go to simple_search for fast, effective answers. Only use deep_research when iterative exploration would genuinely improve the answer quality.
+        Remember: Your goal is to route efficiently. Most queries should go to simple_search for fast, effective answers. Only use deep_research when iterative exploration would genuinely improve the answer quality. Only use sql_query for clear database data requests.
         """)
 
     QUERY_PLANNER_PROMPT = textwrap.dedent("""\
@@ -1764,6 +1826,28 @@ class PromptTemplates:
         If you cannot create truly distinct queries that differ from previous searches, return empty queries array.
         </instruction>
         """)
+
+    # SQL Query Generation Prompts
+    SQL_GENERATION_SYSTEM_PROMPT = textwrap.dedent("""\
+        PLACEHOLDER: SQL generation system prompt will be added here.
+        This prompt will guide the LLM to generate SQL queries from natural language.
+    """)
+
+    SQL_GENERATION_HUMAN_PROMPT = textwrap.dedent("""\
+        PLACEHOLDER: SQL generation human prompt will be added here.
+        Variables: {user_query}, {database_schema}
+    """)
+
+    SQL_VALIDATION_PROMPT = textwrap.dedent("""\
+        PLACEHOLDER: SQL validation prompt will be added here.
+        This prompt will guide the LLM to validate SQL queries for safety.
+    """)
+
+    SQL_RESULT_EXPLANATION_PROMPT = textwrap.dedent("""\
+        PLACEHOLDER: SQL result explanation prompt will be added here.
+        This prompt will guide the LLM to explain query results to the user.
+        Variables: {user_query}, {sql_query}, {query_results}
+    """)
 
     FINAL_SYNTHESIZER_PROMPT = textwrap.dedent("""\
         <user_message>

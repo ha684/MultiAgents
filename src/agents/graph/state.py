@@ -1,7 +1,8 @@
 # src/agents/graph/state.py
-from typing import List, TypedDict, Dict, Optional, Literal, Any
-from langchain_core.messages import BaseMessage
+from typing import Any, Dict, List, Literal, Optional, TypedDict
+
 from langchain_core.documents import Document
+from langchain_core.messages import BaseMessage
 
 
 class SearchQuery(TypedDict):
@@ -98,3 +99,24 @@ class ResearchState(TypedDict):
 
     should_retry_query: bool
     is_rag_source_relevant: bool
+
+
+class SqlState(TypedDict):
+    """State for SQL query operations"""
+
+    conversation: List[BaseMessage]
+    original_query: str
+    contextualized_query: str
+
+    # SQL Generation
+    database_schema: Optional[str]
+    generated_sql: Optional[str]
+    validation_result: Optional[Dict[str, Any]]
+    sql_error: Optional[str]
+
+    # Execution Results
+    query_results: Optional[List[Dict[str, Any]]]
+    result_summary: Optional[str]
+
+    # Response metadata
+    response_metadata: Dict[str, Any]

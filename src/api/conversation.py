@@ -1,10 +1,13 @@
 # src/api/conversation.py
-from fastapi import APIRouter
-from src.services.conversation_service import ConversationService
-from src.services.types import Message
-from typing import List, Dict
-from src.services.types import Conversation
 import uuid
+from typing import List, Dict
+
+from fastapi import APIRouter
+
+from src.services.conversation_service import ConversationService
+from src.services.types import Message, Conversation
+from src.agents.com.manager import execution_manager
+from src.exceptions.chat_exceptions import ResearchNotFoundError
 
 router = APIRouter(tags=["Conversation"])
 conversation_service = ConversationService()
@@ -49,3 +52,38 @@ async def update_conversation(
         conversation_id, user_id, active, name
     )
     return result
+
+
+@router.get("/{conversation_id}/status")
+async def get_research_status(conversation_id: str):
+    """
+    Check if research is running (to show "Skip" button in UI)
+    """
+    execution = execution_manager.get_execution(conversation_id)
+
+    if not execution:
+        return {"is_running": False, "conversation_id": conversation_id}
+
+    return {
+        "is_running": True,
+        "conversation_id": conversation_id,
+        "current_node": execution.current_node,
+        "started_at": execution.started_at.isoformat(),
+        "can_skip": execution.current_node == "research_subgraph_node",
+    }
+
+
+@router.post("/{conversation_id}/skip")
+async def skip_research(conversation_id: str):
+    """
+    User clicks "Skip Research" button in UI
+    """
+    success = execution_manager.skip_research(conversation_id)
+
+    if not success:
+        raise ResearchNotFoundError(conversation_id=conversation_id)
+
+    return {
+        "status": "skipped",
+        "conversation_id": conversation_id,
+    }

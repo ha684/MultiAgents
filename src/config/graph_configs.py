@@ -93,7 +93,6 @@ GRAPH_CONFIGS = {
             "process_results": NodeMetadata(
                 display_message="Processing findings...",
                 stream_phase=StreamPhase.PROCESSING,
-                show_in_ui=False,  # Too fast
             ),
             "verification_agent": NodeMetadata(
                 display_message="Verifying information...",
