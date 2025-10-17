@@ -1,34 +1,38 @@
 # src/tasks/file.py
 import asyncio
+import json
 import os
 import random
-import json
-import uuid
 import time
+import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any, Dict, List
-from contextlib import asynccontextmanager
-from celery import shared_task
-from celery.exceptions import SoftTimeLimitExceeded, WorkerLostError
-from celery.signals import worker_process_init, worker_process_shutdown
+from zoneinfo import ZoneInfo
+
 import httpx
 import requests
+from celery import Task, shared_task
+from celery.exceptions import SoftTimeLimitExceeded, WorkerLostError
+from celery.signals import worker_process_init, worker_process_shutdown
+from langchain_core.documents import Document as LangchainDocument
+
 from src.config.settings import settings
 from src.connector import minio_client
-from src.event_pub import event_publisher
-from src.models.document import DocumentProcessingStatusResponse, DocumentStatusEnum
-from src.rag.processor.strategy import get_strategy
-from src.rag.processor.strategy.image import ImageStrategy
-from src.tasks.qac import _generate_qa_pairs_async
-from src.utils.constants import DOCUMENT_STATUS_CHANNEL
-from src.rag.vector import vector_storage
-from src.utils.logger_conf import logger
 from src.db import document_repository
 from src.db.models.document import Document as DBDocument
-from langchain_core.documents import Document as LangchainDocument
-from celery import Task
+from src.event_pub import event_publisher
+from src.models.document import (
+    DocumentProcessingStatusResponse,
+    DocumentStatusEnum,
+)
+from src.rag.processor.strategy import get_strategy
+from src.rag.processor.strategy.image import ImageStrategy
+from src.rag.vector import vector_storage
+from src.tasks.qac import _generate_qa_pairs_async
+from src.utils.constants import DOCUMENT_STATUS_CHANNEL
+from src.utils.logger_conf import logger
 
 
 _loop = None

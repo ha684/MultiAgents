@@ -185,7 +185,6 @@ class ChatService:
         try:
             messages = [user_message, agent_message]
             await self.conv_service.add_messages(messages, conversation_id)
-            logger.info(f"Saved message pair for conversation {conversation_id}")
         except Exception as e:
             logger.error(f"Error saving message pair: {e}")
             raise e
