@@ -9,7 +9,7 @@ from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.basic import query_context_agent, response_agent
-from src.agents.basic.base import AgentBase
+from src.agents.graph.base import GraphAgentBase, RunConfig
 from src.agents.com.manager import execution_manager
 from src.agents.graph.prompts import PromptTemplates
 from src.agents.graph.research_graph import ResearchGraph
@@ -30,7 +30,7 @@ from src.utils import parse_response
 from src.utils.logger_conf import logger
 
 
-class OrchestratorGraph(AgentBase):
+class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
     """
     Main Orchestrator - Coordinates entire workflow with full conversation context
     """
@@ -43,7 +43,16 @@ class OrchestratorGraph(AgentBase):
         self.research_graph = ResearchGraph()
         self.sql_graph = SqlGraph()
         self.conv_service = ConversationService()
-        self.graph = self._build_graph()
+        self.graph_name = "OrchestratorGraph"
+        self.compiled_graph = self._build_graph()
+
+    def graph(self) -> CompiledStateGraph:
+        return self.compiled_graph
+
+    def default_run_config(self) -> RunConfig:
+        return RunConfig(
+            graph_name=self.graph_name, recursion_limit=100, timeout_seconds=600
+        )
 
     async def contextualize_query_node(
         self, state: OrchestratorState
@@ -100,7 +109,7 @@ class OrchestratorGraph(AgentBase):
             contextualized_query=state["contextualized_query"],
         )
 
-        result = await self.simple_search_graph.run(simple_search_state)
+        result = await self.simple_search_graph.ainvoke(state=simple_search_state)
         return {
             "retrieval_contexts": result.get("retrieval_contexts", {}),
             "response_metadata": result.get("response_metadata", {}),
@@ -119,7 +128,9 @@ class OrchestratorGraph(AgentBase):
             state["conversation"][-1].additional_kwargs.get("conversation_id")
         )
 
-        research_task = asyncio.create_task(self.research_graph.run(research_state))
+        research_task = asyncio.create_task(
+            self.research_graph.ainvoke(state=research_state)
+        )
 
         done, pending = await asyncio.wait(
             [research_task, asyncio.create_task(execution.skip_event.wait())],
@@ -162,7 +173,7 @@ class OrchestratorGraph(AgentBase):
             response_metadata={},
         )
 
-        result = await self.sql_graph.run(sql_state)
+        result = await self.sql_graph.ainvoke(state=sql_state)
 
         return {
             "final_answer": result.get("result_summary", ""),
@@ -187,7 +198,6 @@ class OrchestratorGraph(AgentBase):
 
         if route == "sql_query":
             logger.info("SQL query already processed - returning result")
-            # SQL subgraph already generated the final answer
             return {
                 "final_answer": state.get("final_answer", ""),
                 "response_metadata": state.get("response_metadata", {}),
@@ -269,7 +279,7 @@ class OrchestratorGraph(AgentBase):
 
         workflow.set_finish_point("final_synthesizer")
 
-        return workflow.compile(name="MainOrchestrator")
+        return workflow.compile(name=self.graph_name)
 
     async def stream(
         self, conversation: List[BaseMessage]
@@ -298,7 +308,7 @@ class OrchestratorGraph(AgentBase):
 
         try:
             async with asyncio.timeout(timeout_seconds):
-                async for event in self.graph.astream_events(
+                async for event in self.compiled_graph.astream_events(
                     initial_state, config=config, version="v2"
                 ):
                     last_known_state = event
@@ -335,7 +345,7 @@ class OrchestratorGraph(AgentBase):
                 final_answer="",
                 response_metadata={},
             )
-            final_result = await self.graph.ainvoke(initial_state)
+            final_result = await self.compiled_graph.ainvoke(initial_state)
             message = Message(
                 parts=[
                     TextPart(type="text", text=final_result.get("final_answer", ""))

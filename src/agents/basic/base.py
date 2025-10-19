@@ -1,37 +1,25 @@
-from typing import List, Dict, Any, Callable, Optional
+# src/agents/basic/base.py
+from __future__ import annotations
+from typing import List, Dict, Any, Callable, Optional, Iterable
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import Tool
 from langchain_core.prompts import ChatPromptTemplate
-from src.utils.logger_conf import logger
 from langchain_core.language_models.chat_models import BaseChatModel
+from src.utils.logger_conf import logger
 
 
-class AgentBase:
-    """Base class with common methods for agent patterns"""
+class BaseAgent:
+    """LLM utilities common to all agents (with or without graph)."""
 
     async def simple_llm_call(
         self,
-        messages: List[BaseMessage],
+        messages: Iterable[BaseMessage],
         llm: BaseChatModel,
         error_context: str = "Agent",
     ) -> AIMessage:
-        """
-        Simple LLM call without tools - just get text response
-
-        Args:
-            messages: List of messages
-            llm: LLM instance (not bind tools)
-            error_context: Context string for logging
-
-        Returns:
-            Response content as string
-        """
         try:
-            prompt = ChatPromptTemplate.from_messages(messages)
-            chain = prompt | llm
-            response: AIMessage = await chain.ainvoke({})
-            return response
-
+            prompt = ChatPromptTemplate.from_messages(list(messages))
+            return await (prompt | llm).ainvoke({})
         except Exception as e:
             logger.error(f"{error_context}: Error in LLM call: {e}", exc_info=True)
             return AIMessage(content="")
@@ -46,29 +34,11 @@ class AgentBase:
         fallback_value: str = "",
         error_context: str = "Agent",
     ) -> AIMessage:
-        """
-        Iterative LLM call with tools - returns text content
-
-        Args:
-            messages: List of messages
-            llm_with_tools: LLM with tools bound
-            available_tools: Dictionary of tools available
-            max_iterations: Maximum number of retry attempts
-            retry_prompt: Prompt to retry when no result
-            fallback_value: Fallback value if failed
-            error_context: Context string for logging
-
-        Returns:
-            Response content as string
-        """
         iteration = 0
-
         while iteration < max_iterations:
             iteration += 1
-
             prompt = ChatPromptTemplate.from_messages(messages)
-            chain = prompt | llm_with_tools
-            response: AIMessage = await chain.ainvoke({})
+            response: AIMessage = await (prompt | llm_with_tools).ainvoke({})
             messages.append(response)
 
             if response.content:
@@ -76,33 +46,27 @@ class AgentBase:
 
             if response.tool_calls:
                 tool_outputs = []
-                for tool_call in response.tool_calls:
-                    tool_name = tool_call["name"]
-                    if tool_name in available_tools:
-                        tool_to_call = available_tools[tool_name]
-                        tool_result = await tool_to_call.ainvoke(tool_call["args"])
+                for tc in response.tool_calls:
+                    tool = available_tools.get(tc["name"])
+                    if tool:
+                        tool_result = await tool.ainvoke(tc["args"])
                         tool_outputs.append(
-                            ToolMessage(
-                                content=str(tool_result), tool_call_id=tool_call["id"]
-                            )
+                            ToolMessage(content=str(tool_result), tool_call_id=tc["id"])
                         )
                     else:
-                        logger.warning(f"{error_context}: Unknown tool: {tool_name}")
-
+                        logger.warning(f"{error_context}: Unknown tool: {tc['name']}")
                 messages.extend(tool_outputs)
             else:
                 logger.warning(
-                    f"{error_context}: No content or tool calls in iteration {iteration}"
+                    f"{error_context}: No content/tool calls in iteration {iteration}"
                 )
                 if iteration < max_iterations:
                     messages.append(HumanMessage(content=retry_prompt))
                     continue
-                else:
-                    break
+                break
 
         logger.error(
-            f"{error_context}: Failed to get valid response after {iteration} iterations. "
-            f"Returning fallback value."
+            f"{error_context}: Failed after {iteration} iterations. Returning fallback."
         )
         return AIMessage(content=fallback_value)
 
@@ -116,64 +80,41 @@ class AgentBase:
         retry_prompt: str,
         error_context: str = "Agent",
     ) -> Optional[Dict[str, Any]]:
-        """
-        Iterative LLM call with tools - returns parsed structured output
-
-        Args:
-            messages: List of messages
-            llm_with_tools: LLM with tools bound
-            available_tools: Dictionary of tools available
-            max_iterations: Maximum number of retry attempts
-            parse_fn: Function to parse response content
-            retry_prompt: Prompt to retry when no result
-            error_context: Context string for logging
-
-        Returns:
-            Parsed dictionary or None if failed
-        """
         iteration = 0
-
         while iteration < max_iterations:
             iteration += 1
-
             prompt = ChatPromptTemplate.from_messages(messages)
-            chain = prompt | llm_with_tools
-            response: AIMessage = await chain.ainvoke({})
+            response: AIMessage = await (prompt | llm_with_tools).ainvoke({})
             messages.append(response)
 
             if response.content:
-                parsed_result = parse_fn(str(response.content))
-                if parsed_result:
-                    return parsed_result
+                parsed = parse_fn(str(response.content))
+                if parsed:
+                    return parsed
 
             if not response.tool_calls:
                 logger.warning(
-                    f"{error_context}: No valid JSON and no tool calls in iteration {iteration}. "
-                    f"Response content: {response.content[:200] if response.content else 'None'}"
+                    f"{error_context}: No valid JSON and no tool calls at iter {iteration}. "
+                    f"Response: {response.content[:200] if response.content else 'None'}"
                 )
                 if iteration < max_iterations:
                     messages.append(HumanMessage(content=retry_prompt))
                     continue
-                else:
-                    break
+                break
 
             tool_outputs = []
-            for tool_call in response.tool_calls:
-                tool_name = tool_call["name"]
-                if tool_name in available_tools:
-                    tool_to_call = available_tools[tool_name]
-                    tool_result = await tool_to_call.ainvoke(tool_call["args"])
+            for tc in response.tool_calls:
+                tool = available_tools.get(tc["name"])
+                if tool:
+                    tool_result = await tool.ainvoke(tc["args"])
                     tool_outputs.append(
-                        ToolMessage(
-                            content=str(tool_result), tool_call_id=tool_call["id"]
-                        )
+                        ToolMessage(content=str(tool_result), tool_call_id=tc["id"])
                     )
                 else:
-                    logger.warning(f"{error_context}: Unknown tool: {tool_name}")
-
+                    logger.warning(f"{error_context}: Unknown tool: {tc['name']}")
             messages.extend(tool_outputs)
 
         logger.error(
-            f"{error_context}: Failed to get valid response after {iteration} iterations."
+            f"{error_context}: Structured call failed after {iteration} iterations."
         )
         return None

@@ -7,7 +7,7 @@ from src.llm.factory import get_llm
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
-from src.agents.basic.base import AgentBase
+from src.agents.basic.base import BaseAgent
 
 HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research assistant with access to a collection of documents. Your task is to provide accurate, well-cited answers based strictly on the information in the provided documents.
 
@@ -179,7 +179,7 @@ Remember: Honesty and language matching are your top priorities. It's better to 
 
 
 @singleton
-class ResponseAgent(AgentBase):
+class ResponseAgent(BaseAgent):
     """Agent responsible for generating the final response based on verified context, citations, and history."""
 
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):

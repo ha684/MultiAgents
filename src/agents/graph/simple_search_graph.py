@@ -1,19 +1,21 @@
 # src/agents/graph/simple_search_graph.py
+from __future__ import annotations
+
 from typing import Any, Dict, List
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 import tiktoken
-import asyncio
 
 from src.agents.basic import citation_agent, filename_agent
 from src.utils.logger_conf import logger
 from src.agents.graph.state import SimpleSearchState
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search
+from src.agents.graph.base import GraphAgentBase, RunConfig
 
 
-class SimpleSearchGraph:
+class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
     """
     Simple Search Graph - Handles straightforward queries with single retrieval.
 
@@ -23,7 +25,16 @@ class SimpleSearchGraph:
 
     def __init__(self, tokenizer: tiktoken.Encoding):
         self.tokenizer = tokenizer
-        self.graph = self._build_graph()
+        self.graph_name = "SimpleSearchGraph"
+        self.compiled_graph = self._build_graph()
+
+    def graph(self) -> CompiledStateGraph:
+        return self.compiled_graph
+
+    def default_run_config(self) -> RunConfig:
+        return RunConfig(
+            graph_name=self.graph_name, recursion_limit=10, timeout_seconds=180
+        )
 
     async def extract_filename_node(self, state: SimpleSearchState) -> Dict[str, Any]:
         """Extract filename from query if mentioned"""
@@ -167,44 +178,4 @@ class SimpleSearchGraph:
 
         workflow.set_finish_point("filter_citations")
 
-        return workflow.compile(name="SimpleSearchGraph")
-
-    async def run(self, state: SimpleSearchState) -> SimpleSearchState:
-        """Execute simple search graph with streaming"""
-        config = {"recursion_limit": 10}
-        timeout_seconds = 180
-
-        last_known_state = state
-        final_state = None
-
-        try:
-            async with asyncio.timeout(timeout_seconds):
-                async for event in self.graph.astream_events(
-                    state, config=config, version="v2"
-                ):
-                    kind = event["event"]
-
-                    if kind == "on_chain_end" and event["name"] != "LangGraph":
-                        node_output = event.get("data", {}).get("output")
-                        if node_output:
-                            last_known_state = node_output
-
-                    if kind == "on_chain_end" and event.get("name") == "LangGraph":
-                        final_state = event.get("data", {}).get("output")
-                        last_known_state = final_state
-
-        except asyncio.TimeoutError:
-            logger.warning(
-                f"⚠️ Sub-graph 'SimpleSearchGraph' timed out after {timeout_seconds} seconds. "
-                f"Returning the most recent accumulated result."
-            )
-            return last_known_state
-
-        except Exception as e:
-            logger.error(
-                f"❌ Sub-graph 'SimpleSearchGraph' encountered an unexpected error: {e}. "
-                "Returning the most recent accumulated result."
-            )
-            return last_known_state
-
-        return final_state if final_state else last_known_state
+        return workflow.compile(name=self.graph_name)

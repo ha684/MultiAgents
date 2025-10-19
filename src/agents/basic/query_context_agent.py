@@ -4,7 +4,7 @@ from src.utils.logger_conf import logger
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
 from src.utils.decorators import singleton
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.agents.basic.base import AgentBase
+from src.agents.basic.base import BaseAgent
 
 EXTRACT_CONTEXTUALIZED_QUERY_PROMPT = """
 <instructions>
@@ -122,7 +122,7 @@ Remember: You are reformulating queries for retrieval systems, NOT answering que
 
 
 @singleton
-class QueryContextAgent(AgentBase):
+class QueryContextAgent(BaseAgent):
     def __init__(self):
         llm = get_llm("nxchat")
         self.llm_with_tools = llm.bind_tools([think])

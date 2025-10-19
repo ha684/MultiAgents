@@ -3,6 +3,8 @@
 SQL Graph - Text-to-SQL subgraph for database querying with natural language
 """
 
+from __future__ import annotations
+
 import json
 from typing import Any, Dict, List, Optional
 
@@ -11,7 +13,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from src.agents.basic.base import AgentBase
+from src.agents.graph.base import GraphAgentBase, RunConfig
 from src.agents.graph.prompts import PromptTemplates
 from src.agents.graph.schemas import (
     SqlGenerationSchema,
@@ -29,7 +31,7 @@ from src.utils import parse_response
 from src.utils.logger_conf import logger
 
 
-class SqlGraph(AgentBase):
+class SqlGraph(GraphAgentBase[SqlState]):
     """
     SQL Subgraph - Converts natural language queries to SQL and executes them safely.
 
@@ -59,10 +61,19 @@ class SqlGraph(AgentBase):
             include_tables=self.allow_tables,
         )
 
-        self.graph = self._build_graph()
+        self.graph_name = "SqlGraph"
+        self.compiled_graph = self._build_graph(self.graph_name)
         logger.info("SqlGraph initialized successfully with LangChain SQLDatabase.")
 
-    async def validate_relevance_node(self, state: SqlState) -> Dict[str, Any]:
+    def graph(self) -> CompiledStateGraph:
+        return self.compiled_graph
+
+    def default_run_config(self) -> RunConfig:
+        return RunConfig(
+            graph_name=self.graph_name, recursion_limit=10, timeout_seconds=180
+        )
+
+    async def validate_relevance_node(self, state: SqlState) -> SqlState:
         """
         Validates if user query is relevant to available database tables.
         Fast check before expensive analysis/generation steps.
@@ -794,47 +805,7 @@ Please try rephrasing your question to only request information, or contact a sy
         workflow.add_edge("handle_sql_error", END)
         workflow.add_edge("handle_irrelevant_query", END)
 
-        return workflow.compile(name="SqlGraph")
-
-    async def run(self, state: SqlState) -> SqlState:
-        """
-        Run SQL graph with state.
-
-        Args:
-            state: SqlState with user query and context
-
-        Returns:
-            Updated SqlState with:
-            - query_results: List of query results with metadata
-            - chart_spec: Vega-Lite specification (if applicable)
-            - result_summary: Natural language summary
-            - sql_error: Error message (if any)
-        """
-        logger.info(
-            f"[SqlGraph] Starting graph execution for query: '{state.get('user_query')}'"
-        )
-        try:
-            config = {"recursion_limit": 50}
-            result = await self.graph.ainvoke(state, config=config)
-            logger.info("[SqlGraph] Graph execution completed successfully.")
-            logger.debug(f"[SqlGraph] Final state: {result}")
-            return result
-
-        except Exception as e:
-            logger.error(
-                f"[SqlGraph] A critical error occurred during graph execution: {e}",
-                exc_info=True,
-            )
-            return {
-                **state,
-                "sql_error": f"Graph execution failed with a critical error: {str(e)}",
-                "result_summary": "I'm sorry, but a system error occurred while trying to process your database query. Please try again later or contact support.",
-                "response_metadata": {
-                    "route": "sql_query",
-                    "query_successful": False,
-                    "error": str(e),
-                },
-            }
+        return workflow.compile(name=self.graph_name)
 
 
 def parse_sql_analysis_response(content: str) -> Optional[SqlAnalysisSchema]:

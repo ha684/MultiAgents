@@ -8,7 +8,7 @@ from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.utils import parse_response
-from src.agents.basic.base import AgentBase
+from src.agents.basic.base import BaseAgent
 
 CITATION_PROMPT_TEMPLATE = """
 <role>
@@ -182,7 +182,7 @@ Response: {"indexes": [1, 3, 4]}
 
 
 @singleton
-class CitationAgent(AgentBase):
+class CitationAgent(BaseAgent):
     """Agent responsible for extracting citations from retrieved documents."""
 
     def __init__(self):

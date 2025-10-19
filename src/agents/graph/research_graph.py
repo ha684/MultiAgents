@@ -1,11 +1,16 @@
+# src/agents/graph/research_graph.py
+from __future__ import annotations
+
 import json
 from typing import Dict, Any, List, Optional
+
 from langgraph.graph import StateGraph, END
 from langgraph.graph.state import CompiledStateGraph
+from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage
+
 from src.agents.basic import citation_agent, compress_agent
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search, think
 from src.utils.logger_conf import logger
-from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage
 from src.agents.graph.state import SearchResult, ResearchState, SearchQuery
 from src.agents.graph.prompts import PromptTemplates
 from src.agents.graph.schemas import (
@@ -15,23 +20,31 @@ from src.agents.graph.schemas import (
     ReflectionSchema,
 )
 from src.llm.factory import get_llm
-from src.agents.basic.base import AgentBase
+from src.agents.graph.base import GraphAgentBase, RunConfig
 from src.utils import parse_response
-import asyncio
 
 
-class ResearchGraph(AgentBase):
+class ResearchGraph(GraphAgentBase[ResearchState]):
     """Research Subgraph - Deep research with iterative search loop"""
 
     def __init__(self):
         self.llm = get_llm("nxchat")
         self.thinking_llm = self.llm.bind_tools([think])
-        self.graph = self._build_graph()
+        self.graph_name = "ResearchGraph"
+        self.compiled_graph = self._build_graph()
         self.max_searches = 20
         self.max_consecutive_failures = 3
         logger.info("ResearchGraph initialized successfully.")
 
-    async def query_planner_node(self, state: ResearchState) -> Dict[str, Any]:
+    def graph(self) -> CompiledStateGraph:
+        return self.compiled_graph
+
+    def default_run_config(self) -> RunConfig:
+        return RunConfig(
+            graph_name=self.graph_name, recursion_limit=50, timeout_seconds=600
+        )
+
+    async def query_planner_node(self, state: ResearchState) -> ResearchState:
         """Create research plan"""
         max_iterations = 5
         system_prompt = SystemMessage(content=PromptTemplates.QUERY_PLANNER_PROMPT)
@@ -754,56 +767,7 @@ class ResearchGraph(AgentBase):
             },
         )
 
-        return workflow.compile(name="ResearchGraph")
-
-    async def run(self, state: ResearchState) -> ResearchState:
-        """
-        Run research graph with streaming, handling both timeouts and recursion limits.
-        """
-        config = {"recursion_limit": 100}
-        timeout_seconds = 600
-
-        last_known_state = state
-        final_state = None
-
-        try:
-            async with asyncio.timeout(timeout_seconds):
-                async for event in self.graph.astream_events(
-                    state, config=config, version="v2"
-                ):
-                    kind = event["event"]
-
-                    if kind == "on_chain_end" and event["name"] != "LangGraph":
-                        node_output = event.get("data", {}).get("output")
-                        if node_output:
-                            last_known_state = node_output
-
-                    if kind == "on_chain_end" and event.get("name") == "LangGraph":
-                        final_state = event.get("data", {}).get("output")
-                        last_known_state = final_state
-
-        except RecursionError:
-            logger.warning(
-                "🛑 Sub-graph 'ResearchGraph' was stopped by LangGraph due to reaching recursion limit (`recursion_limit`). "
-                "Returning the most recent accumulated result."
-            )
-            return last_known_state
-
-        except asyncio.TimeoutError:
-            logger.warning(
-                f"⚠️ Sub-graph 'ResearchGraph' timed out after {timeout_seconds} seconds. "
-                f"Returning the most recent accumulated result."
-            )
-            return last_known_state
-
-        except Exception as e:
-            logger.error(
-                f"❌ Sub-graph 'ResearchGraph' encountered an unexpected error: {e}. "
-                "Returning the most recent accumulated result."
-            )
-            return last_known_state
-
-        return final_state if final_state else last_known_state
+        return workflow.compile(name=self.graph_name)
 
 
 def parse_planner_response(content: str) -> Optional[SearchPlanSchema]:

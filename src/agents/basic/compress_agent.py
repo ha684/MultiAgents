@@ -6,7 +6,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.agents.basic.base import AgentBase
+from src.agents.basic.base import BaseAgent
 import textwrap
 
 COMPRESS_PROMPT_TEMPLATE = textwrap.dedent("""\
@@ -575,7 +575,7 @@ Before finalizing, verify in 'think' tool:
 
 
 @singleton
-class CompressAgent(AgentBase):
+class CompressAgent(BaseAgent):
     """Agent responsible for compressing and organizing information from filtered documents."""
 
     def __init__(self):
