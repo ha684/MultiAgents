@@ -104,19 +104,15 @@ class ResearchState(TypedDict):
 class SqlState(TypedDict):
     """State for SQL query operations"""
 
-    conversation: List[BaseMessage]
-    original_query: str
     contextualized_query: str
 
-    # SQL Generation
-    database_schema: Optional[str]
-    generated_sql: Optional[str]
-    validation_result: Optional[Dict[str, Any]]
+    analysis: Optional[Dict]
+
+    generated_queries: Optional[List[Dict]]
+    validation_results: Optional[List[Dict]]
+    query_results: Optional[List[Dict]]
+    chart_spec: Optional[Dict]
+    result_summary: Optional[str]
     sql_error: Optional[str]
 
-    # Execution Results
-    query_results: Optional[List[Dict[str, Any]]]
-    result_summary: Optional[str]
-
-    # Response metadata
-    response_metadata: Dict[str, Any]
+    response_metadata: Dict

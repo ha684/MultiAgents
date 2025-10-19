@@ -1,8 +1,8 @@
-from src.agents.graph.research_graph import ResearchGraph
 import asyncio
 from typing import Dict, Any, Optional
 from datetime import datetime
 from langchain_core.runnables.schema import StreamEvent
+from src.agents.graph.sql_graph import SqlGraph
 
 
 class ResearchGraphStreamer:
@@ -37,13 +37,13 @@ class ResearchGraphStreamer:
             print(f"{c}║{reset} {content}")
         print(f"{c}{'=' * 60}{reset}")
 
-    async def stream_research(
-        self, research_graph: "ResearchGraph", input_state: Dict[str, Any]
+    async def stream_sql(
+        self, sql_graph: "SqlGraph", input_state: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
         """
-        Stream research graph execution with detailed insights and return the final state.
+        Stream sql graph execution with detailed insights and return the final state.
         """
-        self._print_box("🚀 STARTING RESEARCH GRAPH", color="cyan")
+        self._print_box("🚀 STARTING SQL GRAPH", color="cyan")
         print(f"📝 Query: {input_state.get('contextualized_query', 'N/A')}")
 
         llm_streaming_buffer = ""
@@ -60,7 +60,7 @@ class ResearchGraphStreamer:
 
         config = {"recursion_limit": 100}
 
-        async for event in research_graph.graph.astream_events(
+        async for event in sql_graph.graph.astream_events(
             input_state, config=config, version="v2"
         ):
             event: StreamEvent
@@ -84,11 +84,11 @@ class ResearchGraphStreamer:
                     )
                     self.node_timings[name] = duration
 
-                if name == "LangGraph":
+                if name == "SqlGraph":
                     final_state = event.get("data", {}).get("output")
 
             elif kind == "on_chat_model_stream":
-                chunk = event.data.chunk
+                chunk = event["data"]["chunk"]
 
                 if chunk.content:
                     print(chunk.content, end="", flush=True)
@@ -130,14 +130,13 @@ class ResearchGraphStreamer:
 
 async def main():
     """Example usage"""
-    research_graph = ResearchGraph()
+    sql_graph = SqlGraph()
 
     input_state = {
-        "contextualized_query": "report to me about the recent storm of vietnam",
-        "context_metadata": {"kb_id": "068dbcfd-ff20-7647-8000-c7cfdf551423"},
+        "contextualized_query": "Show me the total sales by product category and include monthly trends for the past 6 months"
     }
     streamer = ResearchGraphStreamer()
-    final_result = await streamer.stream_research(research_graph, input_state)
+    final_result = await streamer.stream_sql(sql_graph, input_state)
     print(f"Final result: {final_result}")
 
 

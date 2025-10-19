@@ -1,8 +1,10 @@
 # src/api/chunks.py
 from typing import List
+
 from langchain_core.documents import Document
 from fastapi import APIRouter
 from pydantic import BaseModel
+
 from src.services.chunks_service import ChunksService
 
 router = APIRouter(prefix="/chunks", tags=["Chunks"])

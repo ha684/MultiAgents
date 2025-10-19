@@ -1,5 +1,5 @@
 # src/agents/graph/schemas.py
-from typing import Any, Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -52,7 +52,9 @@ class ReflectionSchema(BaseModel):
 class SqlGenerationSchema(BaseModel):
     """SQL generation output schema"""
 
-    sql_query: str = Field(description="The generated SQL SELECT query")
+    queries: List[Dict[str, Any]] = Field(
+        description="The generated SQL SELECT queries"
+    )
 
 
 class SqlValidationSchema(BaseModel):
@@ -74,6 +76,7 @@ class SqlAnalysisSchema(BaseModel):
     """SQL analysis output schema"""
 
     needs_chart: bool = Field(description="Whether the query needs a chart")
+    chart_type: Optional[str] = Field(description="The type of chart")
     required_queries: List[Dict[str, Any]] = Field(
         description="List of required queries"
     )
@@ -99,6 +102,18 @@ class ChartGenerationSchema(BaseModel):
         "radial",
         "map",
     ] = Field(description="The type of chart")
+
+
+class RelevanceValidationSchema(BaseModel):
+    """Relevance validation output schema"""
+
+    is_relevant: bool = Field(
+        description="Whether the query is relevant to the database"
+    )
+    reason: str = Field(description="The reason for the relevance validation")
+    suggested_rephrase: Optional[str] = Field(
+        description="The suggested rephrase for the query"
+    )
 
 
 # class Event(LlmResponse):
