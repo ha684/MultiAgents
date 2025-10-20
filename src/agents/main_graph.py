@@ -46,6 +46,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         self.graph_name = "OrchestratorGraph"
         self.compiled_graph = self._build_graph()
 
+    @property
     def graph(self) -> CompiledStateGraph:
         return self.compiled_graph
 
@@ -145,38 +146,33 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             research_task.cancel()
 
             partial = execution.partial_state or research_state
-            return ResearchState(
-                contextualized_query=research_state.contextualized_query,
-                context_metadata=research_state.context_metadata,
-                accumulated_knowledge=partial.get(
-                    "accumulated_knowledge", "[Research skipped by user]"
-                ),
-                all_search_history=partial.get("all_search_history", []),
-                cited_documents=partial.get("cited_documents", []),
-            )
+            return {
+                "accumulated_knowledge": partial.get("accumulated_knowledge"),
+                "all_search_history": partial.get("all_search_history"),
+                "cited_documents": partial.get("cited_documents"),
+            }
 
-        return await research_task
+        task = await research_task
+        return {
+            "accumulated_knowledge": task.get("accumulated_knowledge"),
+            "all_search_history": task.get("all_search_history"),
+            "cited_documents": task.get("cited_documents"),
+        }
 
     async def sql_subgraph_node(self, state: OrchestratorState) -> Dict[str, Any]:
-        """Execute SQL query graph"""
+        """Execute SQL query graph and extract relevant data"""
+        logger.info("[sql_subgraph_node] Starting SQL subgraph execution")
 
-        sql_state = SqlState(
-            conversation=state["conversation"],
-            original_query=state["original_query"],
-            contextualized_query=state["contextualized_query"],
-            database_schema=None,
-            generated_sql=None,
-            validation_result=None,
-            sql_error=None,
-            query_results=None,
-            result_summary=None,
-            response_metadata={},
-        )
-
+        sql_state = SqlState(contextualized_query=state["contextualized_query"])
         result = await self.sql_graph.ainvoke(state=sql_state)
 
+        logger.debug(f"[sql_subgraph_node] SQL graph result: {result}")
+
         return {
-            "final_answer": result.get("result_summary", ""),
+            "sql_query_results": result.get("query_results"),
+            "sql_chart_spec": result.get("chart_spec"),
+            "sql_error": result.get("sql_error"),
+            "sql_result_summary": result.get("result_summary", ""),
             "response_metadata": result.get("response_metadata", {}),
         }
 
@@ -281,50 +277,21 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
 
         return workflow.compile(name=self.graph_name)
 
-    async def stream(
+    async def astream(
         self, conversation: List[BaseMessage]
     ) -> AsyncGenerator[StreamEvent, None]:
-        """
-        Execute orchestrator graph with full conversation
-        """
+        """Execute orchestrator graph with full conversation"""
         original_query = conversation[-1].content
-
         initial_state = OrchestratorState(
-            conversation=conversation,
-            original_query=original_query,
-            contextualized_query="",
-            route_decision=None,
-            accumulated_knowledge="",
-            cited_documents=[],
-            retrieval_contexts={},
-            final_answer="",
-            response_metadata={},
+            conversation=conversation, original_query=original_query
         )
 
-        config = {"recursion_limit": 100}
-        timeout_seconds = 600
         conversation_id = conversation[-1].additional_kwargs.get("conversation_id")
         execution_manager.start_execution(conversation_id)
 
         try:
-            async with asyncio.timeout(timeout_seconds):
-                async for event in self.compiled_graph.astream_events(
-                    initial_state, config=config, version="v2"
-                ):
-                    last_known_state = event
-                    yield event
-        except asyncio.TimeoutError:
-            logger.warning(
-                f"⚠️ 'OrchestratorGraph' timed out after {timeout_seconds} seconds. "
-                f"Returning the most recent accumulated result."
-            )
-            yield last_known_state
-        except Exception as e:
-            logger.error(
-                f"❌ 'OrchestratorGraph' encountered an unexpected error: {e}. "
-                "Returning the most recent accumulated result."
-            )
-            yield last_known_state
+            async for event in super().astream(initial_state):
+                yield event
         finally:
             execution_manager.finish_execution(conversation_id)
 
@@ -335,17 +302,9 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         try:
             original_query = conversation[-1].content
             initial_state = OrchestratorState(
-                conversation=conversation,
-                original_query=original_query,
-                contextualized_query="",
-                route_decision=None,
-                accumulated_knowledge="",
-                cited_documents=[],
-                retrieval_contexts={},
-                final_answer="",
-                response_metadata={},
+                conversation=conversation, original_query=original_query
             )
-            final_result = await self.compiled_graph.ainvoke(initial_state)
+            final_result = await super().ainvoke(initial_state)
             message = Message(
                 parts=[
                     TextPart(type="text", text=final_result.get("final_answer", ""))

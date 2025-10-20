@@ -1,13 +1,15 @@
 # src/agents/graph/base.py
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, TypeVar, Generic
+from typing import Any, Dict, Optional, TypeVar, Generic, AsyncGenerator
 from abc import ABC, abstractmethod
 import asyncio
 
 from langgraph.graph.state import CompiledStateGraph
-from src.utils.logger_conf import logger
+from langchain_core.runnables.schema import StreamEvent
+
 from src.agents.basic.base import BaseAgent
+from src.utils.logger_conf import logger
 
 StateT = TypeVar("StateT")
 
@@ -44,6 +46,7 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
     async def ainvoke(
         self, state: StateT, config_override: Optional[RunConfig] = None
     ) -> StateT:
+        """Invoke và trả về kết quả cuối cùng - dùng cho subgraph nodes"""
         run_cfg = config_override or self.default_run_config()
         lg_config = run_cfg.as_langgraph_config()
         last_state: StateT = state
@@ -84,3 +87,31 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
             return last_state
 
         return final_state if final_state is not None else last_state
+
+    async def astream(
+        self, state: StateT, config_override: Optional[RunConfig] = None
+    ) -> AsyncGenerator[StreamEvent, None]:
+        """Stream events - use for testing and monitoring"""
+        run_cfg = config_override or self.default_run_config()
+        lg_config = run_cfg.as_langgraph_config()
+        last_state: StateT = state
+
+        try:
+            async with asyncio.timeout(run_cfg.timeout_seconds):
+                async for event in self.graph.astream_events(
+                    state, config=lg_config, version=run_cfg.version
+                ):
+                    last_state = event
+                    yield event
+
+        except asyncio.TimeoutError:
+            logger.warning(
+                f"⚠️ '{run_cfg.graph_name}' timed out after {run_cfg.timeout_seconds}s."
+            )
+            yield last_state
+        except Exception as e:
+            logger.error(
+                f"❌ '{run_cfg.graph_name}' error: {e}.",
+                exc_info=True,
+            )
+            yield last_state

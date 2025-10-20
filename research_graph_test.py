@@ -38,7 +38,7 @@ class ResearchGraphStreamer:
         print(f"{c}{'=' * 60}{reset}")
 
     async def stream_sql(
-        self, sql_graph: "SqlGraph", input_state: Dict[str, Any]
+        self, sql_graph: SqlGraph, input_state: Dict[str, Any]
     ) -> Optional[Dict[str, Any]]:
         """
         Stream sql graph execution with detailed insights and return the final state.
@@ -58,11 +58,7 @@ class ResearchGraphStreamer:
             "tokens_streamed": 0,
         }
 
-        config = {"recursion_limit": 100}
-
-        async for event in sql_graph.graph.astream_events(
-            input_state, config=config, version="v2"
-        ):
+        async for event in sql_graph.astream(input_state):
             event: StreamEvent
             kind = event["event"]
             name = event.get("name", "")

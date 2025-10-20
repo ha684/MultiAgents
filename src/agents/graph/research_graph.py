@@ -36,6 +36,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
         self.max_consecutive_failures = 3
         logger.info("ResearchGraph initialized successfully.")
 
+    @property
     def graph(self) -> CompiledStateGraph:
         return self.compiled_graph
 

@@ -28,6 +28,7 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
         self.graph_name = "SimpleSearchGraph"
         self.compiled_graph = self._build_graph()
 
+    @property
     def graph(self) -> CompiledStateGraph:
         return self.compiled_graph
 

@@ -6,14 +6,14 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.agents.basic.base import AgentBase
+from src.agents.basic.base import BaseAgent
 
 VERIFICATION_PROMPT_TEMPLATE = """
 """
 
 
 @singleton
-class VerificationAgent(AgentBase):
+class VerificationAgent(BaseAgent):
     """Agent responsible for verifying information from relevant documents."""
 
     def __init__(self):

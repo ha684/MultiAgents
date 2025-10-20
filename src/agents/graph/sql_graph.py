@@ -65,6 +65,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         self.compiled_graph = self._build_graph()
         logger.info("SqlGraph initialized successfully with LangChain SQLDatabase.")
 
+    @property
     def graph(self) -> CompiledStateGraph:
         return self.compiled_graph
 
@@ -77,6 +78,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         """
         Validates if user query is relevant to available database tables.
         Fast check before expensive analysis/generation steps.
+        Returns error in result_summary if not relevant.
         """
         logger.info("[validate_relevance] Checking query relevance to database.")
         max_iterations = 3
@@ -114,7 +116,13 @@ class SqlGraph(GraphAgentBase[SqlState]):
             )
             return {
                 "is_relevant": False,
-                "irrelevance_reason": "Unable to determine query relevance to database.",
+                "sql_error": "Unable to determine query relevance to database.",
+                "result_summary": "Unable to determine if your query is relevant to the available database.",
+                "response_metadata": {
+                    "route": "sql_query",
+                    "query_successful": False,
+                    "error": "relevance_check_failed",
+                },
             }
 
         is_relevant = response.get("is_relevant", False)
@@ -126,10 +134,20 @@ class SqlGraph(GraphAgentBase[SqlState]):
             )
             suggested_rephrase = response.get("suggested_rephrase")
             logger.info(f"[validate_relevance] Irrelevant query. Reason: {reason}")
+
             return {
                 "is_relevant": False,
                 "irrelevance_reason": reason,
                 "suggested_rephrase": suggested_rephrase,
+                "sql_error": f"Query not relevant to database: {reason}",
+                "result_summary": f"Query is not relevant to the available database. {reason}",
+                "response_metadata": {
+                    "route": "sql_query",
+                    "query_successful": False,
+                    "error": "query_not_relevant_to_database",
+                    "available_tables": self.allow_tables,
+                    "suggested_rephrase": suggested_rephrase,
+                },
             }
 
         logger.info("[validate_relevance] Query is relevant to database.")
@@ -143,9 +161,9 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         if not state.get("is_relevant", False):
             logger.warning(
-                "[route_after_relevance_check] Query is not relevant. Routing to handle_irrelevant_query."
+                "[route_after_relevance_check] Query is not relevant. Ending graph."
             )
-            return "handle_irrelevant_query"
+            return END
 
         logger.info(
             "[route_after_relevance_check] Query is relevant. Routing to analyze_query."
@@ -196,7 +214,13 @@ class SqlGraph(GraphAgentBase[SqlState]):
             )
             return {
                 "sql_error": "Failed to analyze query requirements",
+                "result_summary": "Failed to analyze your query requirements. Please try rephrasing your question.",
                 "analysis": None,
+                "response_metadata": {
+                    "route": "sql_query",
+                    "query_successful": False,
+                    "error": "analysis_failed",
+                },
             }
 
         logger.info(
@@ -222,7 +246,13 @@ class SqlGraph(GraphAgentBase[SqlState]):
             )
             return {
                 "sql_error": "No query plan available to generate SQL",
+                "result_summary": "Unable to create a query plan for your request.",
                 "generated_queries": None,
+                "response_metadata": {
+                    "route": "sql_query",
+                    "query_successful": False,
+                    "error": "no_query_plan",
+                },
             }
 
         logger.debug(f"[generate_sql_queries] Using query plan: {query_plan}")
@@ -260,6 +290,12 @@ class SqlGraph(GraphAgentBase[SqlState]):
             return {
                 "generated_queries": None,
                 "sql_error": "Failed to generate SQL queries",
+                "result_summary": "Failed to generate SQL queries for your request.",
+                "response_metadata": {
+                    "route": "sql_query",
+                    "query_successful": False,
+                    "error": "sql_generation_failed",
+                },
             }
 
         generated_queries = response["queries"]
@@ -281,6 +317,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         """
         Validates all generated SQL queries.
         Ensures they are SELECT-only and safe to execute.
+        Returns error in result_summary if validation fails.
         """
         logger.info("[validate_queries] Starting query validation node.")
         generated_queries = state.get("generated_queries")
@@ -292,6 +329,12 @@ class SqlGraph(GraphAgentBase[SqlState]):
             return {
                 "validation_results": None,
                 "sql_error": "No SQL queries to validate",
+                "result_summary": "No SQL queries were generated to validate.",
+                "response_metadata": {
+                    "route": "sql_query",
+                    "query_successful": False,
+                    "error": "no_queries_to_validate",
+                },
             }
 
         logger.info(f"[validate_queries] Validating {len(generated_queries)} queries.")
@@ -327,13 +370,19 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 logger.info(f"[validate_queries] Validation PASSED for '{purpose}'.")
 
         if not all_valid:
-            error_msg = (
-                f"Validation failed for one or more queries: {'; '.join(issues)}"
-            )
+            error_msg = f"Validation failed: {'; '.join(issues)}"
             logger.error(f"[validate_queries] {error_msg}")
+
             return {
                 "validation_results": validation_results,
                 "sql_error": error_msg,
+                "result_summary": f"Query validation failed. Only SELECT queries are allowed. Issues: {'; '.join(issues)}",
+                "response_metadata": {
+                    "route": "sql_query",
+                    "query_successful": False,
+                    "error": "validation_failed",
+                    "validation_issues": issues,
+                },
             }
 
         logger.info("[validate_queries] All SQL queries validated successfully.")
@@ -347,18 +396,17 @@ class SqlGraph(GraphAgentBase[SqlState]):
     def route_after_validation(self, state: SqlState) -> str:
         """Routes after SQL validation."""
         logger.info("[route_after_validation] Deciding route after validation.")
+
         if state.get("sql_error"):
-            logger.warning(
-                "[route_after_validation] SQL error detected. Routing to handle_sql_error."
-            )
-            return "handle_sql_error"
+            logger.warning("[route_after_validation] SQL error detected. Ending graph.")
+            return END
 
         validation_results = state.get("validation_results", [])
         if not validation_results:
             logger.error(
-                "[route_after_validation] No validation results found. Routing to handle_sql_error."
+                "[route_after_validation] No validation results found. Ending graph."
             )
-            return "handle_sql_error"
+            return END
 
         all_valid = all(
             v["validation"]["is_valid"] and v["validation"]["is_select_only"]
@@ -367,9 +415,9 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         if not all_valid:
             logger.error(
-                "[route_after_validation] Some queries failed validation. Routing to handle_sql_error."
+                "[route_after_validation] Some queries failed validation. Ending graph."
             )
-            return "handle_sql_error"
+            return END
 
         logger.info(
             "[route_after_validation] All queries are valid. Routing to execute_queries."
@@ -380,13 +428,22 @@ class SqlGraph(GraphAgentBase[SqlState]):
         """
         Executes all validated SQL queries sequentially.
         Uses DatabaseSession for proper transaction management.
+        Returns error in result_summary if execution fails.
         """
         logger.info("[execute_queries] Starting query execution node.")
         validation_results = state.get("validation_results", [])
 
         if not validation_results:
             logger.error("[execute_queries] No validated queries to execute.")
-            return {"sql_error": "No validated queries available for execution"}
+            return {
+                "sql_error": "No validated queries available for execution",
+                "result_summary": "No validated queries available to execute.",
+                "response_metadata": {
+                    "route": "sql_query",
+                    "query_successful": False,
+                    "error": "no_queries_to_execute",
+                },
+            }
 
         logger.info(f"[execute_queries] Executing {len(validation_results)} queries.")
         all_results = []
@@ -433,9 +490,19 @@ class SqlGraph(GraphAgentBase[SqlState]):
         failed_queries = [r for r in all_results if not r["success"]]
         if failed_queries:
             error_msgs = [f"{r['purpose']}: {r['error']}" for r in failed_queries]
+            error_summary = f"Some queries failed: {'; '.join(error_msgs)}"
+
             return {
                 "query_results": all_results,
-                "sql_error": f"Some queries failed: {'; '.join(error_msgs)}",
+                "sql_error": error_summary,
+                "result_summary": f"Query execution failed. {error_summary}",
+                "response_metadata": {
+                    "route": "sql_query",
+                    "query_successful": False,
+                    "error": "execution_failed",
+                    "failed_queries": len(failed_queries),
+                    "total_queries": len(all_results),
+                },
             }
 
         total_rows = sum(r["row_count"] for r in all_results)
@@ -455,11 +522,12 @@ class SqlGraph(GraphAgentBase[SqlState]):
     def route_after_execution(self, state: SqlState) -> str:
         """Routes after query execution."""
         logger.info("[route_after_execution] Deciding route after execution.")
+
         if state.get("sql_error"):
             logger.warning(
-                "[route_after_execution] SQL error detected during execution. Routing to handle_sql_error."
+                "[route_after_execution] SQL error detected during execution. Ending graph."
             )
-            return "handle_sql_error"
+            return END
 
         analysis = state.get("analysis", {})
         if analysis.get("needs_chart") and analysis.get("chart_type"):
@@ -575,6 +643,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         Combines results from multiple queries if needed.
         """
         logger.info("[format_results] Starting result formatting node.")
+
         if state.get("sql_error"):
             logger.warning(
                 "[format_results] Skipping formatting due to prior SQL error."
@@ -583,7 +652,14 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         if not state.get("query_results"):
             logger.warning("[format_results] No query results to format.")
-            return {"result_summary": "No data was returned from the database."}
+            return {
+                "result_summary": "No data was returned from the database.",
+                "response_metadata": {
+                    "route": "sql_query",
+                    "query_successful": True,
+                    "total_rows": 0,
+                },
+            }
 
         system_prompt = SystemMessage(
             content=PromptTemplates.SQL_RESULT_EXPLANATION_PROMPT
@@ -639,119 +715,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
             "response_metadata": updated_metadata,
         }
 
-    async def handle_sql_error_node(self, state: SqlState) -> Dict[str, Any]:
-        """
-        Handles SQL errors and generates user-friendly error messages.
-        """
-        logger.info("[handle_sql_error] Starting error handling node.")
-        error_message = state.get(
-            "sql_error", "An unknown error occurred during the SQL process."
-        )
-
-        logger.error(f"[handle_sql_error] Handling reported error: {error_message}")
-
-        user_message = f"""I encountered an issue while processing your database query.
-
-Original Question: {state["contextualized_query"]}
-
-Issue: {error_message}
-"""
-
-        if state.get("validation_results"):
-            failed_validations = [
-                v
-                for v in state["validation_results"]
-                if not v["validation"]["is_valid"]
-                or not v["validation"]["is_select_only"]
-            ]
-
-            if failed_validations:
-                user_message += "\n\nDetails on Validation Issues:\n"
-                for v in failed_validations:
-                    user_message += f"\nFor query purpose '{v['purpose']}':\n"
-                    for issue in v["validation"].get("issues", []):
-                        user_message += f"  - {issue}\n"
-
-        user_message += """
-\nFor security and data integrity, I can only perform read-only (SELECT) queries.
-Any requests to modify data (like INSERT, UPDATE, DELETE) are not permitted.
-
-Please try rephrasing your question to only request information, or contact a system administrator if you believe this is an error.
-"""
-
-        final_summary = user_message.strip()
-        logger.info("[handle_sql_error] Generated user-facing error message.")
-
-        updated_metadata = {
-            **state.get("response_metadata", {}),
-            "route": "sql_query",
-            "query_successful": False,
-            "error": error_message,
-        }
-        logger.debug(
-            f"[handle_sql_error] Returning error summary and final metadata: {updated_metadata}"
-        )
-
-        return {
-            "result_summary": final_summary,
-            "response_metadata": updated_metadata,
-        }
-
-    async def handle_irrelevant_query_node(self, state: SqlState) -> Dict[str, Any]:
-        """
-        Handles queries that are not relevant to the database.
-        Provides helpful feedback to user.
-        """
-        logger.info("[handle_irrelevant_query] Handling irrelevant query.")
-
-        reason = state.get(
-            "irrelevance_reason",
-            "Your query doesn't match the available database tables.",
-        )
-        suggested_rephrase = state.get("suggested_rephrase")
-
-        user_message = f"""I understand you're asking: "{state["contextualized_query"]}"
-
-    However, this question doesn't appear to be related to the data available in the database.
-
-    {reason}
-
-    **Available Data Sources:**
-    I can help you query information from these tables:
-    """
-
-        for table in self.allow_tables:
-            user_message += f"\n- **{table}**: "
-            if table == "conversations":
-                user_message += "Chat conversation records"
-            elif table == "messages":
-                user_message += "Individual messages within conversations"
-            elif table == "knowledge_bases":
-                user_message += "Knowledge base configurations"
-            elif table == "documents":
-                user_message += "Uploaded documents and files"
-            elif table == "document_qa":
-                user_message += "Question-answer pairs from documents"
-
-        if suggested_rephrase:
-            user_message += f"\n\n**Suggestion:** {suggested_rephrase}"
-        else:
-            user_message += "\n\n**Tip:** Try asking questions about conversations, messages, documents, or knowledge bases stored in the system."
-
-        logger.info(
-            "[handle_irrelevant_query] Generated user-friendly irrelevance message."
-        )
-
-        return {
-            "result_summary": user_message,
-            "response_metadata": {
-                "route": "sql_query",
-                "query_successful": False,
-                "error": "query_not_relevant_to_database",
-                "is_relevant": False,
-            },
-        }
-
     def _build_graph(self) -> CompiledStateGraph:
         """Build SQL query graph with relevance validation and chart generation support."""
         workflow = StateGraph(SqlState)
@@ -763,8 +726,6 @@ Please try rephrasing your question to only request information, or contact a sy
         workflow.add_node("execute_queries", self.execute_queries_node)
         workflow.add_node("generate_chart", self.generate_chart_node)
         workflow.add_node("format_results", self.format_results_node)
-        workflow.add_node("handle_sql_error", self.handle_sql_error_node)
-        workflow.add_node("handle_irrelevant_query", self.handle_irrelevant_query_node)
 
         workflow.set_entry_point("validate_relevance")
 
@@ -773,7 +734,7 @@ Please try rephrasing your question to only request information, or contact a sy
             self.route_after_relevance_check,
             {
                 "analyze_query": "analyze_query",
-                "handle_irrelevant_query": "handle_irrelevant_query",
+                END: END,
             },
         )
 
@@ -785,7 +746,7 @@ Please try rephrasing your question to only request information, or contact a sy
             self.route_after_validation,
             {
                 "execute_queries": "execute_queries",
-                "handle_sql_error": "handle_sql_error",
+                END: END,
             },
         )
 
@@ -795,15 +756,13 @@ Please try rephrasing your question to only request information, or contact a sy
             {
                 "generate_chart": "generate_chart",
                 "format_results": "format_results",
-                "handle_sql_error": "handle_sql_error",
+                END: END,
             },
         )
 
         workflow.add_edge("generate_chart", "format_results")
 
         workflow.add_edge("format_results", END)
-        workflow.add_edge("handle_sql_error", END)
-        workflow.add_edge("handle_irrelevant_query", END)
 
         return workflow.compile(name=self.graph_name)
 

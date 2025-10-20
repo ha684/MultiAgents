@@ -57,6 +57,13 @@ class OrchestratorState(TypedDict):
     accumulated_knowledge: str
     all_search_history: List[SearchResult]
     cited_documents: List[Document]
+
+    # --- Data from SQL Subgraph ---
+    sql_query_results: Optional[List[Dict]]
+    sql_chart_spec: Optional[Dict]
+    sql_error: Optional[str]
+    sql_result_summary: Optional[str]
+
     # Final Output
     final_answer: str
     response_metadata: Dict[str, Any]
@@ -105,6 +112,10 @@ class SqlState(TypedDict):
     """State for SQL query operations"""
 
     contextualized_query: str
+
+    is_relevant: Optional[bool]
+    irrelevance_reason: Optional[str]
+    suggested_rephrase: Optional[str]
 
     analysis: Optional[Dict]
 
