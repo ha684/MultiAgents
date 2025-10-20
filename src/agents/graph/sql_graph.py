@@ -62,7 +62,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         )
 
         self.graph_name = "SqlGraph"
-        self.compiled_graph = self._build_graph(self.graph_name)
+        self.compiled_graph = self._build_graph()
         logger.info("SqlGraph initialized successfully with LangChain SQLDatabase.")
 
     def graph(self) -> CompiledStateGraph:
