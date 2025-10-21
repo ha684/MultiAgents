@@ -1,3 +1,4 @@
+# src/config/graph_configs.py
 from dataclasses import dataclass
 from typing import Dict, Optional
 from src.models.streaming import StreamPhase
@@ -60,12 +61,12 @@ GRAPH_CONFIGS = {
             "extract_filename": NodeMetadata(
                 display_message="Identifying sources...",
                 stream_phase=StreamPhase.RETRIEVAL,
-                show_in_ui=False,  # Internal step
+                show_in_ui=False,
             ),
             "retrieve_documents": NodeMetadata(
                 display_message="Searching knowledge base...",
                 stream_phase=StreamPhase.RETRIEVAL,
-                emit_on_complete=True,  # Show results when done
+                emit_on_complete=True,
             ),
             "filter_citations": NodeMetadata(
                 display_message="Selecting relevant information...",

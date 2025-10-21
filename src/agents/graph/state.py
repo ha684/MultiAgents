@@ -41,42 +41,41 @@ class RetrievalContext(TypedDict):
     search_method: Literal["rag", "web"]
 
 
+class ExecutionRecord(TypedDict):
+    """Record of a subgraph execution attempt"""
+
+    subgraph: str
+    error: Optional[str]
+    timestamp: str
+    result_summary: Optional[str]
+
+
 class OrchestratorState(TypedDict):
-    """State for orchestrator operations"""
+    """Enhanced state for agentic orchestrator"""
 
-    # Input & Core State
     conversation: List[BaseMessage]
-    original_query: str
-    contextualized_query: str
+    contextualized_query: Optional[str]
+
     route_decision: Optional[str]
+    response_mode: Optional[str]
+    execution_history: List[ExecutionRecord]
 
-    # --- Data from Simple Search Subgraph ---
-    retrieval_contexts: RetrievalContext
+    subgraph_result: Optional[str]
+    subgraph_error: Optional[str]
 
-    # --- Data from Research Subgraph ---
-    accumulated_knowledge: str
-    all_search_history: List[SearchResult]
-    cited_documents: List[Document]
+    main_context: Optional[str]
+    cited_documents: Optional[List[Document]]
 
-    # --- Data from SQL Subgraph ---
-    sql_query_results: Optional[List[Dict]]
-    sql_chart_spec: Optional[Dict]
-    sql_error: Optional[str]
-    sql_result_summary: Optional[str]
-
-    # Final Output
-    final_answer: str
-    response_metadata: Dict[str, Any]
+    final_answer: Optional[str]
+    response_metadata: Optional[Dict[str, Any]]
 
 
 class SimpleSearchState(TypedDict):
     """State for simple search operations"""
 
     conversation: List[BaseMessage]
-    original_query: str
     contextualized_query: str
-
-    retrieval_contexts: RetrievalContext
+    cited_documents: List[Document]
     response_metadata: Dict[str, Any]
 
 

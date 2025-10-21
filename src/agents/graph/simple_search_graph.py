@@ -112,16 +112,16 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
             doc.metadata["original_index"] = i
 
         return {
-            "retrieval_contexts": {
-                "original_query": state["original_query"],
-                "contextualized_query": contextualized_query,
-                "total_retrieved": len(retrieved_docs),
-                "total_cited": 0,
-                "cited_chunks": retrieved_docs,
-                "search_method": search_method,
-            },
+            "cited_documents": retrieved_docs,
             "response_metadata": {
                 **state.get("response_metadata", {}),
+                "search_method": search_method,
+                "favicons": [doc.metadata.get("favicon", "") for doc in retrieved_docs],
+                "urls": [
+                    doc.metadata.get("original_filename", "") for doc in retrieved_docs
+                ],
+                "sources_count": len(retrieved_docs),
+                "total_cited": 0,
             },
         }
 
@@ -129,8 +129,7 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
         """Filter relevant documents using citation agent"""
         logger.info("Simple Search - Filtering citations")
 
-        retrieval_context = state["retrieval_contexts"]
-        retrieved_docs = retrieval_context["cited_chunks"]
+        retrieved_docs = state["cited_documents"]
 
         if not retrieved_docs:
             logger.warning("No documents to filter")
@@ -151,16 +150,17 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
 
         logger.info(f"Filtered to {len(cited_docs)} cited documents")
 
-        updated_context = {
-            **retrieval_context,
-            "total_cited": len(cited_docs),
-            "cited_chunks": cited_docs,
-        }
-
         return {
-            "retrieval_contexts": updated_context,
+            "cited_documents": cited_docs,
             "response_metadata": {
                 **state.get("response_metadata", {}),
+                "search_method": state.get("search_method", "rag"),
+                "favicons": [doc.metadata.get("favicon", "") for doc in cited_docs],
+                "urls": [
+                    doc.metadata.get("original_filename", "") for doc in cited_docs
+                ],
+                "sources_count": len(cited_docs),
+                "total_cited": len(cited_docs),
             },
         }
 

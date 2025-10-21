@@ -116,8 +116,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
             )
             return {
                 "is_relevant": False,
-                "sql_error": "Unable to determine query relevance to database.",
-                "result_summary": "Unable to determine if your query is relevant to the available database.",
                 "response_metadata": {
                     "route": "sql_query",
                     "query_successful": False,
@@ -139,8 +137,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 "is_relevant": False,
                 "irrelevance_reason": reason,
                 "suggested_rephrase": suggested_rephrase,
-                "sql_error": f"Query not relevant to database: {reason}",
-                "result_summary": f"Query is not relevant to the available database. {reason}",
                 "response_metadata": {
                     "route": "sql_query",
                     "query_successful": False,
@@ -213,8 +209,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 "[analyze_query] Failed to analyze query after multiple attempts."
             )
             return {
-                "sql_error": "Failed to analyze query requirements",
-                "result_summary": "Failed to analyze your query requirements. Please try rephrasing your question.",
+                "query_results": [],
                 "analysis": None,
                 "response_metadata": {
                     "route": "sql_query",
@@ -245,8 +240,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 "[generate_sql_queries] No query plan found in state. Cannot generate SQL."
             )
             return {
-                "sql_error": "No query plan available to generate SQL",
-                "result_summary": "Unable to create a query plan for your request.",
+                "query_results": [],
                 "generated_queries": None,
                 "response_metadata": {
                     "route": "sql_query",
@@ -289,8 +283,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
             )
             return {
                 "generated_queries": None,
-                "sql_error": "Failed to generate SQL queries",
-                "result_summary": "Failed to generate SQL queries for your request.",
                 "response_metadata": {
                     "route": "sql_query",
                     "query_successful": False,
@@ -375,8 +367,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
             return {
                 "validation_results": validation_results,
-                "sql_error": error_msg,
-                "result_summary": f"Query validation failed. Only SELECT queries are allowed. Issues: {'; '.join(issues)}",
                 "response_metadata": {
                     "route": "sql_query",
                     "query_successful": False,
@@ -397,8 +387,10 @@ class SqlGraph(GraphAgentBase[SqlState]):
         """Routes after SQL validation."""
         logger.info("[route_after_validation] Deciding route after validation.")
 
-        if state.get("sql_error"):
-            logger.warning("[route_after_validation] SQL error detected. Ending graph.")
+        if not state.get("query_results", []):
+            logger.warning(
+                "[route_after_validation] No query results found. Ending graph."
+            )
             return END
 
         validation_results = state.get("validation_results", [])
@@ -436,8 +428,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         if not validation_results:
             logger.error("[execute_queries] No validated queries to execute.")
             return {
-                "sql_error": "No validated queries available for execution",
-                "result_summary": "No validated queries available to execute.",
+                "query_results": [],
                 "response_metadata": {
                     "route": "sql_query",
                     "query_successful": False,
@@ -489,13 +480,8 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         failed_queries = [r for r in all_results if not r["success"]]
         if failed_queries:
-            error_msgs = [f"{r['purpose']}: {r['error']}" for r in failed_queries]
-            error_summary = f"Some queries failed: {'; '.join(error_msgs)}"
-
             return {
                 "query_results": all_results,
-                "sql_error": error_summary,
-                "result_summary": f"Query execution failed. {error_summary}",
                 "response_metadata": {
                     "route": "sql_query",
                     "query_successful": False,
@@ -637,84 +623,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
             "response_metadata": updated_metadata,
         }
 
-    async def format_results_node(self, state: SqlState) -> Dict[str, Any]:
-        """
-        Formats query results into a natural language summary.
-        Combines results from multiple queries if needed.
-        """
-        logger.info("[format_results] Starting result formatting node.")
-
-        if state.get("sql_error"):
-            logger.warning(
-                "[format_results] Skipping formatting due to prior SQL error."
-            )
-            return {}
-
-        if not state.get("query_results"):
-            logger.warning("[format_results] No query results to format.")
-            return {
-                "result_summary": "No data was returned from the database.",
-                "response_metadata": {
-                    "route": "sql_query",
-                    "query_successful": True,
-                    "total_rows": 0,
-                },
-            }
-
-        system_prompt = SystemMessage(
-            content=PromptTemplates.SQL_RESULT_EXPLANATION_PROMPT
-        )
-
-        results_text = f"Original Question: {state['contextualized_query']}\n\n"
-        results_text += "Query Results:\n\n"
-
-        for result in state["query_results"]:
-            if result.get("success"):
-                results_text += f"Purpose: {result['purpose']}\n"
-                results_text += f"Rows returned: {result['row_count']}\n"
-                if result.get("results"):
-                    results_text += "Sample data (first 10 rows):\n"
-                    results_text += json.dumps(
-                        result["results"][:10], indent=2, default=str
-                    )
-                results_text += "\n\n"
-
-        if state.get("chart_spec"):
-            results_text += (
-                "Note: A visualization chart has also been generated for this data.\n"
-            )
-
-        logger.debug(
-            f"[format_results] Text prepared for summarization LLM call: {results_text}"
-        )
-        user_prompt = HumanMessage(content=results_text)
-        messages = [system_prompt, user_prompt]
-
-        logger.info("[format_results] Calling LLM to summarize results.")
-        response = await self.simple_llm_call(messages=messages, llm=self.llm)
-
-        summary = (
-            response.content
-            if response
-            else "The query was executed successfully, but a summary could not be generated."
-        )
-
-        logger.info("[format_results] Successfully generated result summary.")
-
-        updated_metadata = {
-            **state.get("response_metadata", {}),
-            "route": "sql_query",
-            "query_successful": True,
-        }
-        logger.debug(
-            f"[format_results] Returning summary and final metadata: {updated_metadata}"
-        )
-
-        return {
-            "result_summary": summary,
-            "response_metadata": updated_metadata,
-        }
-
     def _build_graph(self) -> CompiledStateGraph:
         """Build SQL query graph with relevance validation and chart generation support."""
         workflow = StateGraph(SqlState)
@@ -725,7 +633,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
         workflow.add_node("validate_queries", self.validate_queries_node)
         workflow.add_node("execute_queries", self.execute_queries_node)
         workflow.add_node("generate_chart", self.generate_chart_node)
-        workflow.add_node("format_results", self.format_results_node)
 
         workflow.set_entry_point("validate_relevance")
 
@@ -755,14 +662,11 @@ class SqlGraph(GraphAgentBase[SqlState]):
             self.route_after_execution,
             {
                 "generate_chart": "generate_chart",
-                "format_results": "format_results",
                 END: END,
             },
         )
 
-        workflow.add_edge("generate_chart", "format_results")
-
-        workflow.add_edge("format_results", END)
+        workflow.set_finish_point("generate_chart")
 
         return workflow.compile(name=self.graph_name)
 

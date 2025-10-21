@@ -1,8 +1,8 @@
 # src/agents/basic/compress_agent.py
 from typing import List
 from langchain_core.documents import Document
-from src.llm.factory import get_llm
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
 from src.agents.tools.server.mcp_retrieve_tools import think
@@ -512,33 +512,6 @@ Feature B introduces advanced analytics capabilities powered by machine learning
 **Analysis**: Growth justified - added genuine new feature (Feature B) and enhanced existing feature with architectural details.
 
 ---
-
-Example 3: Handling Conflicts
-
-Existing Knowledge (200 chars):
-```
-# Project Timeline
-The internal QA deadline is June 15, 2024 ([Internal Memo][2]).
-```
-
-New Documents:
-- [CITATION: 30] Client Email: Client delivery confirmed for June 30, 2024
-
-[Uses think tool]:
-"Classification:
-- [30] June 30 deadline: Could be CONTRADICTORY or COMPLEMENTARY
-- Analysis: Different contexts (internal vs client) → COMPLEMENTARY, not a conflict
-- Both dates are valid for different milestones
-
-Strategy: Add client deadline, clarify both dates serve different purposes"
-
-Consolidated Output (280 chars - 40% growth):
-```
-# Project Timeline
-The project has two key dates. The internal QA completion deadline is June 15, 2024 ([Internal Memo][2]). The confirmed client delivery date is June 30, 2024 ([Client Communication][30]). This provides a two-week buffer between internal completion and external delivery.
-```
-
-**Analysis**: Added context to explain both dates, justified growth for clarity.
 
 </examples>
 
