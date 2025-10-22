@@ -76,7 +76,6 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
                 f"❌ '{run_cfg.graph_name}' error: {e}. Returning last_state.",
                 exc_info=True,
             )
-            last_state["error"] = str(f"'{run_cfg.graph_name}' error: {e}")
             return last_state
 
         return final_state if final_state is not None else last_state

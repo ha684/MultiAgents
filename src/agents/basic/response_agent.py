@@ -231,27 +231,8 @@ An error occurred while trying to retrieve information:
 1. **Language matching**: Respond in the SAME language as the user's query
 2. **Acknowledge the issue**: Briefly acknowledge that retrieval failed
 3. **Explain what happened**: In simple terms (no technical jargon)
-4. **Offer alternatives**:
-   - Try rephrasing the question
-   - Provide more specific details
-   - Ask a different but related question
-5. **Stay helpful**: Keep a positive, solution-oriented tone
-
-Example responses:
-
-**English:**
-"I encountered an issue while searching for that information. Could you try rephrasing your question or providing more specific details? I'm here to help find what you need."
-
-**Vietnamese:**
-"Tôi gặp vấn đề khi tìm kiếm thông tin đó. Bạn có thể diễn đạt lại câu hỏi hoặc cung cấp thêm chi tiết cụ thể không? Tôi sẵn sàng hỗ trợ bạn."
+4. **Stay helpful**: Keep a positive, solution-oriented tone
 </your_task>
-
-<what_not_to_do>
-- Don't expose technical error details to users
-- Don't blame the system
-- Don't over-apologize
-- Don't make promises about fixing it
-</what_not_to_do>
 """
 
 NO_VIABLE_OPTION_PROMPT = """You are a helpful assistant responding after multiple retrieval attempts have failed.

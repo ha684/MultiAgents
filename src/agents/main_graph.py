@@ -469,7 +469,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             logger.info(f"Executing subgraph via method: {method_name}")
 
             result = await executor_method(state)
-            logger.info(f"Result: {result}")
             has_result = bool(
                 result.get("main_context") or result.get("cited_documents")
             )
@@ -478,7 +477,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 logger.warning(f"Subgraph {route} returned no useful result")
 
                 execution_history.append(
-                    {"subgraph": route, "error": "No useful result", "timestamp": "now"}
+                    {"subgraph": route, "error": "No useful result"}
                 )
 
                 if (

@@ -17,7 +17,6 @@ class SubgraphConfig:
     fallback_chain: Optional[List[str]] = None
     requires_confirmation: bool = False
 
-    # New: indicators for router
     query_indicators: Optional[List[str]] = None
     not_suitable_for: Optional[List[str]] = None
 
