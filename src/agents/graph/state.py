@@ -27,7 +27,6 @@ class SearchResult(TypedDict):
     query: str
     documents: List[Document]
     search_type: Literal["rag", "web"]
-    processed: bool
 
 
 class RetrievalContext(TypedDict):

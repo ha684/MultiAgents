@@ -57,18 +57,10 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
                 async for event in self.graph.astream_events(
                     state, config=lg_config, version=run_cfg.version
                 ):
-                    kind = event.get("event")
-                    name = event.get("name")
+                    out = event.get("data", {}).get("output")
+                    last_state = self.on_node_state(last_state, out)
 
-                    if kind == "on_chain_end" and name != run_cfg.graph_name:
-                        out = event.get("data", {}).get("output")
-                        last_state = self.on_node_state(last_state, out)
-
-                    if kind == "on_chain_end" and name == run_cfg.graph_name:
-                        final_state = event.get("data", {}).get("output")
-                        if final_state is not None:
-                            last_state = final_state
-
+            final_state = last_state
         except RecursionError:
             logger.warning(
                 f"🛑 '{run_cfg.graph_name}' stopped (recursion_limit={run_cfg.recursion_limit}). Returning last_state."
@@ -84,6 +76,7 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
                 f"❌ '{run_cfg.graph_name}' error: {e}. Returning last_state.",
                 exc_info=True,
             )
+            last_state["error"] = str(f"'{run_cfg.graph_name}' error: {e}")
             return last_state
 
         return final_state if final_state is not None else last_state

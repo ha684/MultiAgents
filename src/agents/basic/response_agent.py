@@ -1,15 +1,18 @@
 # src/agents/basic/response_agent.py
 from typing import List, Dict, AsyncGenerator, Union, Any
+
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import BaseMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+
 from src.config.llm_config import SupportedLLMProviders
 from src.llm.factory import get_llm
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
 from src.agents.basic.base import BaseAgent
 from src.agents.graph.schemas import ResponseMode
+from src.agents.graph.prompts import PromptTemplates
 
 HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research assistant with access to a collection of documents. Your task is to provide accurate, well-cited answers based strictly on the information in the provided documents.
 
@@ -293,51 +296,7 @@ Bạn có thể thử diễn đạt lại câu hỏi hoặc chia nhỏ nó ra kh
 </your_task>
 """
 
-ADVANCE_MODE_PROMPT = """You are a research assistant presenting comprehensive findings from deep research.
-
-<context>
-You have completed an in-depth, multi-step research investigation. The accumulated knowledge below represents synthesized findings from multiple sources and iterations.
-
-<accumulated_knowledge>
-{accumulated_knowledge}
-</accumulated_knowledge>
-
-{cited_documents}
-</context>
-
-<your_task>
-1. **Language matching**: Respond in the SAME language as the user's query
-2. **Present comprehensive findings**: 
-   - Synthesize the accumulated knowledge clearly
-   - Structure with headers (##) for major sections
-   - Use bullet points for key findings
-   - Highlight important insights with **bold**
-3. **Cite sources**: Every factual claim needs citation ([descriptive text][number])
-4. **Be thorough**: This was deep research, so provide substantial depth
-5. **Maintain clarity**: Despite complexity, keep it readable
-
-Structure suggestion:
-## Overview
-[High-level summary]
-
-## Key Findings
-- [Finding 1 with citation]
-- [Finding 2 with citation]
-
-## Detailed Analysis
-[Deeper exploration]
-
-## Implications/Conclusions
-[What this means]
-</your_task>
-
-<citation_rules>
-- Use format: ([descriptive text][number])
-- Numbers must match document indexes in <documents> section
-- Every factual claim needs a citation
-- Use descriptive text, not "Document X"
-</citation_rules>
-"""
+ADVANCE_MODE_PROMPT = PromptTemplates.FINAL_SYNTHESIZER_PROMPT
 
 FOLLOWUP_MODE_PROMPT = """You are a conversational assistant handling a follow-up question.
 
@@ -463,7 +422,6 @@ class ResponseAgent(BaseAgent):
         current_query = history[-1].content
         execution_history = execution_history or []
 
-        # CONFIRMATION_REQUIRED mode
         if mode == ResponseMode.CONFIRMATION_REQUIRED:
             system_prompt = CONFIRMATION_REQUIRED_PROMPT.format(
                 query=current_query, pending_route=pending_route or "deep_research"
@@ -490,14 +448,17 @@ class ResponseAgent(BaseAgent):
             return [system_message] + history
 
         elif mode == ResponseMode.ADVANCE:
-            cited_docs = self._format_context_for_response(contexts)
-            system_prompt = ADVANCE_MODE_PROMPT.format(
-                accumulated_knowledge=accumulated_knowledge
-                or "No accumulated knowledge",
-                cited_documents=cited_docs if cited_docs else "No documents available",
+            system_prompt = SystemMessage(
+                content="You are a research synthesis expert tasked with creating a comprehensive, well-structured response based on accumulated research findings."
             )
-            system_message = SystemMessage(content=system_prompt)
-            return [system_message] + history
+            user_prompt = HumanMessage(
+                content=PromptTemplates.FINAL_SYNTHESIZER_PROMPT.format(
+                    user_message=history[-1].content,
+                    accumulated_knowledge=accumulated_knowledge,
+                )
+            )
+            messages = [system_prompt] + history[-1:] + [user_prompt]
+            return messages
 
         elif mode == ResponseMode.FOLLOWUP:
             if contexts:

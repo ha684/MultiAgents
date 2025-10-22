@@ -42,7 +42,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
 
     def default_run_config(self) -> RunConfig:
         return RunConfig(
-            graph_name=self.graph_name, recursion_limit=50, timeout_seconds=600
+            graph_name=self.graph_name, recursion_limit=5, timeout_seconds=600
         )
 
     async def query_planner_node(self, state: ResearchState) -> ResearchState:
@@ -70,7 +70,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             )
             return {
                 "pending_queries": [],
-                "accumulated_knowledge": "",
+                "accumulated_knowledge": state.get("accumulated_knowledge", ""),
                 "completed_queries": [],
                 "max_searches": self.max_searches,
                 "iteration_count": 0,
@@ -81,7 +81,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                 "has_tried_web": False,
                 "consecutive_search_failures": 0,
                 "citation_counter": 0,
-                "cited_documents": [],
+                "cited_documents": state.get("cited_documents", []),
                 "rag_is_unavailable": False,
                 "web_is_unavailable": False,
                 "should_retry_query": False,
@@ -96,7 +96,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             "completed_queries": [],
             "max_searches": self.max_searches,
             "iteration_count": 0,
-            "accumulated_knowledge": "",
+            "accumulated_knowledge": state.get("accumulated_knowledge", ""),
             "all_search_history": [],
             "used_rag_ids": [],
             "used_web_urls": [],
@@ -104,7 +104,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             "has_tried_web": False,
             "consecutive_search_failures": 0,
             "citation_counter": 0,
-            "cited_documents": [],
+            "cited_documents": state.get("cited_documents", []),
             "rag_is_unavailable": False,
             "web_is_unavailable": False,
             "should_retry_query": False,
@@ -142,7 +142,12 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                 logger.warning(
                     "[PreFlightCheck] RAG source returned no documents. Deeming irrelevant."
                 )
-                return {"is_rag_source_relevant": False, "rag_is_unavailable": True}
+                return {
+                    "is_rag_source_relevant": False,
+                    "rag_is_unavailable": True,
+                    "cited_documents": state.get("cited_documents", []),
+                    "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+                }
 
             relevant_indices = await citation_agent.ainvoke(
                 history=[HumanMessage(content=original_query)], reference=documents
@@ -152,15 +157,29 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                 logger.warning(
                     "[PreFlightCheck] Citation agent found no relevant documents in initial RAG search. Deeming RAG source irrelevant for this run."
                 )
-                return {"is_rag_source_relevant": False, "rag_is_unavailable": True}
+                return {
+                    "is_rag_source_relevant": False,
+                    "rag_is_unavailable": True,
+                    "cited_documents": state.get("cited_documents", []),
+                    "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+                }
 
         except Exception as e:
             logger.error(
                 f"[PreFlightCheck] RAG pre-flight check failed with an error: {e}. Disabling RAG."
             )
-            return {"is_rag_source_relevant": False, "rag_is_unavailable": True}
+            return {
+                "is_rag_source_relevant": False,
+                "rag_is_unavailable": True,
+                "cited_documents": state.get("cited_documents", []),
+                "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+            }
 
-        return {"is_rag_source_relevant": True}
+        return {
+            "is_rag_source_relevant": True,
+            "cited_documents": state.get("cited_documents", []),
+            "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+        }
 
     async def handle_no_plan_node(self, state: ResearchState) -> Dict[str, Any]:
         """
@@ -172,13 +191,20 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             "missing_aspects": [state["contextualized_query"]],
             "confidence": "low",
         }
-        return {"verification_result": verification_result}
+        return {
+            "verification_result": verification_result,
+            "cited_documents": state.get("cited_documents", []),
+            "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+        }
 
     async def search_executor_node(self, state: ResearchState) -> Dict[str, Any]:
         """Execute search query with robust failure handling"""
         if not state["pending_queries"]:
             logger.warning("[SearchExecutor] No pending queries. Skipping execution.")
-            return {}
+            return {
+                "cited_documents": state.get("cited_documents", []),
+                "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+            }
 
         current_query = state["pending_queries"][0]
         remaining_queries = state["pending_queries"][1:]
@@ -209,6 +235,8 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                         "consecutive_search_failures", 0
                     )
                     + 1,
+                    "cited_documents": state.get("cited_documents", []),
+                    "accumulated_knowledge": state.get("accumulated_knowledge", ""),
                 }
 
         if search_type == "rag" and rag_unavailable:
@@ -226,6 +254,8 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                     "completed_queries": state["completed_queries"] + [current_query],
                     "pending_queries": remaining_queries,
                     "consecutive_search_failures": self.max_consecutive_failures,
+                    "cited_documents": state.get("cited_documents", []),
+                    "accumulated_knowledge": state.get("accumulated_knowledge", ""),
                 }
 
         if search_type == "web" and web_unavailable:
@@ -243,6 +273,8 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                     "completed_queries": state["completed_queries"] + [current_query],
                     "pending_queries": remaining_queries,
                     "consecutive_search_failures": self.max_consecutive_failures,
+                    "cited_documents": state.get("cited_documents", []),
+                    "accumulated_knowledge": state.get("accumulated_knowledge", ""),
                 }
 
         documents = []
@@ -268,6 +300,8 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             updated_state = {
                 "rag_is_unavailable": rag_unavailable,
                 "web_is_unavailable": web_unavailable,
+                "cited_documents": state.get("cited_documents", []),
+                "accumulated_knowledge": state.get("accumulated_knowledge", ""),
             }
 
             if search_type == "rag":
@@ -294,13 +328,12 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                 "consecutive_search_failures": consecutive_search_failures,
                 "rag_is_unavailable": updated_state["rag_is_unavailable"],
                 "web_is_unavailable": updated_state["web_is_unavailable"],
+                "cited_documents": updated_state["cited_documents"],
+                "accumulated_knowledge": updated_state["accumulated_knowledge"],
             }
 
         search_result = SearchResult(
-            query=query_text,
-            documents=documents,
-            search_type=search_type,
-            processed=False,
+            query=query_text, documents=documents, search_type=search_type
         )
 
         return {
@@ -312,6 +345,8 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             "has_tried_rag": state.get("has_tried_rag", False) or search_type == "rag",
             "has_tried_web": state.get("has_tried_web", False) or search_type == "web",
             "consecutive_search_failures": consecutive_search_failures,
+            "cited_documents": state.get("cited_documents", []),
+            "accumulated_knowledge": state.get("accumulated_knowledge", ""),
         }
 
     async def process_results_node(self, state: ResearchState) -> Dict[str, Any]:
@@ -454,6 +489,23 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
         - If soft failure, try to retry with a fallback search type IF AVAILABLE.
         - If fallback is unavailable, skip the failed query and continue.
         """
+        iteration = state["iteration_count"]
+        max_searches = state["max_searches"]
+
+        should_verify_this_iteration = (
+            iteration % 3 == 0
+            or iteration >= max_searches - 2
+            or not state.get("pending_queries")
+        )
+
+        if (
+            not should_verify_this_iteration
+            and state.get("pending_queries")
+            and not state.get("should_retry_query")
+        ):
+            logger.info(f"[Router] Skip verification at iteration {iteration}")
+            return "search_executor"
+
         if not state.get("should_retry_query"):
             return "verification_agent"
 
@@ -514,7 +566,9 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                     "is_sufficient": False,
                     "missing_aspects": [state["contextualized_query"]],
                     "confidence": "low",
-                }
+                },
+                "cited_documents": state.get("cited_documents", []),
+                "accumulated_knowledge": state.get("accumulated_knowledge", ""),
             }
 
         max_iterations = 3
@@ -548,23 +602,40 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                     "is_sufficient": False,
                     "missing_aspects": [],
                     "confidence": "low",
-                }
+                },
+                "cited_documents": state.get("cited_documents", []),
+                "accumulated_knowledge": state.get("accumulated_knowledge", ""),
             }
 
-        return {"verification_result": verification_dict}
+        return {
+            "verification_result": verification_dict,
+            "cited_documents": state.get("cited_documents", []),
+            "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+        }
 
     async def reflection_node(self, state: ResearchState) -> Dict[str, Any]:
         """
         Critiques the current research state and suggests next steps.
         """
 
-        search_history_str = json.dumps(state.get("all_search_history", []), indent=2)
+        all_search_history = state.get("all_search_history", [])
+        search_history = [
+            {
+                "query": search_result["query"],
+                "search_type": search_result["search_type"],
+            }
+            for search_result in all_search_history
+        ]
 
         prompt_input = PromptTemplates.REFLECTION_HUMAN_PROMPT.format(
             original_query=state["contextualized_query"],
             accumulated_knowledge=state["accumulated_knowledge"],
-            missing_aspects=json.dumps(state["verification_result"]["missing_aspects"]),
-            search_history=search_history_str,
+            missing_aspects=json.dumps(
+                state["verification_result"]["missing_aspects"],
+                indent=2,
+                ensure_ascii=False,
+            ),
+            search_history=json.dumps(search_history, indent=2, ensure_ascii=False),
         )
 
         messages: List[BaseMessage] = [
@@ -584,9 +655,17 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
 
         if not reflection_result:
             logger.error("[Reflection] Failed to generate a valid reflection.")
-            return {"reflection_result": {"critique": "N/A", "next_steps": "N/A"}}
+            return {
+                "reflection_result": {"critique": "N/A", "next_steps": "N/A"},
+                "cited_documents": state.get("cited_documents", []),
+                "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+            }
 
-        return {"reflection_result": reflection_result}
+        return {
+            "reflection_result": reflection_result,
+            "cited_documents": state.get("cited_documents", []),
+            "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+        }
 
     async def dynamic_query_generator_node(
         self, state: ResearchState
@@ -600,7 +679,11 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             logger.warning(
                 "[DynamicQueryGenerator] No missing aspects identified. Skipping query generation."
             )
-            return {"pending_queries": []}
+            return {
+                "pending_queries": [],
+                "cited_documents": state.get("cited_documents", []),
+                "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+            }
 
         missing_aspects = verification["missing_aspects"]
 
@@ -651,7 +734,11 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             logger.error(
                 "[DynamicQueryGenerator] Failed to generate valid dynamic queries."
             )
-            return {"pending_queries": []}
+            return {
+                "pending_queries": [],
+                "cited_documents": state.get("cited_documents", []),
+                "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+            }
 
         new_queries = dynamic_query_generator_dict.get("queries", [])
 
@@ -659,9 +746,17 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             logger.warning(
                 "[DynamicQueryGenerator] Agent returned empty queries. This may mean information gaps are minor or unresolvable."
             )
-            return {"pending_queries": []}
+            return {
+                "pending_queries": [],
+                "cited_documents": state.get("cited_documents", []),
+                "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+            }
 
-        return {"pending_queries": new_queries}
+        return {
+            "pending_queries": new_queries,
+            "cited_documents": state.get("cited_documents", []),
+            "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+        }
 
     def route_after_dynamic_generation(self, state: ResearchState) -> str:
         """Decides where to go after attempting to generate new queries."""

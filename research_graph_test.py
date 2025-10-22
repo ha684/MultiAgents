@@ -73,6 +73,8 @@ class ResearchGraphStreamer:
                     color="blue",
                 )
 
+                final_state = event.get("data", {}).get("output")
+
             elif kind == "on_chain_end":
                 if name in self.node_start_times:
                     duration = (
@@ -80,8 +82,7 @@ class ResearchGraphStreamer:
                     )
                     self.node_timings[name] = duration
 
-                if name == "SqlGraph":
-                    final_state = event.get("data", {}).get("output")
+                final_state = event.get("data", {}).get("output")
 
             elif kind == "on_chat_model_stream":
                 chunk = event["data"]["chunk"]

@@ -3,6 +3,7 @@ import asyncio
 from typing import Any, AsyncGenerator, Dict, List, Optional
 import json
 import tiktoken
+import textwrap
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables.schema import StreamEvent
@@ -79,12 +80,16 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             )
 
         if wsc is not None:
-            try:
-                wsc = wsc.model_copy(update={"active": web_active})
-            except Exception:
-                wsc.active = web_active
-            meta["web_search_config"] = wsc
+            if isinstance(wsc, dict):
+                wsc = dict(wsc)
+                wsc["active"] = web_active
+            else:
+                try:
+                    wsc = wsc.model_copy(update={"active": web_active})
+                except AttributeError:
+                    wsc = wsc.copy(update={"active": web_active})
 
+        meta["web_search_config"] = wsc
         addl["message_metadata"] = meta
         conv[-1] = type(last)(**{**last.__dict__, "additional_kwargs": addl})
 
@@ -107,7 +112,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
     async def _execute_web_search(self, state: OrchestratorState) -> Dict[str, Any]:
         return await self._run_simple_search(state, web_active=True)
 
-    async def _execute_research(self, state: OrchestratorState) -> Dict[str, Any]:
+    async def _execute_deep_research(self, state: OrchestratorState) -> Dict[str, Any]:
         """Execute research subgraph"""
         context_metadata = state["conversation"][-1].additional_kwargs.get(
             "message_metadata", {}
@@ -288,24 +293,24 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         system_prompt = SystemMessage(content=PromptTemplates.ROUTER_PROMPT)
 
         context_message = HumanMessage(
-            content=f"""<available_subgraphs>
-    {subgraph_context}
-    </available_subgraphs>
+            content=textwrap.dedent(f"""<available_subgraphs>
+                {subgraph_context}
+                </available_subgraphs>
 
-    <execution_history>
-    {history_context if history_context else "No previous attempts"}
-    </execution_history>
+                <execution_history>
+                {history_context if history_context else "No previous attempts"}
+                </execution_history>
 
-    <conversation_context>
-    {conversation_context if conversation_context else "No previous conversation"}
-    </conversation_context>
+                <conversation_context>
+                {conversation_context if conversation_context else "No previous conversation"}
+                </conversation_context>
 
-    <current_query>
-    {conversation[-1].content}
-    </current_query>
+                <current_query>
+                {conversation[-1].content}
+                </current_query>
 
-    Analyze the query and select the most appropriate subgraph route.
-    """
+                Analyze the query and select the most appropriate subgraph route.
+                """)
         )
 
         messages: List[BaseMessage] = [system_prompt, context_message]
@@ -464,7 +469,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             logger.info(f"Executing subgraph via method: {method_name}")
 
             result = await executor_method(state)
-
+            logger.info(f"Result: {result}")
             has_result = bool(
                 result.get("main_context") or result.get("cited_documents")
             )

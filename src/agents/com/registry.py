@@ -116,7 +116,7 @@ SubgraphRegistry.register(
         ],
         entry_state_type=SimpleSearchState,
         executor="web_search",
-        fallback_chain=["deep_research"],
+        fallback_chain=["rag_search", "deep_research"],
         requires_confirmation=False,
     )
 )
@@ -149,7 +149,7 @@ SubgraphRegistry.register(
         ],
         entry_state_type=ResearchState,
         executor="deep_research",
-        fallback_chain=None,
+        fallback_chain=["rag_search", "web_search"],
         requires_confirmation=True,
     )
 )
@@ -184,7 +184,7 @@ SubgraphRegistry.register(
         ],
         entry_state_type=SqlState,
         executor="sql_query",
-        fallback_chain=["rag_search", "web_search"],
+        fallback_chain=["rag_search", "web_search", "deep_research"],
         requires_confirmation=False,
     )
 )

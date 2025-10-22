@@ -47,7 +47,7 @@ class OrchestratorStreamer:
 
         stats = {"nodes": [], "tokens": 0, "tools": 0, "start_time": time.time()}
 
-        async for event in orchestrator.stream(conversation):
+        async for event in orchestrator.astream(conversation):
             event: StreamEvent
             kind = event["event"]
             name = event.get("name", "")
@@ -129,7 +129,7 @@ async def main():
     orchestrator = OrchestratorGraph()
 
     human_message = HumanMessage(
-        content="Analyze the geopolitical impact of the latest G7 summit decisions on energy trading. Use deep research",
+        content="có tất cả bao nhiêu cuộc trò chuyện?",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]
