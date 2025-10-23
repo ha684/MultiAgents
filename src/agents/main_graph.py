@@ -1,9 +1,7 @@
 # src/agents/main_graph.py
-import asyncio
 from typing import Any, AsyncGenerator, Dict, List, Optional
-import json
-import tiktoken
 import textwrap
+from dataclasses import asdict
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables.schema import StreamEvent
@@ -20,17 +18,13 @@ from src.agents.graph.research_graph import ResearchGraph
 from src.agents.graph.schemas import RouteDecision
 from src.agents.graph.simple_search_graph import SimpleSearchGraph
 from src.agents.graph.sql_graph import SqlGraph
-from src.agents.graph.state import (
-    OrchestratorState,
-    ResearchState,
-    SimpleSearchState,
-    SqlState,
-)
+from src.agents.graph.state import OrchestratorState
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.common.types import Message, RetrievalContext, TextPart
 from src.llm.factory import get_llm
 from src.services.conversation_service import ConversationService
 from src.agents.graph.schemas import ResponseMode
+from src.agents.executors import EXECUTORS
 from src.utils import parse_response
 from src.utils.logger_conf import logger
 
@@ -48,151 +42,14 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
     def __init__(self):
         self.llm = get_llm(provider="nxchat")
         self.thinking_llm = self.llm.bind_tools([think])
-        tokenizer = tiktoken.encoding_for_model("gpt-4o")
 
-        self.simple_search_graph = SimpleSearchGraph(tokenizer)
+        self.simple_search_graph = SimpleSearchGraph()
         self.research_graph = ResearchGraph()
         self.sql_graph = SqlGraph()
 
         self.conv_service = ConversationService()
         self.graph_name = "OrchestratorGraph"
         self.compiled_graph = self._build_graph()
-
-    def _get_original_query(self, state: OrchestratorState) -> str:
-        """Extract original query from last message in conversation"""
-        return state["conversation"][-1].content
-
-    async def _run_simple_search(
-        self, state: OrchestratorState, web_active: bool
-    ) -> Dict[str, Any]:
-        conv = list(state["conversation"])
-        if not conv:
-            raise ValueError("Conversation is empty.")
-
-        last = conv[-1]
-        addl = getattr(last, "additional_kwargs", {}) or {}
-        meta = dict(addl.get("message_metadata", {}))
-        wsc = meta.get("web_search_config")
-
-        if wsc is None and web_active:
-            raise ValueError(
-                "web_search_config is required for web search but was not found."
-            )
-
-        if wsc is not None:
-            if isinstance(wsc, dict):
-                wsc = dict(wsc)
-                wsc["active"] = web_active
-            else:
-                try:
-                    wsc = wsc.model_copy(update={"active": web_active})
-                except AttributeError:
-                    wsc = wsc.copy(update={"active": web_active})
-
-        meta["web_search_config"] = wsc
-        addl["message_metadata"] = meta
-        conv[-1] = type(last)(**{**last.__dict__, "additional_kwargs": addl})
-
-        simple_search_state = SimpleSearchState(
-            conversation=conv,
-            original_query=self._get_original_query(state),
-            contextualized_query=state["contextualized_query"],
-        )
-        result = await self.simple_search_graph.ainvoke(state=simple_search_state)
-        return {
-            "main_context": None,
-            "cited_documents": result.get("cited_documents", []),
-            "response_metadata": result.get("response_metadata", {}),
-            "subgraph_error": None,
-        }
-
-    async def _execute_rag_search(self, state: OrchestratorState) -> Dict[str, Any]:
-        return await self._run_simple_search(state, web_active=False)
-
-    async def _execute_web_search(self, state: OrchestratorState) -> Dict[str, Any]:
-        return await self._run_simple_search(state, web_active=True)
-
-    async def _execute_deep_research(self, state: OrchestratorState) -> Dict[str, Any]:
-        """Execute research subgraph"""
-        context_metadata = state["conversation"][-1].additional_kwargs.get(
-            "message_metadata", {}
-        )
-        research_state = ResearchState(
-            contextualized_query=state["contextualized_query"],
-            context_metadata=context_metadata,
-        )
-        execution = execution_manager.get_execution(
-            state["conversation"][-1].additional_kwargs.get("conversation_id")
-        )
-
-        research_task = asyncio.create_task(
-            self.research_graph.ainvoke(state=research_state)
-        )
-
-        done, pending = await asyncio.wait(
-            [research_task, asyncio.create_task(execution.skip_event.wait())],
-            return_when=asyncio.FIRST_COMPLETED,
-        )
-
-        for task in pending:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-        if execution.should_skip():
-            logger.warning("User requested skip during research")
-            result = execution.partial_state or {
-                "accumulated_knowledge": "",
-                "cited_documents": [],
-            }
-        else:
-            result = await research_task
-            execution.update_partial_state(result)
-
-        return {
-            "main_context": result.get("accumulated_knowledge", ""),
-            "cited_documents": result.get("cited_documents", []),
-            "response_metadata": {},
-            "subgraph_error": None,
-        }
-
-    async def _execute_sql_query(self, state: OrchestratorState) -> Dict[str, Any]:
-        """Execute SQL query subgraph"""
-        sql_state = SqlState(contextualized_query=state["contextualized_query"])
-        result = await self.sql_graph.ainvoke(state=sql_state)
-
-        results_text = ""
-        query_results = result.get("query_results")
-        if query_results:
-            results_text = f"Original Question: {state['contextualized_query']}\n\n"
-            results_text += "Query Results:\n\n"
-
-            for res in query_results:
-                if res.get("success"):
-                    results_text += f"Purpose: {res['purpose']}\n"
-                    results_text += f"Rows returned: {res['row_count']}\n"
-                    if res.get("results"):
-                        results_text += "Sample data (first 3 rows):\n"
-                        results_text += json.dumps(
-                            res["results"][:3], indent=2, default=str
-                        )
-                    results_text += "\n\n"
-
-            if result.get("chart_spec"):
-                results_text += "Note: A visualization chart has also been generated for this data.\n"
-
-        response_metadata = result.get("response_metadata", {})
-        if result.get("chart_spec"):
-            response_metadata["sql_chart_spec"] = result["chart_spec"]
-
-        return {
-            "main_context": results_text,
-            "cited_documents": [],
-            "response_metadata": response_metadata,
-            "subgraph_error": result.get("sql_error"),
-        }
 
     @property
     def graph(self) -> CompiledStateGraph:
@@ -207,7 +64,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         self, state: OrchestratorState
     ) -> Dict[str, Any]:
         """Contextualize query before routing"""
-        original_query = self._get_original_query(state)
+        original_query = state["conversation"][-1].content
 
         if len(state["conversation"]) > 2:
             contextualized = await query_context_agent.ainvoke(
@@ -220,46 +77,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             logger.info("No history - using original query")
 
         return {"contextualized_query": contextualized}
-
-    def _check_if_user_approved_research(self, state: OrchestratorState) -> bool:
-        """
-        Check if user just approved a research request by looking at recent conversation.
-        Returns True if the last assistant message asked for research confirmation
-        and user responded positively.
-        """
-        conversation = state["conversation"]
-        if len(conversation) < 2:
-            return False
-
-        prev_assistant_msg = None
-        for i in range(len(conversation) - 2, -1, -1):
-            if conversation[i].type == "ai":
-                prev_assistant_msg = conversation[i]
-                break
-
-        if not prev_assistant_msg:
-            return False
-
-        metadata = prev_assistant_msg.additional_kwargs.get("message_metadata", {})
-        was_confirmation = (
-            metadata.get("response_mode") == ResponseMode.CONFIRMATION_REQUIRED
-        )
-
-        if not was_confirmation:
-            return False
-
-        user_msg = conversation[-1].content.lower().strip()
-        approval_keywords = [
-            "yes",
-            "ok",
-            "sure",
-            "proceed",
-            "go ahead",
-            "continue",
-            "approve",
-        ]
-
-        return any(keyword in user_msg for keyword in approval_keywords)
 
     async def router_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """Dynamic router using registry definitions"""
@@ -332,16 +149,16 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             }
 
         route = response["route"]
+        subgraph_config = SubgraphRegistry.get_subgraph(route)
 
-        if not SubgraphRegistry.get_subgraph(route):
+        if not subgraph_config:
             logger.error(
                 f"Router selected invalid route: {route}, defaulting to direct_response"
             )
             route = "direct_response"
 
-        subgraph_config = SubgraphRegistry.get_subgraph(route)
         if subgraph_config and subgraph_config.requires_confirmation:
-            if not self._check_if_user_approved_research(state):
+            if not _is_user_approved_research(state):
                 logger.info(f"Route {route} requires confirmation, asking user first")
                 return {
                     "route_decision": route,
@@ -367,8 +184,15 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         if state.get("needs_confirmation", False):
             return ResponseMode.CONFIRMATION_REQUIRED
 
-        if result.get("subgraph_error"):
+        if (
+            result["subgraph_error"]
+            and not result["main_context"]
+            and not result["cited_documents"]
+        ):
             return ResponseMode.ERROR
+
+        if route == "sql_query":
+            return ResponseMode.SQL_RESPONSE
 
         if route == "direct_response":
             if len(execution_history) >= self.MAX_RETRY_ATTEMPTS:
@@ -395,9 +219,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             return {
                 "subgraph_result": "needs_confirmation",
                 "response_mode": response_mode,
-                "main_context": "",
-                "cited_documents": [],
-                "response_metadata": {},
             }
 
         if route == "direct_response":
@@ -405,45 +226,32 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             return {
                 "subgraph_result": "direct_response",
                 "response_mode": response_mode,
-                "main_context": "",
-                "cited_documents": [],
-                "response_metadata": {},
             }
 
         subgraph_config = SubgraphRegistry.get_subgraph(route)
+
         if not subgraph_config or not subgraph_config.executor:
             logger.error(f"Unknown or non-executable subgraph: {route}")
-            error_result = {"subgraph_error": f"Unknown subgraph: {route}"}
-            response_mode = self._determine_response_mode_from_result(
-                state, route, error_result
-            )
-            return {
-                "subgraph_result": "error",
-                "subgraph_error": f"Unknown subgraph: {route}",
-                "response_mode": response_mode,
-                "main_context": "",
-                "cited_documents": [],
-                "response_metadata": {},
-            }
-
-        executor_name = subgraph_config.executor
-        method_name = f"_execute_{executor_name}"
-        executor_method = getattr(self, method_name, None)
-
-        if not executor_method or not callable(executor_method):
-            error_msg = f"Executor method '{method_name}' not found or not callable in OrchestratorGraph."
-            logger.error(error_msg)
-            error_result = {"subgraph_error": error_msg}
-            response_mode = self._determine_response_mode_from_result(
-                state, route, error_result
-            )
+            error_msg = f"The router agent is pointing to an invalid subgraph: {route}"
             return {
                 "subgraph_result": "error",
                 "subgraph_error": error_msg,
-                "response_mode": response_mode,
-                "main_context": "",
-                "cited_documents": [],
-                "response_metadata": {},
+                "response_mode": ResponseMode.ERROR,
+            }
+
+        exec_ref = subgraph_config.executor
+        if isinstance(exec_ref, str):
+            executor = EXECUTORS.get(exec_ref)
+        else:
+            executor = exec_ref
+
+        if not executor or not callable(executor):
+            error_msg = f"Executor '{executor}' not found."
+            logger.error(error_msg)
+            return {
+                "subgraph_result": "error",
+                "subgraph_error": error_msg,
+                "response_mode": ResponseMode.ERROR,
             }
 
         execution_history = state.get("execution_history", [])
@@ -452,129 +260,97 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             logger.warning(
                 f"Max retry attempts ({self.MAX_RETRY_ATTEMPTS}) reached, switching to direct_response"
             )
-            error_result = {"subgraph_error": "Max retry attempts exceeded"}
-            response_mode = ResponseMode.NO_VIABLE_OPTION
+            error_msg = "All retrieval options exhausted after multiple attempts, inform the user about that."
             return {
                 "subgraph_result": "exhausted",
-                "subgraph_error": "All retrieval options exhausted after multiple attempts",
-                "response_mode": response_mode,
+                "subgraph_error": error_msg,
+                "response_mode": ResponseMode.NO_VIABLE_OPTION,
                 "execution_history": execution_history,
                 "route_decision": "direct_response",
-                "main_context": "",
-                "cited_documents": [],
-                "response_metadata": {},
             }
 
-        try:
-            logger.info(f"Executing subgraph via method: {method_name}")
+        result = await executor(state)
+        result = asdict(result)
+        failure_result_condition = (
+            result["subgraph_error"]
+            and not result["main_context"]
+            and not result["cited_documents"]
+        )
 
-            result = await executor_method(state)
-            has_result = bool(
-                result.get("main_context") or result.get("cited_documents")
+        if failure_result_condition:
+            logger.warning(f"Subgraph {route} returned no useful result")
+            execution_history.append(
+                {"subgraph": route, "error": result["subgraph_error"]}
             )
-
-            if not has_result:
-                logger.warning(f"Subgraph {route} returned no useful result")
-
-                execution_history.append(
-                    {"subgraph": route, "error": "No useful result"}
-                )
-
-                if (
-                    subgraph_config.fallback_chain
-                    and len(execution_history) < self.MAX_RETRY_ATTEMPTS
-                ):
-                    next_fallback = subgraph_config.fallback_chain[0]
-                    logger.info(f"Trying fallback chain: {next_fallback}")
-
-                    retry_result = {
-                        **result,
-                        "subgraph_error": "No result, retrying with fallback",
-                    }
-                    response_mode = self._determine_response_mode_from_result(
-                        state, next_fallback, retry_result
-                    )
-
-                    return {
-                        **result,
-                        "subgraph_result": "retry",
-                        "execution_history": execution_history,
-                        "response_mode": response_mode,
-                        "route_decision": next_fallback,
-                    }
-                else:
-                    logger.warning(
-                        "No fallback available or max retries reached, switching to direct_response"
-                    )
-                    no_result = {**result, "subgraph_error": "No result found"}
-                    response_mode = self._determine_response_mode_from_result(
-                        state, "direct_response", no_result
-                    )
-
-                    return {
-                        **result,
-                        "subgraph_result": "no_result",
-                        "execution_history": execution_history,
-                        "response_mode": response_mode,
-                        "route_decision": "direct_response",
-                    }
-
-            logger.info(f"Subgraph {route} completed successfully")
-            response_mode = self._determine_response_mode_from_result(
-                state, route, result
-            )
-
-            return {
-                **result,
-                "subgraph_result": "success",
-                "response_mode": response_mode,
-                "execution_history": execution_history,
-            }
-
-        except Exception as e:
-            logger.error(f"Error executing subgraph {route}: {e}")
-
-            execution_history.append({"subgraph": route, "error": str(e)})
 
             if (
                 subgraph_config.fallback_chain
                 and len(execution_history) < self.MAX_RETRY_ATTEMPTS
             ):
-                next_fallback = subgraph_config.fallback_chain[0]
-                logger.info(f"Exception occurred, trying fallback: {next_fallback}")
+                tried_routes = {h["subgraph"] for h in execution_history}
+                available_fallbacks = [
+                    fb
+                    for fb in subgraph_config.fallback_chain
+                    if fb not in tried_routes
+                ]
 
-                error_result = {"subgraph_error": str(e)}
-                response_mode = self._determine_response_mode_from_result(
-                    state, next_fallback, error_result
-                )
+                if available_fallbacks:
+                    next_fallback = available_fallbacks[0]
+                    logger.info(
+                        f"Using fallback chain: {route} -> {next_fallback} "
+                        f"(attempt {len(execution_history) + 1}/{self.MAX_RETRY_ATTEMPTS})"
+                    )
 
-                return {
-                    "subgraph_result": "retry",
-                    "subgraph_error": str(e),
-                    "execution_history": execution_history,
-                    "response_mode": response_mode,
-                    "route_decision": next_fallback,
-                    "main_context": "",
-                    "cited_documents": [],
-                    "response_metadata": {},
-                }
+                    response_mode = self._determine_response_mode_from_result(
+                        state, next_fallback, result
+                    )
+
+                    return {
+                        **result,
+                        "subgraph_result": "retry_fallback",
+                        "execution_history": execution_history,
+                        "response_mode": response_mode,
+                        "route_decision": next_fallback,
+                        "fallback_source": route,
+                    }
+
             else:
-                logger.error(
-                    "Exception with no fallback available, switching to direct_response"
-                )
-                error_result = {"subgraph_error": str(e)}
-                response_mode = ResponseMode.NO_VIABLE_OPTION
-
                 return {
-                    "subgraph_result": "error",
-                    "subgraph_error": str(e),
+                    **result,
+                    "subgraph_result": "retry_router",
                     "execution_history": execution_history,
-                    "response_mode": response_mode,
-                    "route_decision": "direct_response",
-                    "main_context": "",
-                    "cited_documents": [],
-                    "response_metadata": {},
+                    "response_mode": ResponseMode.STANDARD,
                 }
+
+        response_mode = self._determine_response_mode_from_result(state, route, result)
+
+        return {
+            **result,
+            "subgraph_result": "success",
+            "response_mode": response_mode,
+            "execution_history": execution_history,
+        }
+
+    def route_after_dispatch(self, state: OrchestratorState) -> str:
+        """
+        Improved routing logic to clearly differentiate between different cases
+        """
+        result = state.get("subgraph_result", "success")
+
+        if result == "retry_fallback":
+            logger.info(f"Following fallback chain to: {state['route_decision']}")
+            return "dispatch_subgraph"
+
+        elif result == "retry_router":
+            logger.info("No fallback available, returning to router for new decision")
+            return "router"
+
+        elif result == "needs_confirmation":
+            logger.info("Asking user for confirmation")
+            return "final_response"
+
+        else:
+            return "final_response"
 
     async def final_response_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """
@@ -586,6 +362,9 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
 
         logger.info(f"Final response with mode: {response_mode}, route: {route}")
 
+        pending_route = (
+            route if response_mode == ResponseMode.CONFIRMATION_REQUIRED else None
+        )
         response = await response_agent.ainvoke(
             contexts=state.get("cited_documents", []),
             history=state["conversation"],
@@ -593,9 +372,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             accumulated_knowledge=state.get("main_context", ""),
             execution_history=state.get("execution_history", []),
             error_message=state.get("subgraph_error"),
-            pending_route=route
-            if response_mode == ResponseMode.CONFIRMATION_REQUIRED
-            else None,
+            pending_route=pending_route,
         )
 
         response_metadata = state.get("response_metadata", {})
@@ -611,19 +388,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             "final_answer": response.content,
             "response_metadata": response_metadata,
         }
-
-    def route_after_dispatch(self, state: OrchestratorState) -> str:
-        """Decide next step after subgraph execution"""
-        result = state.get("subgraph_result", "success")
-
-        if result == "retry":
-            logger.info("Retrying with fallback route")
-            return "router"
-        elif result == "needs_confirmation":
-            logger.info("Going to response to ask for confirmation")
-            return "final_response"
-        else:
-            return "final_response"
 
     def _build_graph(self) -> CompiledStateGraph:
         """Build agentic orchestrator graph"""
@@ -653,20 +417,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         self, conversation: List[BaseMessage]
     ) -> AsyncGenerator[StreamEvent, None]:
         """Execute orchestrator graph with full conversation"""
-        initial_state = OrchestratorState(
-            conversation=conversation,
-            contextualized_query=None,
-            route_decision=None,
-            response_mode=None,
-            execution_history=[],
-            subgraph_result=None,
-            subgraph_error=None,
-            main_context=None,
-            cited_documents=None,
-            final_answer=None,
-            response_metadata=None,
-        )
-
+        initial_state = OrchestratorState(conversation=conversation)
         conversation_id = conversation[-1].additional_kwargs.get("conversation_id")
         execution_manager.start_execution(conversation_id)
 
@@ -681,12 +432,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
     ) -> Optional[Dict[str, Any]]:
         """Non-streaming execution (backward compatible)"""
         try:
-            original_query = conversation[-1].content
-            initial_state = OrchestratorState(
-                conversation=conversation,
-                original_query=original_query,
-                execution_history=[],
-            )
+            initial_state = OrchestratorState(conversation=conversation)
             final_result = await super().ainvoke(initial_state)
             message = Message(
                 parts=[
@@ -714,3 +460,44 @@ def parse_route_decision(content: str) -> Optional[RouteDecision]:
     except Exception as e:
         logger.error(f"Error parsing route decision: {e}")
         return None
+
+
+def _is_user_approved_research(state: OrchestratorState) -> bool:
+    """
+    Check if user just approved a research request by looking at recent conversation.
+    Returns True if the last assistant message asked for research confirmation
+    and user responded positively.
+    """
+    conversation = state["conversation"]
+    if len(conversation) < 2:
+        return False
+
+    prev_assistant_msg = None
+    for i in range(len(conversation) - 2, -1, -1):
+        if conversation[i].type == "ai":
+            prev_assistant_msg = conversation[i]
+            break
+
+    if not prev_assistant_msg:
+        return False
+
+    metadata = prev_assistant_msg.additional_kwargs.get("message_metadata", {})
+    was_confirmation = (
+        metadata.get("response_mode") == ResponseMode.CONFIRMATION_REQUIRED
+    )
+
+    if not was_confirmation:
+        return False
+
+    user_msg = conversation[-1].content.lower().strip()
+    approval_keywords = [
+        "yes",
+        "ok",
+        "sure",
+        "proceed",
+        "go ahead",
+        "continue",
+        "approve",
+    ]
+
+    return any(keyword in user_msg for keyword in approval_keywords)

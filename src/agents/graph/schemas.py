@@ -126,6 +126,7 @@ class ResponseMode(str, Enum):
     NO_VIABLE_OPTION = "no_viable_option"
     ERROR = "error"
     CONFIRMATION_REQUIRED = "confirmation_required"
+    SQL_RESPONSE = "sql_response"
 
 
 # class Event(LlmResponse):

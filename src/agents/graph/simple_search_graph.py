@@ -23,8 +23,8 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
     extract_filename → retrieve_documents → filter_citations → generate_response
     """
 
-    def __init__(self, tokenizer: tiktoken.Encoding):
-        self.tokenizer = tokenizer
+    def __init__(self):
+        self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
         self.graph_name = "SimpleSearchGraph"
         self.compiled_graph = self._build_graph()
 
