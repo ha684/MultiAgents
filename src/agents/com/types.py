@@ -6,6 +6,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import Dict, Optional, List, Type, Any, Protocol, Union
 import asyncio
+from enum import Enum
 
 from langchain_core.documents import Document
 
@@ -76,3 +77,16 @@ class SubgraphOutput:
 
 class SubgraphExecutor(Protocol):
     async def __call__(self, state: Dict[str, Any]) -> SubgraphOutput: ...
+
+
+class ResponseMode(str, Enum):
+    """Modes for response_agent to handle different scenarios"""
+
+    ADVANCE = "advance"
+    STANDARD = "standard"
+    CHITCHAT = "chitchat"
+    FOLLOWUP = "followup"
+    NO_VIABLE_OPTION = "no_viable_option"
+    ERROR = "error"
+    CONFIRMATION_REQUIRED = "confirmation_required"
+    SQL_RESPONSE = "sql_response"

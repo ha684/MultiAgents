@@ -12,7 +12,7 @@ from src.agents.basic import citation_agent, compress_agent
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search, think
 from src.utils.logger_conf import logger
 from src.agents.graph.state import SearchResult, ResearchState, SearchQuery
-from src.agents.graph.prompts import PromptTemplates
+from src.agents.com.prompts import PromptTemplates
 from src.agents.graph.schemas import (
     SearchPlanSchema,
     VerificationSchema,

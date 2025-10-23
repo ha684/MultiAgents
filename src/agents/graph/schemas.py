@@ -1,6 +1,5 @@
 # src/agents/graph/schemas.py
 from typing import Any, Dict, List, Literal, Optional
-from enum import Enum
 from pydantic import BaseModel, Field
 
 
@@ -112,19 +111,6 @@ class RelevanceValidationSchema(BaseModel):
     suggested_rephrase: Optional[str] = Field(
         description="The suggested rephrase for the query"
     )
-
-
-class ResponseMode(str, Enum):
-    """Modes for response_agent to handle different scenarios"""
-
-    ADVANCE = "advance"
-    STANDARD = "standard"
-    CHITCHAT = "chitchat"
-    FOLLOWUP = "followup"
-    NO_VIABLE_OPTION = "no_viable_option"
-    ERROR = "error"
-    CONFIRMATION_REQUIRED = "confirmation_required"
-    SQL_RESPONSE = "sql_response"
 
 
 # class Event(LlmResponse):

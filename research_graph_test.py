@@ -127,13 +127,14 @@ class ResearchGraphStreamer:
 
 async def main():
     """Example usage"""
-    sql_graph = SqlGraph()
+    # sql_graph = SqlGraph()
+    from src.agents.graph import simple_search_graph
 
     input_state = {
         "contextualized_query": "Show me the total sales by product category and include monthly trends for the past 6 months"
     }
     streamer = ResearchGraphStreamer()
-    final_result = await streamer.stream_sql(sql_graph, input_state)
+    final_result = await streamer.stream_sql(simple_search_graph, input_state)
     print(f"Final result: {final_result}")
 
 

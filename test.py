@@ -51,14 +51,15 @@
 #     print(doc.page_content)
 #     print("-" * 100)
 
-from src.llm.factory import get_llm
+from src.agents.basic import filename_agent
+import asyncio
 
-llm = get_llm("nxchat")
-messages = [
-    {
-        "role": "user",
-        "content": "Bạn có biết cách tạo một JSON theo đặc tả của Vega-Lite để vẽ biểu đồ cột không?",
-    }
-]
-response = llm.invoke(messages)
-print(response)
+
+async def main():
+    response = await filename_agent.ainvoke(
+        query="What is the content of the file document.pdf?"
+    )
+    print(response)
+
+
+asyncio.run(main())

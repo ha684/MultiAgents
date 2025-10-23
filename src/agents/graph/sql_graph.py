@@ -14,7 +14,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.graph.base import GraphAgentBase, RunConfig
-from src.agents.graph.prompts import PromptTemplates
+from src.agents.com.prompts import PromptTemplates
 from src.agents.graph.schemas import (
     SqlGenerationSchema,
     SqlAnalysisSchema,
@@ -454,7 +454,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 )
                 continue
 
-            rows: List[Dict[str, Any]] = result or []
+            rows: List[Dict[str, Any]] = json.loads(result) or []
             total_rows = len(rows)
             truncated = total_rows > MAX_ROWS_PER_QUERY
             preview_rows = rows[:MAX_ROWS_PER_QUERY]

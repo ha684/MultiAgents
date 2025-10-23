@@ -11,8 +11,8 @@ from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
 from src.agents.basic.base import BaseAgent
-from src.agents.graph.schemas import ResponseMode
-from src.agents.graph.prompts import PromptTemplates
+from src.agents.com.types import ResponseMode
+from src.agents.com.prompts import PromptTemplates
 
 HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research assistant with access to a collection of documents. Your task is to provide accurate, well-cited answers based strictly on the information in the provided documents.
 

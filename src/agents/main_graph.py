@@ -13,17 +13,14 @@ from src.agents.basic import query_context_agent, response_agent
 from src.agents.graph.base import GraphAgentBase, RunConfig
 from src.agents.com.manager import execution_manager
 from src.agents.com.registry import SubgraphRegistry
-from src.agents.graph.prompts import PromptTemplates
-from src.agents.graph.research_graph import ResearchGraph
+from src.agents.com.prompts import PromptTemplates
 from src.agents.graph.schemas import RouteDecision
-from src.agents.graph.simple_search_graph import SimpleSearchGraph
-from src.agents.graph.sql_graph import SqlGraph
+from src.agents.com.types import ResponseMode
 from src.agents.graph.state import OrchestratorState
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.common.types import Message, RetrievalContext, TextPart
 from src.llm.factory import get_llm
 from src.services.conversation_service import ConversationService
-from src.agents.graph.schemas import ResponseMode
 from src.agents.executors import EXECUTORS
 from src.utils import parse_response
 from src.utils.logger_conf import logger
@@ -42,11 +39,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
     def __init__(self):
         self.llm = get_llm(provider="nxchat")
         self.thinking_llm = self.llm.bind_tools([think])
-
-        self.simple_search_graph = SimpleSearchGraph()
-        self.research_graph = ResearchGraph()
-        self.sql_graph = SqlGraph()
-
         self.conv_service = ConversationService()
         self.graph_name = "OrchestratorGraph"
         self.compiled_graph = self._build_graph()

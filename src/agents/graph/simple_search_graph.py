@@ -8,7 +8,7 @@ from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 import tiktoken
 
-from src.agents.basic import citation_agent, filename_agent
+from src.agents.basic import citation_agent, filename_agent_instance
 from src.utils.logger_conf import logger
 from src.agents.graph.state import SimpleSearchState
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search
@@ -39,9 +39,11 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
 
     async def extract_filename_node(self, state: SimpleSearchState) -> Dict[str, Any]:
         """Extract filename from query if mentioned"""
-        requested_filename = await filename_agent.ainvoke(
+        logger.info(f"Extracting filename from query: {state['contextualized_query']}")
+        requested_filename = await filename_agent_instance.ainvoke(
             query=state["contextualized_query"]
         )
+        logger.info(f"Requested filename: {requested_filename}")
         if requested_filename:
             logger.info(f"Detected filename: {requested_filename}")
 
