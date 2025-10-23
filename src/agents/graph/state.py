@@ -118,10 +118,7 @@ class SqlState(TypedDict):
     analysis: Optional[Dict]
 
     generated_queries: Optional[List[Dict]]
-    validation_results: Optional[List[Dict]]
     query_results: Optional[List[Dict]]
     chart_spec: Optional[Dict]
-    result_summary: Optional[str]
-    sql_error: Optional[str]
 
     response_metadata: Dict

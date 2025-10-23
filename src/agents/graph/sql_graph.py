@@ -78,7 +78,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
         """
         Validates if user query is relevant to available database tables.
         Fast check before expensive analysis/generation steps.
-        Returns error in result_summary if not relevant.
         """
         logger.info("[validate_relevance] Checking query relevance to database.")
         max_iterations = 3
@@ -309,7 +308,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
         """
         Validates all generated SQL queries.
         Ensures they are SELECT-only and safe to execute.
-        Returns error in result_summary if validation fails.
         """
         logger.info("[validate_queries] Starting query validation node.")
         generated_queries = state.get("generated_queries")
@@ -319,9 +317,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 "[validate_queries] No SQL queries found in state to validate."
             )
             return {
-                "validation_results": None,
-                "sql_error": "No SQL queries to validate",
-                "result_summary": "No SQL queries were generated to validate.",
+                "query_results": None,
                 "response_metadata": {
                     "route": "sql_query",
                     "query_successful": False,
@@ -366,7 +362,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
             logger.error(f"[validate_queries] {error_msg}")
 
             return {
-                "validation_results": validation_results,
+                "query_results": validation_results,
                 "response_metadata": {
                     "route": "sql_query",
                     "query_successful": False,
@@ -379,35 +375,17 @@ class SqlGraph(GraphAgentBase[SqlState]):
         logger.debug(
             f"[validate_queries] Returning validation results: {validation_results}"
         )
-        return {
-            "validation_results": validation_results,
-        }
+
+        return {"query_results": validation_results}
 
     def route_after_validation(self, state: SqlState) -> str:
         """Routes after SQL validation."""
         logger.info("[route_after_validation] Deciding route after validation.")
 
-        if not state.get("query_results", []):
-            logger.warning(
-                "[route_after_validation] No query results found. Ending graph."
-            )
-            return END
-
-        validation_results = state.get("validation_results", [])
+        validation_results = state.get("query_results", [])
         if not validation_results:
             logger.error(
                 "[route_after_validation] No validation results found. Ending graph."
-            )
-            return END
-
-        all_valid = all(
-            v["validation"]["is_valid"] and v["validation"]["is_select_only"]
-            for v in validation_results
-        )
-
-        if not all_valid:
-            logger.error(
-                "[route_after_validation] Some queries failed validation. Ending graph."
             )
             return END
 
@@ -420,10 +398,9 @@ class SqlGraph(GraphAgentBase[SqlState]):
         """
         Executes all validated SQL queries sequentially.
         Uses DatabaseSession for proper transaction management.
-        Returns error in result_summary if execution fails.
         """
         logger.info("[execute_queries] Starting query execution node.")
-        validation_results = state.get("validation_results", [])
+        validation_results = state.get("query_results", [])
 
         if not validation_results:
             logger.error("[execute_queries] No validated queries to execute.")
@@ -441,7 +418,22 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         for idx, validation_info in enumerate(validation_results):
             sanitized_query = validation_info["validation"]["sanitized_query"]
+            is_valid = validation_info["validation"]["is_valid"]
             purpose = validation_info["purpose"]
+
+            if not is_valid:
+                logger.error(f"Query '{purpose}' is not valid. Skipping execution.")
+                all_results.append(
+                    {
+                        "purpose": purpose,
+                        "query": sanitized_query,
+                        "results": None,
+                        "row_count": 0,
+                        "success": False,
+                        "error": validation_info["validation"]["issues"].join(", "),
+                    }
+                )
+                continue
 
             logger.info(
                 f"Executing query {idx + 1}/{len(validation_results)}: {purpose}"
@@ -508,13 +500,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
     def route_after_execution(self, state: SqlState) -> str:
         """Routes after query execution."""
         logger.info("[route_after_execution] Deciding route after execution.")
-
-        if state.get("sql_error"):
-            logger.warning(
-                "[route_after_execution] SQL error detected during execution. Ending graph."
-            )
-            return END
-
         analysis = state.get("analysis", {})
         if analysis.get("needs_chart") and analysis.get("chart_type"):
             logger.info(
@@ -522,10 +507,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
             )
             return "generate_chart"
 
-        logger.info(
-            "[route_after_execution] No chart needed. Routing to format_results."
-        )
-        return "format_results"
+        return END
 
     async def generate_chart_node(self, state: SqlState) -> Dict[str, Any]:
         """

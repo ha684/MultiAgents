@@ -1,24 +1,7 @@
 # src/agents/com/registry.py
-from typing import Dict, List, Optional, Type
-from dataclasses import dataclass
+from typing import Dict, List, Optional
 from src.agents.graph.state import SimpleSearchState, ResearchState, SqlState
-
-
-@dataclass
-class SubgraphConfig:
-    """Configuration for registering a subgraph as a tool"""
-
-    name: str
-    description: str
-    when_to_use: str
-    examples: List[str]
-    entry_state_type: Type
-    executor: str
-    fallback_chain: Optional[List[str]] = None
-    requires_confirmation: bool = False
-
-    query_indicators: Optional[List[str]] = None
-    not_suitable_for: Optional[List[str]] = None
+from src.agents.com.types import SubgraphConfig
 
 
 class SubgraphRegistry:

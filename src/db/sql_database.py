@@ -19,6 +19,7 @@ from sqlalchemy.types import NullType
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 
 from src.db.repository.database_session import DatabaseSession
+from src.utils.logger_conf import logger
 
 
 def _format_index(index: dict) -> str:
@@ -435,6 +436,7 @@ class AsyncSQLDatabase:
                 include_columns=include_columns,
             )
         except SQLAlchemyError as e:
+            logger.error(f"Error executing command: {command}, error: {e}")
             return f"Error: {e}"
 
     async def get_context(self) -> Dict[str, Any]:

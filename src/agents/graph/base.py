@@ -1,31 +1,33 @@
 # src/agents/graph/base.py
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, TypeVar, Generic, AsyncGenerator
+from typing import Optional, TypeVar, Generic, AsyncGenerator, Literal
 from abc import ABC, abstractmethod
 import asyncio
+from dataclasses import dataclass
 
 from langgraph.graph.state import CompiledStateGraph
 from langchain_core.runnables.schema import StreamEvent
 
 from src.agents.basic.base import BaseAgent
 from src.utils.logger_conf import logger
+from src.agents.com.types import RunConfig
 
 StateT = TypeVar("StateT")
+Status = Literal["success", "timeout", "recursion_limit", "error"]
 
 
 @dataclass
-class RunConfig:
-    graph_name: str = "Graph"
-    recursion_limit: int = 10
-    timeout_seconds: int = 180
-    version: str = "v2"
-    extra: Dict[str, Any] = field(default_factory=dict)
+class InvokeResult(Generic[StateT]):
+    """
+    Standardize the return result of the async graph node:
+    - state: the final state after running the graph
+    - status: the type of result (success, timeout, recursion_limit, error)
+    - message: detailed context of error/success (used for logging or LLM)
+    """
 
-    def as_langgraph_config(self) -> Dict[str, Any]:
-        base = {"recursion_limit": self.recursion_limit}
-        base.update(self.extra)
-        return base
+    state: StateT
+    status: Status
+    message: Optional[str] = None
 
 
 class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
@@ -45,12 +47,11 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
 
     async def ainvoke(
         self, state: StateT, config_override: Optional[RunConfig] = None
-    ) -> StateT:
-        """Invoke và trả về kết quả cuối cùng - dùng cho subgraph nodes"""
+    ) -> InvokeResult[StateT]:
+        """Invoke and return the final result - used for subgraph nodes"""
         run_cfg = config_override or self.default_run_config()
         lg_config = run_cfg.as_langgraph_config()
         last_state: StateT = state
-        final_state: Optional[StateT] = None
 
         try:
             async with asyncio.timeout(run_cfg.timeout_seconds):
@@ -60,25 +61,34 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
                     out = event.get("data", {}).get("output")
                     last_state = self.on_node_state(last_state, out)
 
-            final_state = last_state
-        except RecursionError:
-            logger.warning(
-                f"🛑 '{run_cfg.graph_name}' stopped (recursion_limit={run_cfg.recursion_limit}). Returning last_state."
-            )
-            return last_state
-        except asyncio.TimeoutError:
-            logger.warning(
-                f"⚠️ '{run_cfg.graph_name}' timed out after {run_cfg.timeout_seconds}s. Returning last_state."
-            )
-            return last_state
-        except Exception as e:
-            logger.error(
-                f"❌ '{run_cfg.graph_name}' error: {e}. Returning last_state.",
-                exc_info=True,
-            )
-            return last_state
+            return InvokeResult(state=last_state, status="success")
 
-        return final_state if final_state is not None else last_state
+        except RecursionError:
+            msg = (
+                f"🛑 Graph '{run_cfg.graph_name}' stopped due to recursion limit "
+                f"({run_cfg.recursion_limit}). Returning last known state. "
+                f"Consider increasing recursion_limit or checking for circular dependencies."
+            )
+            logger.warning(msg)
+            return InvokeResult(state=last_state, status="recursion_limit", message=msg)
+
+        except asyncio.TimeoutError:
+            msg = (
+                f"⚠️ Graph '{run_cfg.graph_name}' timed out after "
+                f"{run_cfg.timeout_seconds}s. Returning last known state. "
+                f"Consider optimizing long-running nodes or increasing timeout_seconds."
+            )
+            logger.warning(msg)
+            return InvokeResult(state=last_state, status="timeout", message=msg)
+
+        except Exception as e:
+            msg = (
+                f"❌ Graph '{run_cfg.graph_name}' failed due to unexpected error "
+                f"({type(e).__name__}: {e}). Returning last known state. "
+                f"Review stack trace and node logic for root cause."
+            )
+            logger.error(msg, exc_info=True)
+            return InvokeResult(state=last_state, status="error", message=msg)
 
     async def astream(
         self, state: StateT, config_override: Optional[RunConfig] = None

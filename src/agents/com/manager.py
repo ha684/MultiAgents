@@ -1,34 +1,7 @@
 # src/agents/com/manager.py
-import asyncio
 from typing import Dict, Optional
-from dataclasses import dataclass, field
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
+from src.agents.com.types import Execution
 from src.utils.decorators import singleton
-
-
-@dataclass
-class Execution:
-    """Track an execution"""
-
-    thread_id: str
-    started_at: datetime = field(
-        default_factory=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
-    )
-    skip_event: asyncio.Event = field(default_factory=asyncio.Event)
-    current_node: Optional[str] = None
-    partial_state: Optional[Dict] = None
-
-    def should_skip(self) -> bool:
-        return self.skip_event.is_set()
-
-    def signal_skip(self):
-        self.skip_event.set()
-
-    def update_partial_state(self, state: Dict):
-        """Save current state to fallback when skip"""
-        self.partial_state = state
 
 
 @singleton
