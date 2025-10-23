@@ -7,9 +7,7 @@ from pydantic import BaseModel, Field
 class RouteDecision(BaseModel):
     """Router output schema"""
 
-    route: Literal["chitchat", "simple_search", "deep_research", "sql_query"] = Field(
-        description="The route to take based on query complexity"
-    )
+    route: str = Field(description="The route to take based on query complexity")
 
 
 class SearchPlanSchema(BaseModel):
