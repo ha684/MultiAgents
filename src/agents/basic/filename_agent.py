@@ -1,8 +1,8 @@
+# src/agents/basic/filename_agent.py
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
 from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
-from src.utils.decorators import singleton
 from langchain_core.messages import SystemMessage, HumanMessage
 
 EXTRACT_FILENAME_PROMPT = """
@@ -58,7 +58,6 @@ class Filename(BaseModel):
     filename: str | None
 
 
-@singleton
 class FilenameAgent:
     def __init__(self):
         self.llm = get_llm("nxchat")

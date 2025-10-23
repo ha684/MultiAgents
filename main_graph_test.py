@@ -129,7 +129,7 @@ async def main():
     orchestrator = OrchestratorGraph()
 
     human_message = HumanMessage(
-        content="bảng conversations có tồn tại trong hệ thống không?",
+        content="lấy tất cả các cuộc trò chuyện đang active qua cho tôi.",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]

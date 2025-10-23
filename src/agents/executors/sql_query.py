@@ -1,19 +1,49 @@
 # src/agents/executors/sql_query.py
-import json
-
+from typing import Any, Dict, List
 from src.agents.graph.state import OrchestratorState, SqlState
 from src.agents.com.types import SubgraphOutput
 from src.agents.graph import sql_graph
 
 
+def _stringify_cell(v: Any, max_len: int = 160) -> str:
+    """Safe, compact cell stringification for logs/prompts."""
+    s = str(v)
+    if len(s) > max_len:
+        return s[: max_len - 1] + "…"
+    return s
+
+
+def _format_table_preview(rows: List[Dict[str, Any]]) -> str:
+    """Render a compact, readable table preview without json.dumps."""
+    if not rows:
+        return "  (no rows)\n"
+
+    first_cols = list(rows[0].keys())
+    other_keys = []
+    for r in rows:
+        for k in r.keys():
+            if k not in first_cols and k not in other_keys:
+                other_keys.append(k)
+    cols = first_cols + other_keys
+
+    header = "  | " + " | ".join(cols) + " |\n"
+    sep = "  | " + " | ".join("---" for _ in cols) + " |\n"
+
+    lines = [header, sep]
+    for r in rows:
+        line = "  | " + " | ".join(_stringify_cell(r.get(c, "")) for c in cols) + " |\n"
+        lines.append(line)
+    return "".join(lines)
+
+
 async def _run_sql_query(state: OrchestratorState) -> SubgraphOutput:
-    """Execute SQL query subgraph and format comprehensive context"""
+    """Execute SQL query subgraph and format comprehensive context without overloading the LLM."""
     sql_state = SqlState(contextualized_query=state["contextualized_query"])
     result = await sql_graph.ainvoke(state=sql_state)
 
     results_text = ""
     error_text = ""
-    response_metadata = result.state.get("response_metadata", {})
+    response_metadata: Dict[str, Any] = result.state.get("response_metadata", {}) or {}
 
     if result.status != "success":
         error_text = f"SQL Subgraph Error: {result.message}\n\n"
@@ -35,7 +65,9 @@ async def _run_sql_query(state: OrchestratorState) -> SubgraphOutput:
         )
 
     if result.state.get("is_relevant"):
-        query_results = result.state.get("query_results", [])
+        query_results: List[Dict[str, Any]] = (
+            result.state.get("query_results", []) or []
+        )
 
         if query_results:
             results_text = "=== SQL Query Execution Results ===\n\n"
@@ -48,45 +80,42 @@ async def _run_sql_query(state: OrchestratorState) -> SubgraphOutput:
                 results_text += (
                     f"--- Successful Queries ({len(successful_queries)}) ---\n\n"
                 )
-
                 for idx, res in enumerate(successful_queries, 1):
                     results_text += f"Query {idx}:\n"
                     results_text += f"  Purpose: {res.get('purpose', 'N/A')}\n"
-                    results_text += f"  Rows returned: {res.get('row_count', 0)}\n"
 
                     if res.get("query"):
                         results_text += f"  SQL: {res['query']}\n"
 
-                    if res.get("results") and res.get("row_count", 0) > 0:
-                        sample_size = min(3, len(res["results"]))
-                        results_text += f"  Sample data (first {sample_size} rows):\n"
-                        results_text += "  " + json.dumps(
-                            res["results"][:sample_size], indent=2, default=str
-                        ).replace("\n", "\n  ")
-                        results_text += "\n"
+                    preview_rows = res.get("results_preview", [])
+                    total_rows = int(res.get("row_count") or 0)
+                    truncated = bool(
+                        res.get("truncated") or (total_rows > len(preview_rows))
+                    )
+
+                    results_text += _format_table_preview(preview_rows)
+
+                    if truncated:
+                        results_text += (
+                            f"  Note: Showing only {len(preview_rows)} of {total_rows} rows. "
+                            f"Tell the user results were truncated and tell them that if they want to see all {total_rows} rows,"
+                            f"they have to do it themselves because {len(preview_rows)} is the hard coded maximum number of rows that can be shown in a text response.\n"
+                        )
                     else:
-                        results_text += "  Note: Query executed successfully but returned no rows.\n"
+                        if total_rows == 0:
+                            results_text += "  Note: Query executed successfully but returned no rows.\n"
 
                     results_text += "\n"
 
-                total_rows = sum(qr.get("row_count", 0) for qr in successful_queries)
-                results_text += (
-                    f"Total rows across all successful queries: {total_rows}\n\n"
-                )
-
             if failed_queries:
                 results_text += f"--- Failed Queries ({len(failed_queries)}) ---\n\n"
-
                 for idx, res in enumerate(failed_queries, 1):
                     results_text += f"Failed Query {idx}:\n"
                     results_text += f"  Purpose: {res.get('purpose', 'N/A')}\n"
                     results_text += f"  Error: {res.get('error', 'Unknown error')}\n"
-
                     if res.get("query"):
                         results_text += f"  SQL: {res['query']}\n"
-
                     results_text += "\n"
-
                 error_text += f"Warning: {len(failed_queries)} out of {len(query_results)} queries failed.\n"
 
             if result.state.get("chart_spec"):
@@ -107,9 +136,11 @@ async def _run_sql_query(state: OrchestratorState) -> SubgraphOutput:
                     "successful_queries": len(successful_queries),
                     "failed_queries": len(failed_queries),
                     "query_successful": len(failed_queries) == 0,
+                    "max_rows_per_query": result.state.get("response_metadata", {}).get(
+                        "max_rows_per_query"
+                    ),
                 }
             )
-
         else:
             results_text = f"Original Question: {state['contextualized_query']}\n\n"
             results_text += "No queries were executed. The system determined no SQL queries were needed.\n"

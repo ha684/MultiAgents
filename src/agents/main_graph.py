@@ -185,9 +185,9 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             return ResponseMode.CONFIRMATION_REQUIRED
 
         if (
-            result["subgraph_error"]
-            and not result["main_context"]
-            and not result["cited_documents"]
+            result.get("subgraph_error")
+            and not result.get("main_context")
+            and not result.get("cited_documents")
         ):
             return ResponseMode.ERROR
 
@@ -197,10 +197,8 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         if route == "direct_response":
             if len(execution_history) >= self.MAX_RETRY_ATTEMPTS:
                 return ResponseMode.NO_VIABLE_OPTION
-
             if len(state["conversation"]) > 2:
                 return ResponseMode.FOLLOWUP
-
             return ResponseMode.CHITCHAT
 
         if route == "deep_research":
@@ -306,12 +304,13 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                     )
 
                     return {
-                        **result,
                         "subgraph_result": "retry_fallback",
                         "execution_history": execution_history,
-                        "response_mode": response_mode,
                         "route_decision": next_fallback,
                         "fallback_source": route,
+                        "main_context": None,
+                        "cited_documents": [],
+                        "subgraph_error": None,
                     }
 
             else:
@@ -406,7 +405,11 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         workflow.add_conditional_edges(
             "dispatch_subgraph",
             self.route_after_dispatch,
-            {"router": "router", "final_response": "final_response"},
+            {
+                "router": "router",
+                "final_response": "final_response",
+                "dispatch_subgraph": "dispatch_subgraph",
+            },
         )
 
         workflow.set_finish_point("final_response")

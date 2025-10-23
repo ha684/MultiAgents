@@ -730,7 +730,7 @@ class ResponseAgent(BaseAgent):
 
             return [system_message] + history[:-1] + [user_prompt]
 
-        else:
+        else:  # ResponseMode.STANDARD
             if contexts:
                 formatted_context = self._format_context_for_response(contexts)
                 system_message = SystemMessage(

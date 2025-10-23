@@ -336,7 +336,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
             logger.debug(
                 f"[validate_queries] Validating query for purpose: '{purpose}'"
             )
-
             validation = self.validator.validate_query(query)
 
             validation_results.append(
@@ -400,6 +399,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         Uses DatabaseSession for proper transaction management.
         """
         logger.info("[execute_queries] Starting query execution node.")
+        MAX_ROWS_PER_QUERY = 5
         validation_results = state.get("query_results", [])
 
         if not validation_results:
@@ -414,7 +414,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
             }
 
         logger.info(f"[execute_queries] Executing {len(validation_results)} queries.")
-        all_results = []
+        all_results: List[Dict[str, Any]] = []
 
         for idx, validation_info in enumerate(validation_results):
             sanitized_query = validation_info["validation"]["sanitized_query"]
@@ -423,21 +423,19 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
             if not is_valid:
                 logger.error(f"Query '{purpose}' is not valid. Skipping execution.")
+                issues = validation_info["validation"].get("issues") or []
+                # fix: use ", ".join(list) instead of list.join(", ")
+                issue_text = ", ".join(map(str, issues))
                 all_results.append(
                     {
                         "purpose": purpose,
                         "query": sanitized_query,
-                        "results": None,
-                        "row_count": 0,
+                        "results_preview": None,
                         "success": False,
-                        "error": validation_info["validation"]["issues"].join(", "),
+                        "error": issue_text or "invalid_query",
                     }
                 )
                 continue
-
-            logger.info(
-                f"Executing query {idx + 1}/{len(validation_results)}: {purpose}"
-            )
 
             result = await self.sql_database.run_no_throw(
                 sanitized_query, fetch="all", include_columns=True
@@ -449,26 +447,28 @@ class SqlGraph(GraphAgentBase[SqlState]):
                     {
                         "purpose": purpose,
                         "query": sanitized_query,
-                        "results": None,
-                        "row_count": 0,
+                        "results_preview": None,
                         "success": False,
                         "error": result,
                     }
                 )
-            else:
-                query_results = result if isinstance(result, list) else []
-                all_results.append(
-                    {
-                        "purpose": purpose,
-                        "query": sanitized_query,
-                        "results": query_results,
-                        "row_count": len(query_results),
-                        "success": True,
-                    }
-                )
-                logger.info(
-                    f"Query '{purpose}' executed successfully, returned {len(query_results)} rows"
-                )
+                continue
+
+            rows: List[Dict[str, Any]] = result or []
+            total_rows = len(rows)
+            truncated = total_rows > MAX_ROWS_PER_QUERY
+            preview_rows = rows[:MAX_ROWS_PER_QUERY]
+
+            all_results.append(
+                {
+                    "purpose": purpose,
+                    "query": sanitized_query,
+                    "results_preview": preview_rows,
+                    "row_count": total_rows,
+                    "truncated": truncated,
+                    "success": True,
+                }
+            )
 
         failed_queries = [r for r in all_results if not r["success"]]
         if failed_queries:
@@ -480,20 +480,16 @@ class SqlGraph(GraphAgentBase[SqlState]):
                     "error": "execution_failed",
                     "failed_queries": len(failed_queries),
                     "total_queries": len(all_results),
+                    "max_rows_per_query": MAX_ROWS_PER_QUERY,
                 },
             }
-
-        total_rows = sum(r["row_count"] for r in all_results)
-        logger.info(
-            f"All queries executed successfully, total {total_rows} rows returned"
-        )
 
         return {
             "query_results": all_results,
             "response_metadata": {
                 **state.get("response_metadata", {}),
                 "total_queries": len(all_results),
-                "total_rows": total_rows,
+                "max_rows_per_query": MAX_ROWS_PER_QUERY,
             },
         }
 
@@ -545,7 +541,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
                     {
                         "purpose": result["purpose"],
                         "sample_data": result["results"][:3],
-                        "row_count": result["row_count"],
                         "columns": list(result["results"][0].keys())
                         if result["results"]
                         else [],

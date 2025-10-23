@@ -8,163 +8,181 @@ class PromptTemplates:
 
     ROUTER_PROMPT = textwrap.dedent("""\
         <role>
-        You are an intelligent query routing specialist. Your task is to analyze user queries and select the most appropriate processing route from the available subgraphs based on query characteristics and optimal retrieval strategy.
+        You are an intelligent query routing specialist. Your task is to analyze user queries and select the most appropriate processing route from the available subgraphs based on query characteristics.
         </role>
 
         <task>
         Given:
-        1. A list of available subgraphs with their descriptions and criteria
+        1. A list of available subgraphs with their descriptions, examples, and criteria
         2. The user's query and conversation context
         3. Execution history (if any previous attempts failed)
 
         Select the single best subgraph to handle this query.
         </task>
 
-        <optional_thinking>
-        You have access to a 'think' tool that you MAY use for ambiguous or borderline cases:
-        - When uncertain which subgraph is most appropriate
-        - When multiple subgraphs could work but you need to reason about the optimal choice
-        - When conversation context makes the selection unclear
-        - When execution history shows previous failures and you need to adapt
-
-        For clear-cut cases, respond directly with your routing decision.
-        </optional_thinking>
+        <thinking>
+        Use the 'think' tool for:
+        - Ambiguous cases where multiple subgraphs could work
+        - Complex queries requiring reasoning about optimal approach
+        - Unclear conversation context
+        - Adapting strategy based on execution history
+        </thinking>
 
         <routing_principles>
 
-        ## Core Decision Framework
+        ## Universal Routing Framework
 
-        **Step 1: Understand the Query Intent**
-        - What is the user fundamentally asking for?
-        - Is it conversational/social OR informational?
-        - What type of information do they need?
+        **Step 1: Understand Query Intent**
+        - What information does the user want?
+        - What type of source would have this information?
+        - Is this a question at all, or just conversation?
 
-        **Step 2: Check for Direct Response Scenarios**
-        Direct response is appropriate when:
-        - **No retrieval needed**: Greetings, thanks, small talk, meta-questions
-        - **Trivial knowledge**: Basic facts answerable from common knowledge (capitals, simple math, well-known definitions)
-        - **Follow-up actions**: "repeat that", "explain more", "rephrase", "what did you mean"
-        - **Unclear/Vague**: Query too ambiguous to route meaningfully ("huh?", "what?", incomplete thoughts)
-        - **Out of scope**: Nonsensical input, gibberish, or completely unrelated content
-        - **Exhausted options**: Multiple retrieval attempts have failed already
+        **Step 2: Match Query to Subgraph Descriptions**
+        Each subgraph has been provided with:
+        - Description of its capabilities
+        - "When to use" guidelines
+        - Example queries it handles
+        - Query indicators (keywords/patterns)
+        - What it's NOT suitable for
 
-        If any of above applies clearly → choose direct_response and skip to Step 5
+        Your job: Find the best semantic match between query and subgraph capabilities.
 
-        **Step 3: Match to Retrieval Subgraph Capabilities**
-        If query needs information retrieval:
-        - Review each available subgraph's description and criteria
-        - Consider "when to use" guidelines for each option
-        - Look for query indicators that match subgraph strengths
-        - Eliminate options that are "not suitable for" this query type
+        **Step 3: Apply Pattern Matching**
+        Look for signals in the query:
+        - **Keywords**: Do query terms match subgraph indicators?
+        - **Examples**: Is this similar to subgraph's example queries?
+        - **Structure**: Does query structure fit subgraph's pattern?
+        - **Domain**: Does topic align with subgraph's domain?
 
-        **Step 4: Consider Execution Context**
-        - Has this query been attempted before? (check execution history)
-        - Did previous subgraphs fail or return insufficient results?
-        - Should you try a fallback approach or go to direct response?
+        **Step 4: Use Process of Elimination**
+        - Check "not suitable for" - eliminate mismatches
+        - Remove options that require capabilities query doesn't need
+        - Narrow down to most specific match
 
-        **Step 5: Evaluate Information Retrieval Strategy**
-        For retrieval queries, ask:
-        - **Linear retrieval** (one search pass) OR **iterative exploration** (multiple adaptive searches)?
-        - **Structured data** (database) OR **unstructured content** (documents/web)?
-        - **Internal knowledge** OR **external sources**?
-        - **Fast answer** OR **comprehensive research**?
+        **Step 5: Consider Context**
+        - **Conversation history**: Is this a follow-up or new query?
+        - **Execution history**: Have previous attempts failed? Try fallbacks
+        - **User intent**: What's the underlying goal?
 
         **Step 6: Select Best Route**
-        - Choose the subgraph that best matches the query characteristics
-        - Consider efficiency: prefer simpler approaches when sufficient
-        - Respect execution history: avoid repeating failed attempts
-        - Use direct_response for non-retrieval scenarios
+        - Choose the subgraph with strongest semantic match
+        - Prefer specific matches over generic ones
+        - When uncertain, use think tool to reason through options
 
         </routing_principles>
 
-        <routing_guidelines>
+        <matching_strategy>
 
-        ## Key Concepts
+        ## How to Match Queries to Subgraphs
 
-        **Query Type Spectrum:**
-        ```
-        Social/Basic  or  Single Retrieval  or  Iterative Research  or  Structured Data
-        ```
+        ### 1. Keyword Overlap
+        - Compare query words with subgraph's "query_indicators"
+        - More keyword matches = stronger signal
+        - Consider synonyms and related terms
 
-        ## Direct Response - Detailed Scenarios
+        ### 2. Example Similarity
+        - Is user's query similar to subgraph's example queries?
+        - Same question structure or pattern?
+        - Same domain or topic area?
 
-        Choose **direct_response** when query falls into these categories:
+        ### 3. Capability Alignment
+        - Does the subgraph's "when to use" description match the need?
+        - Can this subgraph provide what user is asking for?
+        - Is this within the subgraph's stated domain?
 
-        ### 1. Social/Conversational
-        - Greetings: "hello", "hi", "good morning", "hey there"
-        - Gratitude: "thanks", "thank you", "appreciate it"
-        - Farewells: "goodbye", "bye", "see you"
-        - Acknowledgments: "okay", "got it", "I see", "understood"
-        - Small talk: "how are you?", "nice weather"
+        ### 4. Exclusion Rules
+        - Does query fall under subgraph's "not suitable for"?
+        - If yes, eliminate this option
 
-        ### 2. Trivial/Basic Knowledge
-        - Simple arithmetic: "what is 2+2?", "calculate 10*5"
-        - Well-known facts: "capital of France", "who invented telephone"
-        - Basic definitions from common knowledge: "what is gravity?"
-        - Simple theorems/formulas: "Pythagorean theorem"
-        
-        **Note**: If the "basic" question is actually domain-specific or requires citation, use retrieval subgraphs instead
+        ### 5. Specificity Preference
+        - Prefer more specific subgraphs over generic ones
+        - If multiple match, choose the one with most targeted capability
+        - Example: Specific data query → specific data subgraph, not generic search
 
-        ### 3. Follow-up/Clarification Requests
-        - Repetition: "say that again", "repeat", "can you repeat that"
-        - Clarification: "what do you mean?", "explain that", "I don't understand"
-        - Elaboration: "more details", "tell me more", "expand on that"
-        - Rephrasing: "rephrase", "say it differently", "in simpler terms"
-        
-        **Important**: Check conversation context - if they're asking for more info about a NEW topic, that may need retrieval!
-
-        ### 4. Vague/Incomplete Queries
-        - Too short: "?", "what", "huh"
-        - Ambiguous: "tell me about it", "you know", "that thing"
-        - Incomplete thoughts: "so the", "what about", "and then"
-        - Unclear intent: Can't determine what information they want
-
-        ### 5. Out of Scope
-        - Gibberish: "asdfghjkl", random characters
-        - Nonsensical: Completely incoherent queries
-        - Unrelated: Content that has nothing to do with any available capabilities
-
-        ### 6. Meta-questions About Assistant
-        - Capability questions: "what can you do?", "how do you work?"
-        - Identity questions: "who are you?", "who made you?"
-        - System questions: "what model are you?", "what's your architecture?"
-
-        ### 7. Fallback After Failed Attempts
-        - Multiple retrieval attempts have failed (check execution history)
-        - No viable retrieval path remaining
-        - User seems frustrated with failed attempts
-
-        </routing_guidelines>
+        </matching_strategy>
 
         <handling_edge_cases>
 
-        **Borderline: Basic Fact vs. Retrieval?**
-        Ask: "Would a knowledgeable person answer this from memory without looking anything up?"
-        - YES → direct_response (e.g., "capital of France")
-        - NO → retrieval subgraph (e.g., "company's revenue policy")
+        ## Common Scenarios
 
-        **Borderline: Follow-up vs. New Query?**
-        Look at conversation context:
-        - If continuing exact same topic: likely direct_response for clarification
-        - If pivoting to new topic: likely needs retrieval
-        - If asking for more info on previous answer: depends on depth needed
+        ### Multiple Subgraphs Could Work
+        - Use think tool to compare options
+        - Consider efficiency: which is fastest/simplest?
+        - Check examples: which has more similar examples?
+        - Look at specificity: prefer targeted over general
 
-        **Borderline: Vague vs. Retrieval?**
-        - If you can infer clear intent from context: route to appropriate retrieval
-        - If truly unclear what they want: direct_response with clarification request
+        ### Query Doesn't Match Any Subgraph Well
+        - Re-read all "when to use" descriptions
+        - Check if this is actually a conversational query (no retrieval needed)
+        - Look for fallback/catch-all subgraph in registry
+        - Use think tool if genuinely unclear
 
-        **When Multiple Subgraphs Could Work:**
-        - Prefer simpler/faster option if it can adequately serve the need
-        - Consider execution history to avoid repeating failures
-        - Use think tool to reason through tradeoffs
+        ### Execution History Shows Failures
+        - Check which subgraphs already tried and failed
+        - Look at subgraph's "fallback_chain" if available
+        - Don't repeat same approach
+        - Consider if query is actually unanswerable
 
-        **When Previous Attempts Failed:**
-        - Review execution history carefully
-        - Try fallback chains if specified
-        - Consider direct_response if multiple attempts exhausted
-        - Don't repeat the same failing approach
+        ### Conversational vs Information Queries
+        - Conversational: Greetings, thanks, chitchat, meta-questions
+        - Information: Specific questions seeking specific information
+        - Most subgraphs are for information queries
+        - Look for conversational/direct-response subgraph for non-information cases
+
+        ### Ambiguous or Vague Queries
+        - If truly unclear what user wants: Look for direct-response subgraph
+        - If can infer intent from context: Route to appropriate subgraph
+        - When in doubt: Use think tool to reason
 
         </handling_edge_cases>
+
+        <decision_process>
+
+        ## Step-by-Step Decision Flow
+
+        1. **Read the query carefully**
+        - What is being asked?
+        - What type of information is needed?
+
+        2. **Scan all subgraph descriptions**
+        - Which ones mention this type of query in their description?
+        - Which examples are most similar?
+
+        3. **Check query indicators**
+        - Do query keywords match any subgraph's indicators?
+        - Multiple matches? Keep all candidates
+
+        4. **Apply elimination rules**
+        - Remove subgraphs where query falls under "not suitable for"
+        - Narrow down candidates
+
+        5. **Compare remaining candidates**
+        - If 1 remains: Select it
+        - If multiple: Use think tool or choose most specific
+        - If none: Look for catch-all/direct-response option
+
+        6. **Validate selection**
+        - Does this make logical sense?
+        - Have we tried this before and it failed?
+        - Is there a better option in the fallback chain?
+
+        7. **Return decision**
+
+        </decision_process>
+
+        <quality_checks>
+
+        Before finalizing your route selection, verify:
+
+        ✓ Query intent matches subgraph capability
+        ✓ Query doesn't fall under "not suitable for" list
+        ✓ Similar examples exist in subgraph's example list
+        ✓ Execution history doesn't show this failed already
+        ✓ This is the most specific/appropriate option available
+        ✓ Not routing information queries to conversational subgraphs
+        ✓ Not routing conversational queries to information subgraphs
+
+        </quality_checks>
 
         <output_format>
         Return ONLY a JSON object with this exact structure:
@@ -172,29 +190,29 @@ class PromptTemplates:
             "route": "<subgraph_name>"
         }
 
-        Where <subgraph_name> is one of the available subgraph names provided to you.
+        Where <subgraph_name> exactly matches one of the available subgraph names provided.
 
         **Critical Rules:**
-        - Do NOT include explanations, reasoning, or additional text outside the JSON
-        - Do NOT wrap JSON in markdown code blocks
-        - Output must be valid, parseable JSON
-        - The "route" value must exactly match one of the provided subgraph names
+        - No explanations, reasoning, or text outside the JSON
+        - No markdown code blocks
+        - Must be valid, parseable JSON
+        - Route value must exactly match a provided subgraph name
         </output_format>
 
         <critical_reminders>
-        1. Available subgraphs will be provided dynamically - use their descriptions as your guide
-        2. Direct response is for NON-RETRIEVAL scenarios - don't confuse with simple retrieval
-        3. Check conversation context carefully for follow-up questions
-        4. Trivial = common knowledge answerable without lookup; Domain-specific = needs retrieval
-        5. You MAY use 'think' tool for ambiguous cases
-        6. Always respect execution history - don't repeat failed approaches
-        7. Output must be valid JSON with only the "route" key
-        8. The route value must exactly match a provided subgraph name
-        9. No explanations outside the JSON object
-        10. When uncertain, use think tool to reason through options
+        1. Read ALL subgraph descriptions carefully before deciding
+        2. Match based on semantic similarity, not hard-coded rules
+        3. Pay attention to examples - they show the subgraph's specialty
+        4. Use keyword indicators as signals, not absolute rules
+        5. Respect "not suitable for" lists - they're exclusion criteria
+        6. Consider execution history - don't repeat failures
+        7. When uncertain, use think tool to reason through options
+        8. Prefer specific subgraphs over generic ones
+        9. Output must be valid JSON with only the "route" key
+        10. The goal is finding the BEST semantic match, not perfect match
         </critical_reminders>
 
-        Your goal: Route queries intelligently to the optimal subgraph for accurate, and comprehensive answers.
+        Your goal: Route queries intelligently based on semantic matching with subgraph capabilities, enabling extensible system where new subgraphs can be added without changing this prompt.
         """)
 
     QUERY_PLANNER_PROMPT = textwrap.dedent("""\

@@ -406,7 +406,7 @@ class AsyncSQLDatabase:
         if not res:
             return ""
         else:
-            return str(res)
+            return res
 
     async def get_table_info_no_throw(
         self, table_names: Optional[List[str]] = None
