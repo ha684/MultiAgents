@@ -39,17 +39,12 @@ GRAPH_CONFIGS = {
                 display_message="Planning approach...",
                 stream_phase=StreamPhase.PROCESSING,
             ),
-            "simple_search_subgraph": NodeMetadata(
-                display_message="Searching for information...",
-                stream_phase=StreamPhase.RETRIEVAL,
+            "dispatch_subgraph": NodeMetadata(
+                display_message="Processing request...",
+                stream_phase=StreamPhase.PROCESSING,
                 show_in_ui=False,
             ),
-            "research_subgraph_node": NodeMetadata(
-                display_message="Conducting research...",
-                stream_phase=StreamPhase.RETRIEVAL,
-                show_in_ui=False,
-            ),
-            "final_synthesizer": NodeMetadata(
+            "final_response": NodeMetadata(
                 display_message="Generating response...",
                 stream_phase=StreamPhase.SYNTHESIS,
             ),
@@ -111,6 +106,37 @@ GRAPH_CONFIGS = {
             "reflection_node": NodeMetadata(
                 display_message="Reflecting on findings...",
                 stream_phase=StreamPhase.PROCESSING,
+            ),
+        },
+    ),
+    "SqlGraph": GraphMetadata(
+        name="SqlGraph",
+        nodes={
+            "validate_relevance": NodeMetadata(
+                display_message="Validating query relevance...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+            "analyze_query": NodeMetadata(
+                display_message="Analyzing data requirements...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+            "generate_sql_queries": NodeMetadata(
+                display_message="Generating SQL queries...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+            "validate_queries": NodeMetadata(
+                display_message="Validating SQL syntax...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+            "execute_queries": NodeMetadata(
+                display_message="Executing database queries...",
+                stream_phase=StreamPhase.RETRIEVAL,
+                emit_on_complete=True,
+            ),
+            "generate_chart": NodeMetadata(
+                display_message="Generating visualization...",
+                stream_phase=StreamPhase.PROCESSING,
+                emit_on_complete=True,
             ),
         },
     ),

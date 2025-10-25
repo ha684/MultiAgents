@@ -773,6 +773,39 @@ class ResponseAgent(BaseAgent):
         response = await self.simple_llm_call(messages, self.llm)
         return response
 
+    def _prepare_messages(
+        self,
+        contexts: List[Document],
+        history: List[BaseMessage],
+        web_search_attempted: bool = False,
+    ) -> ChatPromptTemplate:
+        """Prepare messages for both streaming and non-streaming responses."""
+        current_query = history[-1].content
+
+        if contexts:
+            logger.info(
+                f'Response Agent: Preparing response for query: "{current_query}" with {len(contexts)} contexts.'
+            )
+            formatted_context = self._format_context_for_response(contexts)
+            system_message = SystemMessage(
+                content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
+            )
+            new_query = HumanMessage(
+                content=f"{formatted_context}\n---\n{current_query}"
+            )
+            messages = [system_message] + history[:-1] + [new_query]
+
+        else:
+            system_message = SystemMessage(
+                content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE
+            )
+            new_query = HumanMessage(
+                content=f"User query: {current_query}\n\nRemember this is the case that no document found."
+            )
+            messages = [system_message] + history[:-1] + [new_query]
+
+        return messages
+
     async def astream(
         self,
         contexts: List[Document],
