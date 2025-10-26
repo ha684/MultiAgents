@@ -1,3 +1,4 @@
+```markdown
 <div align="center">
 
 <h1 align="center">
@@ -35,8 +36,6 @@
 }
 </style>
 
-<img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExMmxkYWZnNmMzcDg5c2NuejgxZHA5YWd5czJtbmFxY2t2c3kxNTE4ZCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/umofoIWyOAUZbHM8OA/giphy.gif" width="480" alt="AI Agent Thinking Animation">
-
 </div>
 
 ---
@@ -63,10 +62,6 @@ flowchart LR
     E --> A
 ````
 
-<p align="center">
-  <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbDFsa2Y3bXI2NDZ3ZGduNDM0NXpzeGx5ZnZjczF2aTd6NThrOTl2ZSZlcD12MV9naWZzX3NlYXJjaCZjdD1n/26FPq8u5gvYO9GzoA/giphy.gif" width="600" alt="Agent Flow Animation">
-</p>
-
 ---
 
 ## ✨ Tính năng nổi bật
@@ -75,11 +70,8 @@ flowchart LR
 * ⚡ **Parallel query execution**
 * 📚 **Citation-aware synthesis**
 * 🧠 **Self-critique & quality evaluation loop**
-* 🧭 **Composable LangGraphs (3-layer architecture)**
+* 🧭 **Composable LangGraphs**
 
----
-
-## 🪄 Demo (concept)
 
 ---
 
@@ -90,22 +82,13 @@ flowchart LR
 | 🧩 **LangGraph**   | Xây pipeline đa agent có state          |
 | 🔗 **LangChain**   | Orchestrate LLMs & tools                |
 | 🌐 **Search APIs** | Web / docs / academic search            |
-| 🧠 **LLMs**        | OpenAI / Anthropic / Ollama (pluggable) |
-
----
-
-## 🧭 Roadmap
-
-* [ ] UI real-time streaming trạng thái truy vấn
-* [ ] Multi-agent collaboration mode
-* [ ] Plugin: Academic search (Semantic Scholar, Arxiv)
-* [ ] Cải thiện citation precision
+| 🧠 **LLMs**        | OpenAI / Anthropic (pluggable) |
 
 ---
 
 <div align="center">
 
-<img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExa3Q2Z2wzbDJiM2tqeGJ0ZnR1ZmJ5cnI2amNudWdoNzh2bWdkaGhkNCZlcD12MV9naWZzX3NlYXJjaCZjdD1n/EbZpmR3man0rXDW8h1/giphy.gif" width="340" alt="AI Agent Loop Animation"><br> <i>"The best research agents don’t just find answers — they understand questions."</i>
+<img src="https://github.com/user-attachments/assets/ai-loop.gif" width="340" alt="AI Agent Loop Animation"><br> <i>"The best research agents don’t just find answers — they understand questions."</i>
 
 </div>
 ```
