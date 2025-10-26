@@ -22,7 +22,8 @@ tmp/
 
 *.logs
 
-test.py
 logs/
 /logs
 *.log
+
+.vscode/
