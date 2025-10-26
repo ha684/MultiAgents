@@ -1,4 +1,3 @@
-```markdown
 <div align="center">
 
 <h1 align="center">
@@ -91,4 +90,3 @@ flowchart LR
 <img src="https://github.com/user-attachments/assets/ai-loop.gif" width="340" alt="AI Agent Loop Animation"><br> <i>"The best research agents don’t just find answers — they understand questions."</i>
 
 </div>
-```
