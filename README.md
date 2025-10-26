@@ -2,38 +2,14 @@
 
 <h1 align="center">
   <img src="https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/1f9e0.png" width="40" height="40">
-  <span class="gradient-text">Agent Research System</span>
+  Agent Research System
 </h1>
 
-<p class="pulse-text">
-  🚀 A next-generation AI research agent powered by <a href="https://langchain-ai.github.io/langgraph/">LangGraph</a><br>
+<p>
+  🚀 A next-generation AI research agent powered by
+  <a href="https://langchain-ai.github.io/langgraph/">LangGraph</a><br/>
   Understands questions, plans searches, and generates citation-backed answers.
 </p>
-
-<style>
-.gradient-text {
-  background: linear-gradient(90deg, #00B4DB, #0083B0, #7F00FF, #E100FF);
-  background-size: 400% 400%;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: gradientShift 8s ease infinite;
-}
-@keyframes gradientShift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
-.pulse-text {
-  font-size: 1.1rem;
-  color: #8c8c8c;
-  animation: pulse 2.5s infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity: 0.8; }
-  50% { opacity: 1; }
-}
-</style>
 
 </div>
 
