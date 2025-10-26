@@ -37,8 +37,8 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
     @abstractmethod
     def graph(self) -> CompiledStateGraph: ...
 
-    def default_run_config(self) -> RunConfig:
-        return RunConfig(graph_name="Graph")
+    @abstractmethod
+    def default_run_config(self) -> RunConfig: ...
 
     def on_node_state(
         self, last_state: StateT, node_output: Optional[StateT]

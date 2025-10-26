@@ -1,3 +1,4 @@
+# src/models/chat.py
 from pydantic import BaseModel, Field, field_serializer
 from enum import Enum
 from src.common.types import Message

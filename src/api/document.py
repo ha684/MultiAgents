@@ -1,7 +1,9 @@
 # src/api/document.py
-from fastapi import APIRouter, UploadFile, File, Request, HTTPException
 from typing import List, Optional, Sequence, Dict, Any
 import uuid
+
+from fastapi import APIRouter, UploadFile, File, Request, HTTPException
+
 from src.models.document import (
     DocumentResponse,
     DocumentStatusEnum,

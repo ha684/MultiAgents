@@ -9,7 +9,6 @@ from src.config.auth_settings import auth_settings
 from src.models.auth import TokenData, UserRole
 import hashlib
 import hmac
-import random
 import jwt
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -147,7 +146,7 @@ class TokenManager:
     @staticmethod
     def create_verification_token() -> tuple[str, datetime]:
         """Create an verification token with expiry"""
-        token = f"{random.randint(100000, 999999):06d}"
+        token = f"{int(secrets.token_hex(4), 16) % 900000 + 100000}"
         expires_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
             minutes=auth_settings.email_verification_token_expire_minutes
         )

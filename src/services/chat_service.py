@@ -8,7 +8,7 @@ from qdrant_client.models import Filter, models
 
 from src.agents.basic import (
     citation_agent,
-    filename_agent_instance,
+    filename_agent,
     query_context_agent,
     response_agent,
     summary_agent,
@@ -229,7 +229,7 @@ class ChatService:
                     search_method = "web"
             else:
                 with tracer.start_as_current_span("FilenameAgent.extract_filename"):
-                    requested_filename = await filename_agent_instance.ainvoke(
+                    requested_filename = await filename_agent.ainvoke(
                         query=original_query
                     )
 
@@ -388,9 +388,7 @@ class ChatService:
                 "Searching for relevant documents...",
                 progress=0.3,
             )
-            requested_filename = await filename_agent_instance.ainvoke(
-                query=original_query
-            )
+            requested_filename = await filename_agent.ainvoke(query=original_query)
 
             filters: Filter = Filter(must=[])
 
