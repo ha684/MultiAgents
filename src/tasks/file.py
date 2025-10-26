@@ -148,14 +148,9 @@ async def _process_document_async(
 
             strategy = get_strategy(document=document, config={})
             chunk_start = time.time()
-            if isinstance(strategy, ImageStrategy):
-                chunks = await strategy.chunk(
-                    file_path=str(temp_file_path), document=document
-                )
-            else:
-                chunks = strategy.chunk(
-                    file_path=str(temp_file_path), document=document
-                )
+            chunks, full_text = strategy.chunk(
+                file_path=str(temp_file_path), document=document
+            )
             chunk_time = time.time() - chunk_start
 
             if not chunks:
@@ -193,6 +188,7 @@ async def _process_document_async(
                     "status": DocumentStatusEnum.FINISHED,
                     "total_chunks": len(chunks),
                     "processed_at": datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+                    "full_text_content": full_text,
                 },
             )
 

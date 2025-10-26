@@ -4,7 +4,7 @@ from langchain_community.document_loaders import DirectoryLoader, UnstructuredFi
 from langchain_community.document_loaders.base import BaseLoader
 from langchain.text_splitter import MarkdownTextSplitter
 import os
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from src.rag.processor.strategy.base import BaseStrategy
 from src.db.models.document import Document as DBDocument
 from langchain_pymupdf4llm import PyMuPDF4LLMLoader
@@ -128,7 +128,7 @@ class NaiveStrategy(BaseStrategy):
 
         return documents
 
-    def chunk(self, file_path: str, document: DBDocument) -> List[Document]:
+    def chunk(self, file_path: str, document: DBDocument) -> Tuple[List[Document], str]:
         """
         Process a file using Langchain's document loaders with deep citation support.
 
@@ -192,13 +192,12 @@ class NaiveStrategy(BaseStrategy):
             for doc in split_docs:
                 if "source" not in doc.metadata:
                     doc.metadata["source"] = file_path
-                doc.metadata["strategy"] = "naive"
 
             logger.info(
                 f"Created {len(split_docs)} chunks from {file_path} with citation metadata"
             )
 
-            return split_docs
+            return split_docs, full_text
 
         except Exception as e:
             logger.exception(f"Error processing file {file_path}: {str(e)}")

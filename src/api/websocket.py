@@ -88,12 +88,8 @@ class WebSocketManager:
         """Process and send status update event"""
         try:
             event_doc_id = event.get("id") or event.get("document_id")
-
-            # Only process events for this document
             if event_doc_id != str(self.document_id):
                 return True
-
-            # Send status update
             success = await self.send_message("status_update", data=event)
             if not success:
                 return False
@@ -101,15 +97,13 @@ class WebSocketManager:
             logger.info(
                 f"Sent status update for document {self.document_id}: {event.get('status')}"
             )
-
-            # Check if processing is complete
             status = event.get("status")
             if status in ["COMPLETED", "FAILED"]:
                 await self.send_message(
                     "complete", message=f"Processing finished with status: {status}"
                 )
                 logger.info(f"Processing complete for document {self.document_id}")
-                return False  # Signal to stop processing
+                return False
 
             return True
 
@@ -161,17 +155,12 @@ async def document_status_ws(websocket: WebSocket, document_id: uuid.UUID):
     """WebSocket endpoint for real-time document status updates"""
 
     ws_manager = WebSocketManager(websocket, document_id)
-
-    # Establish connection
     if not await ws_manager.connect():
         return
-
     try:
-        # Send initial status
         if not await ws_manager.send_initial_status():
             return
 
-        # Listen for status updates
         await ws_manager.listen_for_updates()
 
     except WebSocketDisconnect:
@@ -183,32 +172,3 @@ async def document_status_ws(websocket: WebSocket, document_id: uuid.UUID):
         await ws_manager.send_message("error", message=f"Unexpected error: {str(e)}")
     finally:
         await ws_manager.disconnect()
-
-
-# Optional: Add WebSocket endpoint for multiple documents (if needed)
-@router.websocket("/ws/documents")
-async def multiple_documents_ws(websocket: WebSocket):
-    """WebSocket endpoint for monitoring multiple documents"""
-    await websocket.accept()
-    logger.info("Multi-document WebSocket connection established")
-
-    try:
-        event_publisher = get_event_publisher()
-
-        async for event in event_publisher.subscribe(DOCUMENT_STATUS_CHANNEL):
-            try:
-                await websocket.send_json({"type": "document_update", "data": event})
-            except Exception as e:
-                logger.error(f"Error sending multi-document update: {e}")
-                break
-
-    except WebSocketDisconnect:
-        logger.info("Multi-document WebSocket disconnected")
-    except Exception as e:
-        logger.error(f"Multi-document WebSocket error: {e}")
-    finally:
-        try:
-            await websocket.close()
-        except Exception:
-            pass
-        logger.info("Multi-document WebSocket connection closed")

@@ -102,6 +102,7 @@ class Document(Base):
     processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    full_text_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     # Relationships
     knowledge_base: Mapped["KnowledgeBase"] = relationship(
         "KnowledgeBase", back_populates="documents"
