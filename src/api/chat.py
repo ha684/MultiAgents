@@ -1,9 +1,10 @@
 # src/api/chat.py
-from src.common.types import Message
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+
+from src.common.types import Message
 from src.models.chat import ChatRequest
 from src.services.chat_service import ChatService
-from fastapi.responses import StreamingResponse
 from src.middleware.endpoint_manager import endpoint_protection
 
 router = APIRouter(prefix="/chat", tags=["Chat"])

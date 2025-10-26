@@ -12,12 +12,12 @@ prompt_vi: |
     4. Giữ nguyên ngôn ngữ và ý nghĩa ban đầu của câu hỏi.
   </YÊU CẦU>
 
-  ### **Đầu vào**: 
-    **lịch_sử_trò_chuyện**: 
+  ### **Đầu vào**:
+    **lịch_sử_trò_chuyện**:
       {chat_history}
     **câu_hỏi_mới_nhất**: {question}
 
-  ### **Đầu ra**: 
+  ### **Đầu ra**:
 
 
 prompt_en: |
@@ -34,12 +34,12 @@ prompt_en: |
     4. Maintain the language of the original question.
   </REQUIREMENTS>
 
-  ### **Inputs**: 
-    **chat_history**: 
+  ### **Inputs**:
+    **chat_history**:
       {chat_history}
     **latest_user_question**: {question}
 
-  ### **Outputs**: 
+  ### **Outputs**:
     **Standalone_question**: "Reformulated or original question."
 
 
@@ -57,12 +57,12 @@ prompt_ja: |
     4. 質問の元の言語と意味を保持する。
   <要件>
 
-  ### **入力**: 
-    **チャット履歴**: 
+  ### **入力**:
+    **チャット履歴**:
       {chat_history}
     **最新のユーザー質問**: {question}
 
-  ### **出力**: 
+  ### **出力**:
     **独立した質問**: "書き換えられた質問、または元の質問。（日本語）"
 
 prompt_ko: |
@@ -79,10 +79,10 @@ prompt_ko: |
     4. 질문의 원 언어와 의미를 유지합니다.
   </요구사항>
 
-  ### **입력**: 
-    **대화 내역**: 
+  ### **입력**:
+    **대화 내역**:
       {chat_history}
     **최신 사용자 질문**: {question}
 
-  ### **출력**: 
+  ### **출력**:
     **독립 질문**: "다시 작성된 질문 또는 원문"

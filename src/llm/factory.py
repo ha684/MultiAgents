@@ -24,10 +24,3 @@ def get_llm(provider: SupportedLLMProviders) -> BaseChatModel:
         base_url=default_configs.base_url,
         temperature=default_configs.temperature,
     )
-
-
-if __name__ == "__main__":
-    # Example usage
-    llm = get_llm("claude")
-    print(f"Initialized LLM: {llm.invoke('Hello, world!')}")
-    # You can now use `llm` to interact with the language model

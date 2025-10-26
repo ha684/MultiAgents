@@ -147,7 +147,7 @@ class VectorStorage:
                     must=[
                         models.FieldCondition(
                             key="metadata.kb_id",
-                            match=models.MatchValue(value=kb_id),
+                            match=models.MatchValue(value=str(kb_id)),
                         )
                     ]
                 )

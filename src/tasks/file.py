@@ -1,33 +1,38 @@
 # src/tasks/file.py
 import asyncio
+import json
 import os
 import random
-import json
-import uuid
 import time
+import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime
-from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any, Dict, List
-from contextlib import asynccontextmanager
-from celery import shared_task
-from celery.exceptions import SoftTimeLimitExceeded, WorkerLostError
-from celery.signals import worker_process_init, worker_process_shutdown
+from zoneinfo import ZoneInfo
+
 import httpx
 import requests
+from celery import Task, shared_task
+from celery.exceptions import SoftTimeLimitExceeded, WorkerLostError
+from celery.signals import worker_process_init, worker_process_shutdown
+from langchain_core.documents import Document as LangchainDocument
+
 from src.config.settings import settings
 from src.connector import minio_client
-from src.event_pub import event_publisher
-from src.models.document import DocumentProcessingStatusResponse, DocumentStatusEnum
-from src.rag.processor.strategy import get_strategy
-from src.tasks.qac import _generate_qa_pairs_async
-from src.utils.constants import DOCUMENT_STATUS_CHANNEL
-from src.rag.vector import vector_storage
-from src.utils.logger_conf import logger
 from src.db import document_repository
 from src.db.models.document import Document as DBDocument
-from langchain_core.documents import Document as LangchainDocument
-from celery import Task
+from src.event_pub import event_publisher
+from src.models.document import (
+    DocumentProcessingStatusResponse,
+    DocumentStatusEnum,
+)
+from src.rag.processor.strategy import get_strategy
+from src.rag.processor.strategy.image import ImageStrategy
+from src.rag.vector import vector_storage
+from src.tasks.qac import _generate_qa_pairs_async
+from src.utils.constants import DOCUMENT_STATUS_CHANNEL
+from src.utils.logger_conf import logger
 
 
 _loop = None
@@ -91,7 +96,6 @@ async def temp_file_manager(document_id: uuid.UUID, filename: str):
         try:
             if temp_file_path.exists():
                 os.remove(temp_file_path)
-                logger.debug(f"Cleaned up temp file: {temp_file_path}")
         except Exception as cleanup_error:
             logger.error(
                 f"Error cleaning up temp file {temp_file_path}: {cleanup_error}"
@@ -111,6 +115,16 @@ async def _process_document_async(
         document = await document_repository.get(document_id)
         if not document:
             raise ValueError(f"Document with ID {document_id} not found")
+
+        if document.status == DocumentStatusEnum.FINISHED:
+            logger.warning(
+                f"Document {document_id} has already been processed. Skipping."
+            )
+            return {
+                "status": "skipped",
+                "document_id": str(document_id),
+                "reason": "Already processed",
+            }
 
         document = await document_repository.update_status(
             document_id=document_id, status=DocumentStatusEnum.PROCESSING
@@ -132,7 +146,7 @@ async def _process_document_async(
             file_size = temp_file_path.stat().st_size
             logger.info(f"Downloaded file ({file_size} bytes) in {download_time:.2f}s")
 
-            strategy = get_strategy(config={})
+            strategy = get_strategy(document=document, config={})
             chunk_start = time.time()
             chunks, full_text = strategy.chunk(
                 file_path=str(temp_file_path), document=document

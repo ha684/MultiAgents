@@ -65,6 +65,12 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.58b0",
     "pyjwt>=2.10.1",
     "graphiti-core>=0.3.21",
+    "fastmcp>=2.12.4",
+    "graphviz>=0.21",
+    "grandalf>=0.8",
+    "langgraph-checkpoint-postgres>=2.0.25",
+    "langchain-redis>=0.2.4",
+    "sqlparse>=0.5.3",
 ]
 
 [tool.ruff]

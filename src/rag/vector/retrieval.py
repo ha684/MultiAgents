@@ -167,8 +167,8 @@ class VectorRetrieval:
             logger.info(f"Retrieved {len(compressed_docs)} documents from reranker")
             return compressed_docs
         except Exception as e:
-            logger.exception(f"Error retrieving documents: {e}")
-            return []
+            logger.error("Error retrieving documents from vector store")
+            raise e
 
     async def retrieve_by_ids(self, chunk_ids: List[str]) -> List[Document]:
         """

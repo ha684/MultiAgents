@@ -6,7 +6,6 @@ from langchain.text_splitter import MarkdownTextSplitter
 import os
 from typing import List, Dict, Any, Optional, Tuple
 from src.rag.processor.strategy.base import BaseStrategy
-from src.rag.processor.loader.images_loader import ImageLoader
 from src.db.models.document import Document as DBDocument
 from langchain_pymupdf4llm import PyMuPDF4LLMLoader
 from langchain_community.document_loaders import UnstructuredWordDocumentLoader
@@ -15,7 +14,6 @@ from langchain_community.document_loaders import UnstructuredPowerPointLoader
 from langchain_community.document_loaders import UnstructuredXMLLoader
 from langchain_community.document_loaders import UnstructuredRSTLoader
 from langchain_community.document_loaders.csv_loader import CSVLoader
-from src.rag.processor.strategy.spreadsheet import SpreadsheetStrategy
 from src.utils.logger_conf import logger
 
 
@@ -79,8 +77,6 @@ class NaiveStrategy(BaseStrategy):
             return UnstructuredWordDocumentLoader(file_path)
         if file_extension == ".ppt":
             return UnstructuredPowerPointLoader(file_path, include_slide_notes=True)
-        if file_extension in [".jpg", ".jpeg", ".png"]:
-            return ImageLoader(image_path=file_path, document=document)
         if file_extension in [".xml"]:
             return UnstructuredXMLLoader(file_path, max_characters=1000000)
         if file_extension in [".rst"]:
@@ -89,8 +85,6 @@ class NaiveStrategy(BaseStrategy):
             return CSVLoader(file_path=file_path, autodetect_encoding=True)
         if file_extension in [".txt", ".md"]:
             return UnstructuredMarkdownLoader(file_path, max_characters=1000000)
-        if file_extension in [".xlsx", ".xls"]:
-            return SpreadsheetStrategy(config=self.config)
         if os.path.isdir(file_path):
             return DirectoryLoader(file_path)
         return UnstructuredFileLoader(
@@ -156,7 +150,8 @@ class NaiveStrategy(BaseStrategy):
             logger.info(
                 f"Loading documents from {file_path} using {loader.__class__.__name__}"
             )
-            docs = list(loader.lazy_load())
+            docs = loader.lazy_load()
+            docs = list(docs)
 
             if not docs:
                 raise ValueError("The document has no readable content.")

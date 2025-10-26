@@ -33,6 +33,8 @@ class Conversation(BaseModel):
     conversation_id: str
     is_active: bool
     name: str
+    summary: str | None = None
+    summarized_up_to_message_order: int | None = None
 
 
 class Event(BaseModel):

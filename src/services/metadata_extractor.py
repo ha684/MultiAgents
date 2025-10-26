@@ -12,7 +12,7 @@ from rapidfuzz import process, fuzz
 
 METADATA_PROMPT = textwrap.dedent("""\
     Extract key metadata from the document chunk or text. Focus on identifying:
-    
+
     - document_type: Infer the type/category of document based on content and structure
     - document_title: Main title or heading of the document (preserve original language)
     - main_topics: Key subject areas or themes discussed (preserve original key terms)
@@ -22,10 +22,10 @@ METADATA_PROMPT = textwrap.dedent("""\
     - summary: Brief 1-2 sentence summary of the main content
     - key_concepts: Important domain-specific concepts and terminology (preserve original language)
     - organizational_units: Teams, departments, or business units mentioned (preserve original names)
-    
-    IMPORTANT: Always preserve the original language and exact spelling of all key terms, 
+
+    IMPORTANT: Always preserve the original language and exact spelling of all key terms,
     names, identifiers, and technical terminology. Do not translate or modify these terms.
-    
+
     Extract exact text where possible. If information is not clearly present, omit that field.
     Focus on content useful for document discovery and relationship mapping.
     """)
@@ -34,17 +34,17 @@ METADATA_EXAMPLES = [
     lx.data.ExampleData(
         text="""
         Q2 2024 Marketing Campaign Performance Analysis
-        
+
         Executive Summary:
         This report analyzes the performance of our digital marketing campaigns across Q2 2024.
-        The Marketing Analytics team collaborated with the Sales Operations department to evaluate 
+        The Marketing Analytics team collaborated with the Sales Operations department to evaluate
         ROI across Facebook Ads, Google AdWords, and LinkedIn campaigns.
-        
+
         Key findings:
         - Campaign ROI improved by 23% compared to Q1
         - LinkedIn generated highest quality leads for B2B segment
         - Budget reallocation recommended for Q3
-        
+
         Tools used: Google Analytics, Facebook Business Manager, Salesforce CRM
         Next steps: Present findings to CMO by July 15, 2024
         """,

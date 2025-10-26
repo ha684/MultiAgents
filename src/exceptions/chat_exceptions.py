@@ -27,3 +27,16 @@ class ConversationNotFoundError(BaseException):
             error_code="CONVERSATION_NOT_FOUND",
             status_code=status.HTTP_404_NOT_FOUND,
         )
+
+
+class ResearchNotFoundError(BaseException):
+    """Raised when research is not found"""
+
+    def __init__(self, conversation_id: Optional[str] = None):
+        message = "Running conversation not found"
+
+        super().__init__(
+            message=message,
+            error_code="RESEARCH_NOT_FOUND",
+            status_code=status.HTTP_404_NOT_FOUND,
+        )

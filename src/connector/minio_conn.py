@@ -1,11 +1,11 @@
 import logging
 import os
 import asyncio
-from typing import Optional
 from datetime import timedelta
 from miniopy_async import Minio
 from minio.error import S3Error
 from src.utils.decorators import singleton
+
 
 @singleton
 class MinioClient:
@@ -51,10 +51,12 @@ class MinioClient:
             logging.exception(f"Error checking file existence: {str(e)}")
             raise
 
-    async def _retry_upload(self, upload_func, max_retries: int = 3, delay: float = 1.0):
+    async def _retry_upload(
+        self, upload_func, max_retries: int = 3, delay: float = 1.0
+    ):
         """
         Retry upload with exponential backoff.
-        
+
         Args:
             upload_func: The upload function to retry
             max_retries: Maximum number of retry attempts
@@ -65,16 +67,20 @@ class MinioClient:
                 return await upload_func()
             except S3Error as e:
                 if e.code == "XAmzContentSHA256Mismatch" and attempt < max_retries:
-                    wait_time = delay * (2 ** attempt)
-                    logging.warning(f"Upload attempt {attempt + 1} failed with SHA256 mismatch. Retrying in {wait_time}s...")
+                    wait_time = delay * (2**attempt)
+                    logging.warning(
+                        f"Upload attempt {attempt + 1} failed with SHA256 mismatch. Retrying in {wait_time}s..."
+                    )
                     await asyncio.sleep(wait_time)
                     continue
                 else:
                     raise
             except Exception as e:
                 if attempt < max_retries and "SHA256" in str(e):
-                    wait_time = delay * (2 ** attempt)
-                    logging.warning(f"Upload attempt {attempt + 1} failed. Retrying in {wait_time}s...")
+                    wait_time = delay * (2**attempt)
+                    logging.warning(
+                        f"Upload attempt {attempt + 1} failed. Retrying in {wait_time}s..."
+                    )
                     await asyncio.sleep(wait_time)
                     continue
                 else:
@@ -88,13 +94,9 @@ class MinioClient:
             bucket_name: Name of the bucket
             object_name: Name of the object in the bucket
             file_path: Path where to save the downloaded file
-
-        Returns:
-            None
         """
         try:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-
             await self.client.fget_object(
                 bucket_name=bucket_name, object_name=object_name, file_path=file_path
             )
@@ -114,7 +116,9 @@ class MinioClient:
             None
         """
         try:
-            await self.client.remove_object(bucket_name=bucket_name, object_name=object_name)
+            await self.client.remove_object(
+                bucket_name=bucket_name, object_name=object_name
+            )
         except Exception as e:
             logging.exception(f"Error deleting file from MinIO: {str(e)}")
             raise
@@ -147,9 +151,9 @@ class MinioClient:
                 await self.client.make_bucket(bucket_name)
 
             async def do_upload():
-                if hasattr(data, 'seek'):
+                if hasattr(data, "seek"):
                     data.seek(0)
-                
+
                 return await self.client.put_object(
                     bucket_name=bucket_name,
                     object_name=object_name,
@@ -159,9 +163,11 @@ class MinioClient:
                 )
 
             return await self._retry_upload(do_upload, max_retries)
-            
+
         except Exception as e:
-            logging.exception(f"Error uploading stream to MinIO after {max_retries} retries: {str(e)}")
+            logging.exception(
+                f"Error uploading stream to MinIO after {max_retries} retries: {str(e)}"
+            )
             raise
 
     async def get_presigned_url(

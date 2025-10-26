@@ -1,3 +1,4 @@
-from .qac_agent import QACAgent
+from .main_graph import OrchestratorGraph
+from typing import TypeAlias
 
-qa_agent = QACAgent()
+Agent: TypeAlias = OrchestratorGraph

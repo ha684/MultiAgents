@@ -1,3 +1,4 @@
+# src/common/streaming.py
 from typing import Dict, Any, Optional, Union
 import json
 from src.models.streaming import StreamEventType, StreamEvent, StreamPhase
@@ -20,8 +21,7 @@ class StreamEventBuilder:
 
         sse_data = json.dumps(
             {
-                "type": event.type,
-                "data": event.data,
+                **event.data,
                 "id": event.id,
                 "timestamp": event.timestamp,
             },

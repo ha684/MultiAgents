@@ -19,7 +19,7 @@ from typing import List, Optional
 import uuid
 from src.config.settings import settings
 from src.connector import minio_client
-from src.agents.image_agent import ImageExtractionAgent
+from src.agents.basic.image_agent import ImageExtractionAgent
 from src.utils.logger_conf import logger
 
 

@@ -1,5 +1,4 @@
 from typing import Literal
-from dataclasses import dataclass
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel
 from .settings import settings
@@ -57,17 +56,3 @@ LLM_MODELS_CONFIG = {
         base_url=settings.ntqai_base_url,
     ),
 }
-
-
-@dataclass
-class LangGraphRAGConfig:
-    """Configuration for the RAG agent"""
-
-    max_search_iterations: int = 5
-    initial_top_k: int = 60
-    initial_top_n: int = 15
-    focused_top_k: int = 30
-    focused_top_n: int = 10
-    broader_top_k: int = 100
-    broader_top_n: int = 20
-    max_context_tokens: int = 16384

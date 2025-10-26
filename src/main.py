@@ -2,11 +2,18 @@
 from datetime import datetime
 import time
 from contextlib import asynccontextmanager
+from zoneinfo import ZoneInfo
+import yaml
+
 import uvicorn
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
+from langchain_redis import RedisCache
+from langchain.globals import set_llm_cache
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from src.api.document import router as document_router
 from src.api.knowledge_base import router as knowledge_base_router
 from src.api.chat import router as chat_router
@@ -23,8 +30,6 @@ from src.middleware.response_handler import ResponseHandlerMiddleware
 from src.middleware.exception_handler import exception_handler
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.common.types import HealthCheckResponse
-from zoneinfo import ZoneInfo
-from prometheus_fastapi_instrumentator import Instrumentator
 from src.tracking.observability import setup_tracing
 
 
@@ -32,13 +37,18 @@ from src.tracking.observability import setup_tracing
 async def lifespan(app: FastAPI):
     """Lifespan event handler for FastAPI application"""
     logger.info("Starting up application...")
-
+    redis_cache = RedisCache(
+        redis_url=settings.redis_uri,
+        ttl=3600,
+    )
     try:
         setup_tracing(app)
         await database_connector.initialize()
         logger.info("Database connection initialized successfully")
         await vector_storage_migration.run_migrations()
         logger.info("Vector storage migration completed successfully")
+        set_llm_cache(redis_cache)
+        logger.info("LLM cache initialized successfully")
     except Exception as e:
         raise ConnectionError(
             f"Failed to initialize database: {e}, Run docker compose first"
@@ -50,6 +60,7 @@ async def lifespan(app: FastAPI):
 
     try:
         await database_connector.close()
+        await redis_cache.aclear()
         logger.info("Database connection closed successfully")
     except Exception as e:
         logger.error(f"Error closing database connection: {e}")
@@ -65,7 +76,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
@@ -166,5 +177,7 @@ app.include_router(auth_router)
 
 if __name__ == "__main__":
     host = "0.0.0.0"
+    with open("etc/log_config.yml", "r", encoding="utf-8") as f:
+        log_config = yaml.safe_load(f)
     logger.info(f"Starting server on host={host}, port={settings.port}")
-    uvicorn.run("src.main:app", host=host, port=settings.port)
+    uvicorn.run("src.main:app", host=host, port=settings.port, log_config=log_config)

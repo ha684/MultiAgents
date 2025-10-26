@@ -11,7 +11,7 @@ prompt_en: |
     3. Be detailed, coherent, and contextually appropriate.
     4. Not exceed 100 words in total.
   </REQUIREMENTS>
-  
+
   ### **Project Overview**: {project_overview}
   Question: {question}
 

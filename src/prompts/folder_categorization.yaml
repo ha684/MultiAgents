@@ -39,8 +39,8 @@ prompt_en: |
 
   7. **FINAL ANSWER FORMAT**:
     - RETURN YOUR ANSWER STRICTLY IN THIS STRUCTURE:
-      {{ 
-        "relevant_folders": ["Folder Name 1", "Folder Name 2"] 
+      {{
+        "relevant_folders": ["Folder Name 1", "Folder Name 2"]
       }}
 
   ---
@@ -48,53 +48,53 @@ prompt_en: |
   ### FEW-SHOT EXAMPLES
 
   #### Example 1:
-  **User Query:**  
+  **User Query:**
   `How do I authenticate with the internal API gateway?`
 
-  **Folders:**  
-  {{ 
+  **Folders:**
+  {{
     "Authentication": "Covers internal and external auth flows, including API keys and OAuth setup.",
     "API Documentation": "Technical details about all REST APIs in the project.",
     "Deployment": "Instructions and scripts related to staging and production deployment."
   }}
 
-  **Output:**  
-  {{ 
-    "relevant_folders": ["Authentication", "API Documentation"] 
+  **Output:**
+  {{
+    "relevant_folders": ["Authentication", "API Documentation"]
   }}
 
   ---
 
   #### Example 2:
-  **User Query:**  
+  **User Query:**
   `What steps are required before we can release the product to customers?`
 
-  **Folders:**  
-  {{ 
+  **Folders:**
+  {{
     "Release Checklist": "Contains pre-release QA checks, compliance, and approvals.",
     "Deployment": "Automation scripts and processes for pushing to production.",
     "Project Setup": "Initial configuration steps for local dev and environments."
   }}
 
-  **Output:**  
-  {{ 
-    "relevant_folders": ["Release Checklist", "Deployment"] 
+  **Output:**
+  {{
+    "relevant_folders": ["Release Checklist", "Deployment"]
   }}
 
   #### Example 3:
-  **User Query:**  
+  **User Query:**
   `What are the company’s travel reimbursement policies?`
 
-  **Folders:**  
-  {{ 
+  **Folders:**
+  {{
     "API Documentation": "Technical details about all REST APIs in the project.",
     "Deployment": "Automation scripts and processes for pushing to production.",
     "Release Checklist": "Contains pre-release QA checks, compliance, and approvals."
   }}
 
-  **Output:**  
-  {{ 
-    "relevant_folders": [] 
+  **Output:**
+  {{
+    "relevant_folders": []
   }}
 
   ---

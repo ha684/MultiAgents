@@ -21,7 +21,7 @@ class SupportCitation(BaseModel):
 
 
 class CitationIndexes(BaseModel):
-    indexes: List[int]
+    indexes: List[int | str]
 
 
 class Reference(BaseModel):

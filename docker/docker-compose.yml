@@ -35,7 +35,7 @@ services:
   #     start_period: 3s
 
   redis:
-    image: redis:7
+    image: redis/redis-stack-server:latest
     container_name: redis
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -107,7 +107,7 @@ services:
   #     - kms-app
 
   worker:
-    image: hapt 
+    image: hapt
     restart: unless-stopped
     depends_on:
       postgres:
@@ -149,7 +149,7 @@ services:
       - PYTHONPATH=/app
       - PYTHONDONTWRITEBYTECODE=1
     command: python -m src.worker
-    
+
   prometheus:
     image: prom/prometheus:v2.47.1
     container_name: prometheus

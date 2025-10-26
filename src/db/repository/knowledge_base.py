@@ -39,11 +39,13 @@ class KnowledgeBaseRepository:
             logger.error(f"Error creating knowledge base: {e.args[0]}")
             raise e
 
-    async def get(self, kb_id: uuid.UUID) -> Optional[KnowledgeBase]:
+    async def get(self, kb_id: uuid.UUID, user_id: str) -> Optional[KnowledgeBase]:
         """Get a knowledge base by ID"""
         try:
             async with DatabaseSession() as session:
                 stmt = select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
+                if user_id:
+                    stmt = stmt.where(KnowledgeBase.user_id == user_id)
                 result = await session.execute(stmt)
             return result.scalar_one_or_none()
         except SQLAlchemyError as e:

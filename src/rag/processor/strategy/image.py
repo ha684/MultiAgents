@@ -1,6 +1,5 @@
 from pathlib import Path
 from langchain_core.documents import Document
-from langchain_community.document_loaders.base import BaseLoader
 from typing import List, Dict, Any
 
 from src.rag.processor.strategy.base import BaseStrategy
@@ -21,7 +20,7 @@ class ImageStrategy(BaseStrategy):
             config,
         )
 
-    def _get_loader(self, file_path: str, document: DBDocument) -> BaseLoader:
+    def _get_loader(self, file_path: str, document: DBDocument) -> ImageLoader:
         """
         Get the appropriate document loader based on the file type.
 
@@ -36,9 +35,9 @@ class ImageStrategy(BaseStrategy):
             f"Determining loader for file {file_path} with extension {file_extension}"
         )
 
-        return ImageLoader(image_path=file_path, document=document)
+        return ImageLoader(image_path=file_path)
 
-    def chunk(self, file_path: str, document: DBDocument) -> List[Document]:
+    async def chunk(self, file_path: str, document: DBDocument) -> List[Document]:
         """
         Process a file using Langchain's document loaders.
 
@@ -61,11 +60,10 @@ class ImageStrategy(BaseStrategy):
             logger.info(
                 f"Loading documents from {file_path} using {loader.__class__.__name__}"
             )
-            docs = loader.load()
+            docs = await loader.lazy_load()
             for doc in docs:
                 if "source" not in doc.metadata:
                     doc.metadata["source"] = file_path
-                doc.metadata["strategy"] = "naive"
 
             logger.info(
                 f"Loaded {len(docs)} documents from {file_path} using {loader.__class__.__name__}"

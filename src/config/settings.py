@@ -39,7 +39,7 @@ class Settings(BaseSettings):
 
     # Websearch configuration
     enable_websearch: bool = False
-    websearch_provider: Optional[SearchProvider] = None
+    websearch_provider: Optional[str] = None
     tavily_api_key: Optional[str] = None
     firecrawl_api_url: Optional[str] = None
     firecrawl_api_key: Optional[str] = None

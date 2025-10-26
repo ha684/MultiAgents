@@ -25,6 +25,7 @@ from src.utils.logger_conf import logger
 from src.db.repository.database_session import DatabaseSession
 from src.utils.decorators import singleton
 import uuid
+from src.db.models.conversation import MessageStatus
 
 
 @singleton
@@ -71,6 +72,8 @@ class ConversationRepository:
                     conversation_id=str(conv_model.id),
                     is_active=conv_model.is_active,
                     name=conv_model.name,
+                    summary=conv_model.summary,
+                    summarized_up_to_message_order=conv_model.summarized_up_to_message_order,
                 )
             return result
 
@@ -93,6 +96,10 @@ class ConversationRepository:
                 if conv_model:
                     conv_model.is_active = conversation.is_active
                     conv_model.name = conversation.name
+                    conv_model.summary = conversation.summary
+                    conv_model.summarized_up_to_message_order = (
+                        conversation.summarized_up_to_message_order
+                    )
                     conv_model.updated_at = datetime.now()
                 await session.flush()
                 await session.refresh(conv_model)
@@ -129,42 +136,69 @@ class ConversationRepository:
             logger.error("Error listing conversations")
             raise e
 
-    async def add_message(
-        self, message: Message, conversation_id: uuid.UUID
-    ) -> str | None:
-        """Add a message to the database"""
+    async def add_messages(
+        self, messages: List[Message], conversation_id: uuid.UUID
+    ) -> List[str]:
+        """Add multiple messages to the database in a single transaction"""
         try:
             async with DatabaseSession() as session:
                 count_result = await session.execute(
                     select(MessageModel).filter_by(conversation_id=conversation_id)
                 )
                 max_order = len(count_result.scalars().all())
-                msg_model = MessageModel(
-                    conversation_id=conversation_id,
-                    role=message.role,
-                    parts=self._serialize_parts(message.parts),
-                    message_metadata=message.metadata,
-                    message_order=max_order + 1,
-                    retrieval_context=message.retrieval_context.model_dump()
-                    if message.retrieval_context
-                    else None,
-                )
-                session.add(msg_model)
 
-            return str(msg_model.id)
+                message_ids = []
+                message_models = []
+
+                for idx, message in enumerate(messages):
+                    status = (
+                        MessageStatus.COMPLETED
+                        if message.role == "agent"
+                        else MessageStatus.COMPLETED
+                    )
+
+                    msg_model = MessageModel(
+                        conversation_id=conversation_id,
+                        role=message.role,
+                        parts=self._serialize_parts(message.parts),
+                        message_metadata=message.metadata,
+                        message_order=max_order + idx + 1,
+                        retrieval_context=message.retrieval_context.model_dump()
+                        if message.retrieval_context
+                        else None,
+                        status=status,
+                    )
+                    message_models.append(msg_model)
+                    session.add(msg_model)
+
+                await session.flush()
+
+                for msg_model in message_models:
+                    message_ids.append(str(msg_model.id))
+
+                return message_ids
+
         except SQLAlchemyError as e:
-            logger.error("Error adding message")
+            logger.error(f"Error adding messages in batch: {e}")
             raise e
 
-    async def get_messages(self, conversation_id: uuid.UUID) -> List[Message]:
+    async def get_messages(
+        self, conversation_id: uuid.UUID, last_summarized_order: int | None = None
+    ) -> List[Message]:
         """Get all messages for a conversation"""
         try:
             async with DatabaseSession() as session:
-                result = await session.execute(
+                query = (
                     select(MessageModel)
                     .filter_by(conversation_id=conversation_id)
-                    .order_by(MessageModel.message_order)
+                    .order_by(MessageModel.message_order.desc())
+                    .limit(50)
                 )
+                if last_summarized_order:
+                    query = query.where(
+                        MessageModel.message_order > last_summarized_order
+                    )
+                result = await session.execute(query)
                 messages = result.scalars().all()
 
             return [self._model_to_message(msg) for msg in messages]
@@ -194,6 +228,29 @@ class ConversationRepository:
 
         except SQLAlchemyError as e:
             logger.error(f"Error deleting conversation {conversation_id}")
+            raise e
+
+    async def update_message_status(
+        self,
+        message_id: uuid.UUID,
+        status: MessageStatus,
+        error_details: str | None = None,
+    ) -> bool:
+        """Update message status"""
+        try:
+            async with DatabaseSession() as session:
+                query = select(MessageModel).filter_by(id=message_id)
+                result = await session.execute(query)
+                message = result.scalar_one_or_none()
+                if not message:
+                    return False
+                message.status = status
+                message.error_details = error_details
+                await session.flush()
+                await session.refresh(message)
+            return True
+        except SQLAlchemyError as e:
+            logger.error(f"Error updating message status {message_id}")
             raise e
 
     def _serialize_parts(self, parts: List[Part]) -> List[Dict[str, Any]]:
@@ -274,6 +331,7 @@ class ConversationRepository:
 
     def _model_to_message(self, msg_model: MessageModel) -> Message:
         """Convert MessageModel to Message"""
+        msg_model.message_metadata["message_order"] = msg_model.message_order
         return Message(
             id=str(msg_model.id),
             role=msg_model.role,

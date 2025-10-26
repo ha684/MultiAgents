@@ -8,15 +8,16 @@
 #       }
 #     ],
 #     "metadata": {
-#       "conversation_id": "068d35e5-9423-716b-8000-5cd0aeb06bdc",
-#       "kb_id": "068da9ca-5467-713d-8000-edc609d6fcfb",
-#       "user_id": "123",
-#       "app_name": "test"
+#       "conversation_id": "068f1c40-5a4d-7b74-8000-8f6f76ec074b",
+#       "kb_id": "068e7efb-fd5b-7523-8000-3e54cd74ff34",
+#       "user_id": "ha",
+#       "app_name": "ha"
 #     }
 #   },
 #   "agentic": false,
 #   "web_search": false
 # }
+
 
 # from langchain_community.document_loaders import UnstructuredExcelLoader
 # loader = UnstructuredExcelLoader(r"C:\workspace\data\サンプル_QMSシステム開発_RD_エンティティ一覧.xlsx", mode="elements", include_header=True, find_subtable=True)
@@ -35,17 +36,30 @@
 #     file_size=os.path.getsize(r"C:\workspace\data\サンプル_QMSシステム開発_RD_エンティティ一覧.xlsx"),
 #     filename="サンプル_QMSシスム開発_RD_エンティティ一覧.xlsx",
 # )
-# loader = SpreadsheetStrategy({})
+# loader = sheetStrategy({})
 # docs = loader.chunk(r"C:\workspace\data\サンプル_QMSシステム開発_RD_エンティティ一覧.xlsx", db_document)
 
 # for doc in docs:
 #     print(doc.page_content)
 #     print("-"*100)
 
-from langchain_pymupdf4llm import PyMuPDF4LLMLoader
+# from langchain_pymupdf4llm import PyMuPDF4LLMLoader
 
-loader = PyMuPDF4LLMLoader(r"C:\workspace\data\2506.09250v1.pdf")
-docs = loader.load()
-for doc in docs:
-    print(doc.page_content)
-    print("-" * 100)
+# loader = PyMuPDF4LLMLoader(r"C:\workspace\data\2506.09250v1.pdf")
+# docs = loader.load()
+# for doc in docs:
+#     print(doc.page_content)
+#     print("-" * 100)
+
+from src.agents.basic import filename_agent
+import asyncio
+
+
+async def main():
+    response = await filename_agent.ainvoke(
+        query="What is the content of the file document.pdf?"
+    )
+    print(response)
+
+
+asyncio.run(main())

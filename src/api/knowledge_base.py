@@ -62,18 +62,19 @@ async def create_knowledge_base(
 
 
 @router.get("/{kb_id}")
-async def get_knowledge_base_by_id(kb_id: str) -> KnowledgeBaseResponse:
+async def get_knowledge_base_by_id(kb_id: str, user_id: str) -> KnowledgeBaseResponse:
     """
     Get a knowledge base by its ID.
 
     Args:
         kb_id: The ID of the knowledge base.
+        user_id: The ID of the user.
 
     Returns:
         The knowledge base details.
     """
     try:
-        return await kb_service.get_knowledge_base_by_id(kb_id)
+        return await kb_service.get_knowledge_base_by_id(kb_id, user_id)
     except Exception as e:
         raise e
 
@@ -86,6 +87,7 @@ async def query_knowledge_base(kb_id: str, query: str) -> List[Document]:
     Args:
         kb_id: The ID of the knowledge base.
         query: The query string.
+        user_id: The ID of the user.
 
     Returns:
         A list of documents matching the query.
