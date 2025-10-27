@@ -424,7 +424,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
             if not is_valid:
                 logger.error(f"Query '{purpose}' is not valid. Skipping execution.")
                 issues = validation_info["validation"].get("issues") or []
-                # fix: use ", ".join(list) instead of list.join(", ")
                 issue_text = ", ".join(map(str, issues))
                 all_results.append(
                     {
