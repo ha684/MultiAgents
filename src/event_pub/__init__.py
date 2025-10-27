@@ -1,4 +1,4 @@
-from src.config import settings
+# src/event_pub/__init__.py
 from src.event_pub.redis import RedisEventPublisher
 
 
@@ -9,9 +9,7 @@ def get_event_publisher():
     Returns:
         The event publisher instance.
     """
-    publisher = RedisEventPublisher(
-        uri=settings.redis_uri,
-    )
+    publisher = RedisEventPublisher()
     publisher.connect()
     return publisher
 

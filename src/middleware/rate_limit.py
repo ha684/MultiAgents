@@ -206,13 +206,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Create rate limit key for the request"""
         client_ip = self._get_client_ip(request)
 
-        auth_header = request.headers.get("authorization")
+        auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
             try:
                 token = auth_header.split(" ")[1]
-                logger.info(f"Token: {token}")
                 token_data = jwt_manager.verify_token(token)
-                logger.info(f"Token data: {token_data}")
                 if token_data:
                     return f"user:{token_data.user_id}:{request.url.path}"
             except Exception:

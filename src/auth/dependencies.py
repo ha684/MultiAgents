@@ -18,7 +18,11 @@ from src.exceptions.auth_exceptions import (
 from src.config.auth_settings import ROLE_PERMISSIONS
 from zoneinfo import ZoneInfo
 
-security = HTTPBearer(auto_error=False)
+security = HTTPBearer(
+    auto_error=True,
+    scheme_name="Bearer",
+    description="Bearer token for authentication",
+)
 user_repo = UserRepository()
 
 

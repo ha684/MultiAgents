@@ -248,7 +248,7 @@ class TokenData(BaseModel):
     session_id: str
     exp: int
     iat: int
-    jti: str  # JWT ID for token tracking
+    jti: str
 
 
 class ResourcePermissionCheck(BaseModel):
