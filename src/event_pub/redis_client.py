@@ -1,27 +1,35 @@
 # src/event_pub/redis_client.py
 import redis.asyncio as aioredis
 from src.config.settings import settings
+from typing import Optional
 
 
 class RedisClient:
-    client: aioredis.Redis | None = None
+    """Async Redis client manager"""
+
+    _client: Optional[aioredis.Redis] = None
 
     @classmethod
-    def _initialize(cls):
-        """A private class method to run the init logic once."""
-        uri = settings.redis_uri
+    async def get_client(cls) -> aioredis.Redis:
+        """
+        Get or create Redis client (lazy initialization)
+        Được gọi trong event loop context
+        """
+        if cls._client is None:
+            cls._client = aioredis.from_url(
+                settings.redis_uri,
+                decode_responses=True,
+                max_connections=50,
+                socket_connect_timeout=5,
+                socket_keepalive=True,
+            )
+        return cls._client
 
-        cls.client = aioredis.from_url(
-            uri,
-            decode_responses=True,
-        )
 
-    @classmethod
-    def get_client(cls) -> aioredis.Redis:
-        if cls.client is None:
-            cls._initialize()
-
-        return cls.client
-
-
-redis_client = RedisClient.get_client()
+async def get_redis() -> aioredis.Redis:
+    """
+    Dependency function cho FastAPI
+    Usage: redis: Redis = Depends(get_redis)
+    """
+    redis_client = await RedisClient.get_client()
+    return redis_client

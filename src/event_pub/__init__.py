@@ -1,8 +1,9 @@
 # src/event_pub/__init__.py
+import asyncio
 from src.event_pub.redis import RedisEventPublisher
 
 
-def get_event_publisher():
+async def get_event_publisher():
     """
     Get the event publisher instance.
 
@@ -10,8 +11,8 @@ def get_event_publisher():
         The event publisher instance.
     """
     publisher = RedisEventPublisher()
-    publisher.connect()
+    await publisher.connect()
     return publisher
 
 
-event_publisher = get_event_publisher()
+event_publisher = asyncio.run(get_event_publisher())

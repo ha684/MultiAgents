@@ -56,6 +56,7 @@ import os
 import re
 import json
 import string
+import hashlib
 
 # ====== REGEX ======
 ANSWER_RE = re.compile(r"^\s*(\d+)\s*[\.\)]")  # "1. ..." / "1) ..."
@@ -67,7 +68,7 @@ UNDERLINE_BIT = 1 << 1  # char_flags bit 1 = underline (giá trị 2)
 
 # ====== HỖ TRỢ HÌNH ======
 def extract_hlines(page, height_thresh=2.0, y_tol=2.0):
-    """Lấy các đoạn kẻ ngang (x0, x1, y) từ vector graphics."""
+    """Lấy các đoạn kẻ ngang (x0, x1, y) từ vector graphics để fallback nhận underline."""
     hlines = []
     for path in page.get_drawings():
         for item in path.get("items", []):
@@ -134,16 +135,157 @@ def clean_answer_text(full_text):
     return t
 
 
+# ====== LỌC ẢNH & TRỘN TEXT/IMAGE THEO THỨ TỰ ĐỌC ======
+def should_keep_image(
+    rect,
+    page_rect,
+    px_w,
+    px_h,
+    min_area_ratio=0.003,  # 0.3% diện tích trang
+    min_px_side=120,
+):  # cạnh tối thiểu 120 px
+    """Bỏ icon nhỏ, ảnh nền hoặc đường kẻ raster hóa."""
+    page_area = max((page_rect.width * page_rect.height), 1.0)
+    area_ok = (rect.width * rect.height) >= (min_area_ratio * page_area)
+    px_ok = (px_w is None or px_h is None) or (
+        px_w >= min_px_side and px_h >= min_px_side
+    )
+    aspect = rect.width / max(rect.height, 1e-6)
+    not_line = 0.05 <= aspect <= 20.0
+    return area_ok and px_ok and not_line
+
+
+def build_ordered_elements(
+    page, doc, page_hlines, min_area_ratio=0.003, min_px_side=120
+):
+    """
+    Trộn line-text và image theo (y0, x0).
+    - Text: page.get_text("dict") -> từng line
+    - Image: page.get_images + page.get_image_rects(xref) -> vị trí hiển thị thực tế
+    """
+    elements = []
+    page_rect = page.rect
+
+    # --- TEXT LINES ---
+    text_dict = page.get_text("dict")
+    for block in text_dict.get("blocks", []):
+        if block.get("type") != 0:
+            continue
+        for line in block.get("lines", []):
+            spans = line.get("spans", [])
+            if not spans:
+                continue
+            line_text = " ".join(
+                s.get("text", "").strip() for s in spans if s.get("text")
+            ).strip()
+            if not line_text:
+                continue
+            elements.append(
+                {
+                    "type": "text",
+                    "text": line_text,
+                    "spans": spans,
+                    "bbox": tuple(line.get("bbox", (0, 0, 0, 0))),
+                    "hlines": page_hlines,  # dùng fallback underline theo trang này
+                }
+            )
+
+    # --- IMAGES ---
+    xref_cache = {}
+    for img_tup in page.get_images(full=True):
+        xref = img_tup[0]
+        if xref in xref_cache:
+            base_img = xref_cache[xref]
+        else:
+            try:
+                base_img = doc.extract_image(
+                    xref
+                )  # {'image','ext','width','height',...}
+            except Exception:
+                base_img = {}
+            xref_cache[xref] = base_img
+
+        px_w = base_img.get("width")
+        px_h = base_img.get("height")
+        ext = (base_img.get("ext") or "png").lower()
+        img_bytes = base_img.get("image")
+
+        try:
+            rects = page.get_image_rects(xref)  # list of fitz.Rect nơi ảnh được vẽ
+        except Exception:
+            rects = []
+
+        for r in rects:
+            if not should_keep_image(
+                r,
+                page_rect,
+                px_w,
+                px_h,
+                min_area_ratio=min_area_ratio,
+                min_px_side=min_px_side,
+            ):
+                continue
+
+            elements.append(
+                {
+                    "type": "image",
+                    "xref": xref,
+                    "bbox": (r.x0, r.y0, r.x1, r.y1),
+                    "ext": ext,
+                    "img_bytes": img_bytes,  # có thể None nếu extract lỗi, sẽ fallback khi lưu
+                    "px_w": px_w,
+                    "px_h": px_h,
+                }
+            )
+
+    # Sắp xếp theo thứ tự đọc (từ trên xuống, trái qua phải)
+    elements.sort(key=lambda e: (e["bbox"][1], e["bbox"][0]))
+    return elements
+
+
 # ====== TRÍCH TOÀN BỘ PDF & LƯU JSON ======
-def extract_questions_answers_images(pdf_path, out_img_dir, out_json_path):
+def extract_questions_answers_images(
+    pdf_path,
+    out_img_dir,
+    out_json_path,
+    save_all_images=True,
+    min_area_ratio=0.003,
+    min_px_side=120,
+    store_relative_paths=True,
+):
+    """
+    - Gán ảnh cho câu hỏi theo đúng thứ tự đọc (ảnh xuất hiện sau "Câu N" -> thuộc câu N).
+    - Lọc icon/ảnh nền bé; khử trùng lặp ảnh theo hash nội dung.
+    - Nhận diện đáp án đúng bằng underline (char_flags) + fallback vector line.
+    - JSON:
+        * answer           : 'C' (tương thích cũ)
+        * answer_text      : 'nội dung đáp án đúng'
+        * answer_full      : 'C. nội dung đáp án đúng'
+        * every_choices    : ['A. ...', 'B. ...', ...]
+        * image_path       : ảnh đầu tiên (relative hoặc absolute tuỳ store_relative_paths)
+        * image_paths      : toàn bộ ảnh của câu (cùng kiểu path như trên)
+        * image_dir        : thư mục ảnh (absolute) để bạn ghép nếu cần
+    """
+    # Chuẩn hoá & đảm bảo thư mục ảnh
+    out_img_dir = os.path.abspath(out_img_dir)
     os.makedirs(out_img_dir, exist_ok=True)
 
     doc = fitz.open(pdf_path)
     total_pages = len(doc)
 
     all_results = []  # đưa ra JSON
-    current_question = None  # dict cho câu hiện tại
-    current_answer = None  # dict cho đáp án đang gom dòng
+    current_question = None
+    current_answer = None
+
+    def to_json_path(abs_path):
+        """Trả về đường dẫn JSON theo cấu hình store_relative_paths."""
+        if not abs_path:
+            return ""
+        abs_path_norm = os.path.normpath(abs_path)
+        if store_relative_paths:
+            # chỉ lưu tên file để tránh lệch đường dẫn máy khác
+            return os.path.basename(abs_path_norm)
+        return abs_path_norm
 
     def flush_answer():
         """Kết thúc 1 đáp án, tính gạch chân & gom text."""
@@ -167,11 +309,10 @@ def extract_questions_answers_images(pdf_path, out_img_dir, out_json_path):
 
         joined_text = " ".join(current_answer["lines"]).strip()
         joined_text = re.sub(r"\s+", " ", joined_text)
-        # Bỏ "1." / "1)" đầu dòng
         clean_text = clean_answer_text(joined_text)
 
-        # Gán letter
-        letter = current_answer["letter"]  # đã tính khi bắt gặp dòng đầu
+        # Gán letter + lưu
+        letter = current_answer["letter"]
         current_question["choices"].append(
             {"letter": letter, "text": clean_text, "is_correct": has_ul}
         )
@@ -196,22 +337,32 @@ def extract_questions_answers_images(pdf_path, out_img_dir, out_json_path):
             f"{c['letter']}. {c['text']}" for c in current_question["choices"]
         ]
 
-        # đáp án đúng → letter
+        # đáp án đúng
         correct_letter = ""
+        correct_text = ""
         for c in current_question["choices"]:
             if c["is_correct"]:
                 correct_letter = c["letter"]
+                correct_text = c["text"]
                 break
 
-        # ảnh (nếu đã trích)
-        image_path = current_question.get("image_path", "")
+        answer_full = (
+            f"{correct_letter}. {correct_text}".strip(". ").strip()
+            if correct_letter
+            else ""
+        )
 
+        image_paths_abs = [im["path"] for im in current_question.get("images", [])]
+        image_paths_json = [to_json_path(p) for p in image_paths_abs]
+        image_path_json = image_paths_json[0] if image_paths_json else ""
         all_results.append(
             {
                 "question": q_text,
                 "answer": correct_letter,
-                "every_choices": every_choices_list,  # nếu muốn chuỗi, có thể: " | ".join(every_choices_list)
-                "image_path": image_path,
+                "answer_text": correct_text,
+                "answer_full": answer_full,
+                "every_choices": every_choices_list,
+                "image_name": image_path_json,
             }
         )
 
@@ -220,41 +371,16 @@ def extract_questions_answers_images(pdf_path, out_img_dir, out_json_path):
     # === DUYỆT TỪNG TRANG, GOM TEXT LINE + IMAGE BLOCK THEO THỨ TỰ Y ===
     for page_num in range(total_pages):
         page = doc[page_num]
-        text_dict = page.get_text("dict")
-        hlines = extract_hlines(page)
+        page_hlines = extract_hlines(page)
 
         # Gom element (text lines + images), sort theo y0 rồi x0 để giữ thứ tự đọc
-        elements = []
-        for block in text_dict.get("blocks", []):
-            btype = block.get("type")
-            bb = tuple(block.get("bbox", (0, 0, 0, 0)))
-            if btype == 0:  # text
-                for line in block.get("lines", []):
-                    spans = line.get("spans", [])
-                    if not spans:
-                        continue
-                    line_text = " ".join(
-                        s.get("text", "").strip() for s in spans if s.get("text")
-                    )
-                    line_text = re.sub(r"\s+", " ", line_text).strip()
-                    if not line_text:
-                        continue
-                    elements.append(
-                        {
-                            "type": "text",
-                            "text": line_text,
-                            "spans": spans,
-                            "bbox": tuple(line.get("bbox", (0, 0, 0, 0))),
-                            "hlines": hlines,  # vector lines của trang này (dùng fallback)
-                        }
-                    )
-            elif btype == 1:  # image
-                xref = block.get("xref")
-                if xref:
-                    elements.append({"type": "image", "xref": int(xref), "bbox": bb})
-
-        # sort
-        elements.sort(key=lambda e: (e["bbox"][1], e["bbox"][0]))
+        elements = build_ordered_elements(
+            page,
+            doc,
+            page_hlines,
+            min_area_ratio=min_area_ratio,
+            min_px_side=min_px_side,
+        )
 
         # === ĐỌC ELEMENT THEO THỨ TỰ ===
         for el in elements:
@@ -272,7 +398,7 @@ def extract_questions_answers_images(pdf_path, out_img_dir, out_json_path):
                         "number": q_num,
                         "question_full": [text],  # có thể kéo dài nhiều dòng
                         "choices": [],
-                        "image_path": "",  # sẽ gán khi gặp ảnh đầu tiên trong phạm vi câu này
+                        "images": [],  # lưu danh sách ảnh
                     }
                     current_answer = None
                     continue
@@ -284,8 +410,6 @@ def extract_questions_answers_images(pdf_path, out_img_dir, out_json_path):
                         # chốt đáp án trước (nếu có)
                         flush_answer()
                         num_str = m_a.group(1) if m_a else None
-                        # map sang letter
-                        # ưu tiên từ số ở tiền tố; nếu bị lỗi, fallback theo thứ tự xuất hiện
                         fallback_idx = len(current_question["choices"])
                         letter = num_to_letter(num_str, fallback_index=fallback_idx)
 
@@ -298,38 +422,69 @@ def extract_questions_answers_images(pdf_path, out_img_dir, out_json_path):
                         }
                         continue
 
-                    # Nếu đang gom 1 đáp án => đây là dòng tiếp nối của đáp án
+                    # Dòng tiếp nối của đáp án
                     if current_answer is not None:
                         current_answer["lines"].append(text)
                         current_answer["line_spans"].append(el["spans"])
                         current_answer["line_bboxes"].append(el["bbox"])
                         current_answer["line_hlines"].append(el["hlines"])
-                    # Nếu chưa đến đáp án, thì đây là phần mô tả dài của câu hỏi
+                    # Phần mô tả dài của câu hỏi
                     elif current_question is not None:
                         current_question["question_full"].append(text)
 
             elif el["type"] == "image":
-                # Ảnh đầu tiên kể từ khi thấy "Câu N" cho tới trước "Câu N+1"
-                if current_question is not None and not current_question.get(
-                    "image_path"
-                ):
+                # Ảnh xuất hiện trong phạm vi của câu hiện tại
+                if current_question is not None:
                     try:
-                        img = doc.extract_image(el["xref"])
-                        img_bytes = img["image"]
-                        ext = img.get("ext", "png") or "png"
-                        filename = f"Q{current_question['number']}.{ext.lower()}"
-                        save_path = os.path.join(out_img_dir, filename)
-                        # nếu đã tồn tại (câu bị lặp ảnh), ghi đè nhẹ
-                        with open(save_path, "wb") as f:
+                        # Ưu tiên bytes đã cache
+                        img_bytes = el.get("img_bytes")
+                        ext = el.get("ext", "png")
+                        if not img_bytes:
+                            img = doc.extract_image(el["xref"])
+                            img_bytes = img["image"]
+                            ext = (img.get("ext") or "png").lower()
+
+                        # Khử trùng lặp theo hash (trường hợp cùng xref vẽ nhiều lần / scale khác)
+                        h = hashlib.md5(img_bytes).hexdigest()
+                        existing_hashes = {
+                            x.get("hash") for x in current_question["images"]
+                        }
+                        if h in existing_hashes:
+                            continue
+
+                        # Tên file: Q{number}_{index}.{ext}
+                        idx = len(current_question["images"]) + 1
+                        fname = f"Q{current_question['number']}_{idx}.{ext}"
+                        abs_save_path = os.path.join(out_img_dir, fname)
+                        abs_save_path = os.path.normpath(abs_save_path)
+
+                        # Lưu file
+                        with open(abs_save_path, "wb") as f:
                             f.write(img_bytes)
-                        current_question["image_path"] = save_path
+
+                        # Xác thực tồn tại
+                        if not os.path.exists(abs_save_path):
+                            # rất hiếm: thử đổi sang .png
+                            alt_path = os.path.splitext(abs_save_path)[0] + ".png"
+                            with open(alt_path, "wb") as f:
+                                f.write(img_bytes)
+                            abs_save_path = alt_path
+
+                        current_question["images"].append(
+                            {
+                                "path": abs_save_path,  # luôn absolute để chắc chắn
+                                "hash": h,
+                                "bbox": el["bbox"],
+                                "px": (el.get("px_w"), el.get("px_h")),
+                            }
+                        )
+
                     except Exception:
                         # Không cản luồng nếu trích ảnh lỗi
                         pass
 
     # Hết tài liệu: chốt phần đang dở
     flush_question(final=True)
-
     doc.close()
 
     # Ghi JSON
@@ -345,11 +500,26 @@ if __name__ == "__main__":
     out_img_dir = r"C:\Users\ha.phan\Downloads\bo600_images"
     out_json_path = r"C:\Users\ha.phan\Downloads\bo600_questions.json"
 
+    # Tuỳ chỉnh ngưỡng lọc ảnh nếu còn dính icon nhỏ:
+    # - Tăng min_area_ratio lên 0.005 (0.5%) hoặc
+    # - Tăng min_px_side lên 160
     try:
-        results = extract_questions_answers_images(pdf_path, out_img_dir, out_json_path)
+        results = extract_questions_answers_images(
+            pdf_path=pdf_path,
+            out_img_dir=out_img_dir,
+            out_json_path=out_json_path,
+            save_all_images=True,  # True: lưu mọi ảnh của câu; False: chỉ quan tâm ảnh đầu
+            min_area_ratio=0.003,
+            min_px_side=120,
+            store_relative_paths=True,  # True -> trong JSON chỉ ghi tên file; kèm "image_dir"
+        )
         print(f"✅ Đã trích {len(results)} câu hỏi.")
         print(f"💾 JSON: {out_json_path}")
-        print(f"🖼️ Ảnh lưu tại: {out_img_dir}")
+        print(f"🖼️ Ảnh lưu tại: {os.path.abspath(out_img_dir)}")
+        print(
+            "ℹ️  Trong JSON: 'image_dir' là thư mục ảnh (absolute), "
+            "'image_path'/'image_paths' là tên file (relative)."
+        )
     except FileNotFoundError:
         print(f"❌ Không tìm thấy file: {pdf_path}")
     except Exception as e:

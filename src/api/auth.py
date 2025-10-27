@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 import httpx
+import redis.asyncio as aioredis
 
 from src.auth.dependencies import get_current_user, require_admin
 from src.config.settings import settings
@@ -29,7 +30,7 @@ from src.models.auth import (
 from src.services.auth_service import AuthenticationService
 from src.db.models.user import UserStatus
 from src.services.security_services import token_manager
-from src.event_pub.redis_client import redis_client
+from src.event_pub.redis_client import get_redis
 from src.utils.logger_conf import logger
 
 
@@ -51,6 +52,7 @@ async def google_oauth_redirect(
     redirect_uri: Optional[str] = Query(
         None, description="Frontend redirect URI after OAuth"
     ),
+    redis_client: aioredis.Redis = Depends(get_redis),
 ):
     """
     Initiate Google OAuth flow
@@ -89,6 +91,7 @@ async def google_oauth_redirect(
 async def google_oauth_callback(
     code: str = Query(...),
     state: str = Query(None),
+    redis_client: aioredis.Redis = Depends(get_redis),
 ):
     """
     Google OAuth callback - exchanges Google code for our temporary auth code
@@ -99,7 +102,7 @@ async def google_oauth_callback(
 
     data = json.loads(stored)
     redirect_uri = data["redirect_uri"]
-    redis_client.delete(f"oauth_state:{state}")
+    await redis_client.delete(f"oauth_state:{state}")
 
     try:
         token_url = "https://oauth2.googleapis.com/token"
@@ -179,7 +182,7 @@ async def google_oauth_callback(
 
         auth_code = secrets.token_urlsafe(32)
 
-        redis_client.setex(
+        await redis_client.setex(
             f"auth_code:{auth_code}",
             300,
             json.dumps(
@@ -202,12 +205,14 @@ async def google_oauth_callback(
 
 
 @router.post("/exchange-code")
-async def exchange_auth_code(code: str = Body(..., embed=True)):
+async def exchange_auth_code(
+    code: str = Body(..., embed=True), redis_client: aioredis.Redis = Depends(get_redis)
+):
     """
     Exchange temporary authorization code for access & refresh tokens
     Frontend calls this immediately after OAuth redirect
     """
-    stored = redis_client.get(f"auth_code:{code}")
+    stored = await redis_client.get(f"auth_code:{code}")
 
     if not stored:
         raise HTTPException(
@@ -215,7 +220,7 @@ async def exchange_auth_code(code: str = Body(..., embed=True)):
         )
 
     data = json.loads(stored)
-    redis_client.delete(f"auth_code:{code}")
+    await redis_client.delete(f"auth_code:{code}")
 
     return {
         "access_token": data["access_token"],

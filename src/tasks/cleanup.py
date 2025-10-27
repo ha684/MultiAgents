@@ -2,7 +2,7 @@
 from typing import Any, Dict
 from celery import shared_task
 from src.db.repository.document import DocumentRepository
-from src.event_pub import get_event_publisher
+from src.event_pub import event_publisher
 from src.models.document import DocumentProcessingStatusResponse, DocumentStatusEnum
 from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 from src.utils.logger_conf import logger
@@ -26,8 +26,6 @@ def cleanup_timeout_documents(self) -> Dict[str, Any]:
     logger.info("Starting cleanup of timeout documents")
 
     doc_repo = DocumentRepository()
-
-    event_publisher = get_event_publisher()
 
     try:
         # Find documents that have been processing for more than 1 hour
@@ -56,7 +54,7 @@ def cleanup_timeout_documents(self) -> Dict[str, Any]:
 
                 if updated_document:
                     # Publish timeout event
-                    event_publisher.publish(
+                    await event_publisher.publish(
                         DOCUMENT_STATUS_CHANNEL,
                         DocumentProcessingStatusResponse(
                             id=document.id,
