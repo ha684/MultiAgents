@@ -4,7 +4,7 @@ import asyncio
 
 from src.utils.decorators import singleton
 from src.event_pub.base import BaseEventPublisher
-from src.event_pub.redis_client import get_redis
+from src.event_pub.redis_client import redis_client
 from src.utils.logger_conf import logger
 
 
@@ -15,35 +15,31 @@ class RedisEventPublisher(BaseEventPublisher):
     """
 
     def __init__(self):
-        self.redis_client = None
+        self.redis_client = redis_client
 
-    async def connect(self):
+    def connect(self):
         """
         Establishes a connection to the Redis server.
         """
         try:
-            redis_client = await get_redis()
-            self.redis_client = redis_client
-            await self.redis_client.ping()
+            self.redis_client.ping()
             logger.info("RedisEventPublisher: Successfully connected to Redis.")
         except Exception:
             raise ConnectionError(
                 "Could not connect to Redis. Run docker compose first"
             )
 
-    async def disconnect(self):
+    def disconnect(self):
         """
         Closes the connection to the Redis server.
         """
         try:
-            if self.redis_client:
-                await self.redis_client.aclose()
-                self.redis_client = None
+            self.redis_client.close()
             logger.info("RedisEventPublisher: Disconnected from Redis.")
         except Exception:
             logger.warning("RedisEventPublisher: Error during disconnection.")
 
-    async def publish(self, channel: str, event_data: dict):
+    def publish(self, channel: str, event_data: dict):
         """
         Publishes an event to a specified Redis channel.
 
@@ -54,7 +50,7 @@ class RedisEventPublisher(BaseEventPublisher):
         try:
             message = self._serialize_event(event_data)
             # The publish command returns the number of subscribers that received the message
-            subscribers_count = await self.redis_client.publish(channel, message)
+            subscribers_count = self.redis_client.publish(channel, message)
             logger.info(
                 f"RedisEventPublisher: Published to '{channel}': {message} (Subscribers: {subscribers_count})"
             )

@@ -10,8 +10,7 @@ from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
-
-# from langchain_redis import RedisCache
+from langchain_redis import RedisCache
 from langchain.globals import set_llm_cache
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -32,8 +31,7 @@ from src.middleware.exception_handler import exception_handler
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.common.types import HealthCheckResponse
 from src.tracking.observability import setup_tracing
-from src.event_pub.redis_client import get_redis
-from src.utils.redis_cache import RedisCache
+from src.event_pub.redis_client import redis_client
 
 
 @asynccontextmanager
@@ -41,6 +39,7 @@ async def lifespan(app: FastAPI):
     """Lifespan event handler for FastAPI application"""
     logger.info("Starting up application...")
     redis_cache = RedisCache(
+        redis_client=redis_client,
         ttl=3600,
     )
     try:
@@ -63,9 +62,6 @@ async def lifespan(app: FastAPI):
     try:
         await database_connector.close()
         await redis_cache.aclear()
-        redis_client = await get_redis()
-        if redis_client:
-            await redis_client.aclose()
         logger.info("Database connection closed successfully")
     except Exception as e:
         logger.error(f"Error closing database connection: {e}")

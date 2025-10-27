@@ -1,7 +1,7 @@
 # src/api/websocket.py
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from src.services.document_service import DocumentService
-from src.event_pub import event_publisher
+from src.event_pub import get_event_publisher
 from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 import uuid
 import asyncio
@@ -18,7 +18,7 @@ class WebSocketManager:
         self.websocket = websocket
         self.document_id = document_id
         self.document_service = DocumentService()
-        self.event_publisher = event_publisher
+        self.event_publisher = get_event_publisher()
         self.is_connected = False
 
     async def connect(self) -> bool:
