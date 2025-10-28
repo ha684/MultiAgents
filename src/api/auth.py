@@ -75,7 +75,7 @@ async def google_oauth_redirect(
 
         redirect_uri = redirect_uri or settings.frontend_url
 
-        await redis_client.setex(
+        redis_client.setex(
             f"oauth_state:{state}", 600, json.dumps({"redirect_uri": redirect_uri})
         )
 
@@ -93,7 +93,7 @@ async def google_oauth_callback(
     """
     Google OAuth callback - exchanges Google code for our temporary auth code
     """
-    stored = await redis_client.get(f"oauth_state:{state}")
+    stored = redis_client.get(f"oauth_state:{state}")
     if not stored:
         raise HTTPException(400, "Invalid or expired OAuth state")
 
