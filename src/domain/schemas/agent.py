@@ -1,6 +1,9 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional
+# src/domain/schemas/agent.py
+
 from enum import Enum
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class RelevantFolder(BaseModel):

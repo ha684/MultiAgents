@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
+# src/domain/schemas/knowledge_base.py
 from datetime import datetime
+from typing import List, Optional
 import uuid
+
+from pydantic import BaseModel, Field
 
 
 class KnowledgeBaseCreateRequest(BaseModel):

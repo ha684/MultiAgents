@@ -1,7 +1,8 @@
-# src/common/streaming.py
-from typing import Dict, Any, Optional, Union
+# src/domain/entities/streaming.py
 import json
-from src.models.streaming import StreamEventType, StreamEvent, StreamPhase
+from typing import Any, Dict, Optional, Union
+
+from src.domain.schemas.stream import StreamEvent, StreamEventType, StreamPhase
 
 
 class StreamEventBuilder:

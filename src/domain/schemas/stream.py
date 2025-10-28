@@ -1,8 +1,9 @@
-from enum import Enum
+# src/domain/schemas/stream.py
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional
-import uuid
 from datetime import datetime
+from enum import Enum
+from typing import Any, Dict, Optional
+import uuid
 from zoneinfo import ZoneInfo
 
 

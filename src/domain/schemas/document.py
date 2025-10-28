@@ -1,9 +1,11 @@
+# src/domain/schemas/document.py
+from datetime import datetime
 from enum import Enum
 import json
-from pydantic import BaseModel, field_validator
-from typing import Any, Optional, List
-from datetime import datetime
+from typing import Any, List, Optional
 import uuid
+
+from pydantic import BaseModel, field_validator
 
 
 class DocumentStatusEnum(str, Enum):

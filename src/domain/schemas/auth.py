@@ -12,6 +12,7 @@ from src.exceptions.auth_exceptions import (
 import re
 
 
+# Enums
 class UserRole(str, Enum):
     ADMIN = "admin"
     USER = "user"
@@ -25,6 +26,7 @@ class UserStatus(str, Enum):
     PENDING_VERIFICATION = "pending_verification"
 
 
+# Authentication Request Models
 class UserRegistrationRequest(BaseModel):
     email: EmailStr
     username: str
@@ -148,6 +150,7 @@ class OAuthCallbackRequest(BaseModel):
     state: Optional[str] = None
 
 
+# Response Models
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
@@ -241,6 +244,7 @@ class ErrorResponse(BaseModel):
     metadata: Optional[Dict[str, Any]] = None
 
 
+# Internal Models
 class TokenData(BaseModel):
     user_id: str
     email: str
@@ -276,5 +280,7 @@ class RequestContext(BaseModel):
     user_id: Optional[str] = None
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
+    timestamp: datetime
+    correlation_id: Optional[str] = None
     timestamp: datetime
     correlation_id: Optional[str] = None

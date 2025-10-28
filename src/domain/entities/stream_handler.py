@@ -1,7 +1,10 @@
+# src/domain/entities/stream_handler.py
+
 from typing import Optional
-from src.models.streaming import StreamPhase
+
 from src.config.graph_configs import GRAPH_CONFIGS
-from src.common.streaming import StreamEventBuilder
+from src.domain.entities.streaming import StreamEventBuilder
+from src.domain.schemas.stream import StreamPhase
 from src.utils.logger_conf import logger
 
 
