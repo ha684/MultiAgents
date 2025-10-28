@@ -50,16 +50,9 @@
 # for doc in docs:
 #     print(doc.page_content)
 #     print("-" * 100)
+# -*- coding: utf-8 -*-
 
-from src.agents.basic import filename_agent
-import asyncio
+from src.rag.embeding import embedding
 
-
-async def main():
-    response = await filename_agent.ainvoke(
-        query="What is the content of the file document.pdf?"
-    )
-    print(response)
-
-
-asyncio.run(main())
+embeddings = embedding.embed_query_sync("Hello, world!")
+print(embeddings)

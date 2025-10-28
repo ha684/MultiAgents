@@ -1,0 +1,27 @@
+# src/event_pub/redis_client.py
+import redis.asyncio as aioredis
+from src.config.settings import settings
+
+
+class RedisClient:
+    client: aioredis.Redis | None = None
+
+    @classmethod
+    def _initialize(cls):
+        """A private class method to run the init logic once."""
+        uri = settings.redis_uri
+
+        cls.client = aioredis.from_url(
+            uri,
+            decode_responses=True,
+        )
+
+    @classmethod
+    def get_client(cls) -> aioredis.Redis:
+        if cls.client is None:
+            cls._initialize()
+
+        return cls.client
+
+
+redis_client = RedisClient.get_client()

@@ -1,3 +1,4 @@
+# src/event_pub/base.py
 import json
 import abc
 

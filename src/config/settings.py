@@ -1,5 +1,6 @@
+# src/config/settings.py
 import os
-from typing import Optional
+from typing import List, Optional
 from pydantic import field_validator, ValidationInfo
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from datetime import timedelta
@@ -58,6 +59,9 @@ class Settings(BaseSettings):
     google_client_id: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")
     google_client_secret: Optional[str] = os.getenv("GOOGLE_CLIENT_SECRET")
     google_refresh_token: Optional[str] = os.getenv("GOOGLE_REFRESH_TOKEN")
+    google_redirect_uri: str = "http://localhost:8000/auth/google/callback"
+    google_scopes: List[str] = ["https://www.googleapis.com/auth/gmail.send"]
+    frontend_url: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

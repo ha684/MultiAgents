@@ -1,15 +1,17 @@
 # src/utils/security.py
-import secrets
-import uuid
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 from typing import Optional
-from passlib.context import CryptContext
-from src.config.auth_settings import auth_settings
-from src.models.auth import TokenData, UserRole
+from zoneinfo import ZoneInfo
 import hashlib
 import hmac
 import jwt
+import secrets
+import uuid
+
+from passlib.context import CryptContext
+
+from src.config.auth_settings import auth_settings
+from src.models.auth import TokenData, UserRole
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -89,7 +91,7 @@ class JWTManager:
 
     def create_refresh_token(self) -> str:
         """Create a refresh token (just a secure random string)"""
-        return SecurityManager.generate_secure_token(64)
+        return SecurityManager.generate_secure_token()
 
     def verify_token(self, token: str) -> Optional[TokenData]:
         """Verify and decode a JWT token"""
@@ -98,7 +100,6 @@ class JWTManager:
                 token, self.secret_key, algorithms=[self.algorithm], issuer=self.issuer
             )
 
-            # Validate required fields
             required_fields = [
                 "user_id",
                 "email",
@@ -224,7 +225,6 @@ class AccessControlManager:
         return [f"user_{user_id}_*"]
 
 
-# Create global instances
 security_manager = SecurityManager()
 jwt_manager = JWTManager()
 token_manager = TokenManager()

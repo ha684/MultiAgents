@@ -116,17 +116,20 @@ class UserRepository:
     async def update_user(self, user_id: str, update_data: Dict[str, Any]) -> User:
         """Update user information"""
         try:
-            user = await self.get_user_by_id(user_id)
-            if not user:
-                raise UserNotFoundException()
-
-            for field, value in update_data.items():
-                if hasattr(user, field):
-                    setattr(user, field, value)
-
-            user.updated_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
             async with DatabaseSession() as session:
-                await session.flush()
+                result = await session.execute(
+                    select(User).where(User.id == uuid.UUID(user_id))
+                )
+                user = result.scalar_one_or_none()
+                if not user:
+                    raise UserNotFoundException()
+
+                for field, value in update_data.items():
+                    if hasattr(user, field):
+                        setattr(user, field, value)
+
+                user.updated_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+                await session.commit()
                 await session.refresh(user)
 
             return user

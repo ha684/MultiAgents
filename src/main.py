@@ -31,6 +31,7 @@ from src.middleware.exception_handler import exception_handler
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.common.types import HealthCheckResponse
 from src.tracking.observability import setup_tracing
+from src.event_pub.redis_client import redis_client
 
 
 @asynccontextmanager
@@ -38,7 +39,7 @@ async def lifespan(app: FastAPI):
     """Lifespan event handler for FastAPI application"""
     logger.info("Starting up application...")
     redis_cache = RedisCache(
-        redis_url=settings.redis_uri,
+        redis_client=redis_client,
         ttl=3600,
     )
     try:
