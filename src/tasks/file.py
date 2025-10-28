@@ -291,7 +291,7 @@ async def _publish_status_event(
     """Publish document status event"""
     try:
         event_publisher = await get_event_publisher()
-        event_publisher.publish(
+        await event_publisher.publish(
             DOCUMENT_STATUS_CHANNEL,
             DocumentProcessingStatusResponse(
                 id=document.id,
