@@ -4,7 +4,7 @@ import asyncio
 
 from src.utils.decorators import singleton
 from src.event_pub.base import BaseEventPublisher
-from src.event_pub.redis_client import redis_client
+from src.connector.redis_conn import redis_client
 from src.utils.logger_conf import logger
 
 

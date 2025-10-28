@@ -2,23 +2,23 @@
 import time
 from typing import Dict, Optional, Callable, Any, Tuple
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 import redis
+
 from src.config.auth_settings import RATE_LIMIT_CONFIG
 from src.services.security_services import jwt_manager
+from src.connector.redis_conn import redis_client
 from src.utils.logger_conf import logger
-import os
-from zoneinfo import ZoneInfo
 
 
 class RedisRateLimiter:
     """Redis-based rate limiter"""
 
-    def __init__(
-        self, redis_client: Optional[redis.Redis] = None, key_prefix: str = "rate_limit"
-    ):
+    def __init__(self, key_prefix: str = "rate_limit"):
         """
         Initialize Redis rate limiter
 
@@ -26,19 +26,14 @@ class RedisRateLimiter:
             redis_client: Redis client instance. If None, creates default connection
             key_prefix: Prefix for Redis keys to avoid collisions
         """
-        self.redis = redis_client or redis.Redis(
-            host=os.getenv("REDIS_HOST", "redis"),
-            port=os.getenv("REDIS_PORT", 6379),
-            db=0,
-            decode_responses=True,
-        )
+        self.redis = redis_client
         self.key_prefix = key_prefix
 
     def _get_redis_key(self, key: str) -> str:
         """Generate Redis key with prefix"""
         return f"{self.key_prefix}:{key}"
 
-    def is_allowed(
+    async def is_allowed(
         self, key: str, limit: int, window_seconds: int
     ) -> Tuple[bool, Dict[str, Any]]:
         """
@@ -49,18 +44,20 @@ class RedisRateLimiter:
         now = time.time()
         redis_key = self._get_redis_key(key)
 
-        pipe = self.redis.pipeline()
+        pipe = await self.redis.pipeline()
 
         try:
-            pipe.zremrangebyscore(redis_key, 0, now - window_seconds)
+            await pipe.zremrangebyscore(redis_key, 0, now - window_seconds)
 
-            pipe.zcard(redis_key)
+            await pipe.zcard(redis_key)
 
-            results = pipe.execute()
+            results = await pipe.execute()
             current_count = results[1]
 
             if current_count >= limit:
-                oldest_requests = self.redis.zrange(redis_key, 0, 0, withscores=True)
+                oldest_requests = await self.redis.zrange(
+                    redis_key, 0, 0, withscores=True
+                )
                 if oldest_requests:
                     oldest_time = oldest_requests[0][1]
                     retry_after = int(window_seconds - (now - oldest_time)) + 1
@@ -78,9 +75,9 @@ class RedisRateLimiter:
                     "retry_after": retry_after,
                 }
             unique_score = now + (time.time_ns() % 1000000) / 1000000000
-            self.redis.zadd(redis_key, {str(unique_score): unique_score})
-            self.redis.expire(redis_key, window_seconds + 1)
-            oldest_requests = self.redis.zrange(redis_key, 0, 0, withscores=True)
+            await self.redis.zadd(redis_key, {str(unique_score): unique_score})
+            await self.redis.expire(redis_key, window_seconds + 1)
+            oldest_requests = await self.redis.zrange(redis_key, 0, 0, withscores=True)
             reset_time = (
                 datetime.fromtimestamp(
                     oldest_requests[0][1] + window_seconds,
@@ -104,9 +101,9 @@ class RedisRateLimiter:
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Rate limiting middleware"""
 
-    def __init__(self, app, rate_limiter: Optional[RedisRateLimiter] = None):
+    def __init__(self, app):
         super().__init__(app)
-        self.rate_limiter = rate_limiter or RedisRateLimiter()
+        self.rate_limiter = RedisRateLimiter()
         self.config = RATE_LIMIT_CONFIG
 
         self.route_configs = {
@@ -128,7 +125,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         rate_limit_key = self._create_rate_limit_key(request)
 
-        allowed, limit_info = self.rate_limiter.is_allowed(
+        allowed, limit_info = await self.rate_limiter.is_allowed(
             rate_limit_key,
             rate_config["requests"],
             int(rate_config["window"].total_seconds()),

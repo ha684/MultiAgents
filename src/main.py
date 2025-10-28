@@ -10,8 +10,6 @@ from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
-from langchain_redis import RedisCache
-from langchain.globals import set_llm_cache
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.api.document import router as document_router
@@ -31,24 +29,26 @@ from src.middleware.exception_handler import exception_handler
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.common.types import HealthCheckResponse
 from src.tracking.observability import setup_tracing
-from src.event_pub.redis_client import redis_client
+import redis.asyncio as redis
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for FastAPI application"""
     logger.info("Starting up application...")
-    redis_cache = RedisCache(
-        redis_client=redis_client,
-        ttl=3600,
-    )
+    # redis_cache = RedisCache(
+    #     redis_client=redis_client,
+    #     ttl=3600,
+    # )
+    app.state.redis = redis.from_url(settings.redis_uri, decode_responses=True)
+    await app.state.redis.ping()
     try:
         setup_tracing(app)
         await database_connector.initialize()
         logger.info("Database connection initialized successfully")
         await vector_storage_migration.run_migrations()
         logger.info("Vector storage migration completed successfully")
-        set_llm_cache(redis_cache)
+        # set_llm_cache(redis_cache)
         logger.info("LLM cache initialized successfully")
     except Exception as e:
         raise ConnectionError(
@@ -61,7 +61,8 @@ async def lifespan(app: FastAPI):
 
     try:
         await database_connector.close()
-        await redis_cache.aclear()
+        await app.state.redis.aclose()
+        # await redis_cache.aclear()
         logger.info("Database connection closed successfully")
     except Exception as e:
         logger.error(f"Error closing database connection: {e}")
