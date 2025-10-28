@@ -1,101 +1,14 @@
 # src/middleware/rate_limiting.py
-import time
-from typing import Dict, Optional, Callable, Any, Tuple
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from typing import Optional, Callable
 
 from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
-import redis
 
 from src.config.auth_settings import RATE_LIMIT_CONFIG
 from src.services.security_services import jwt_manager
-from src.connector.redis_conn import redis_client
+from src.connector import redis_client
 from src.utils.logger_conf import logger
-
-
-class RedisRateLimiter:
-    """Redis-based rate limiter"""
-
-    def __init__(self, key_prefix: str = "rate_limit"):
-        """
-        Initialize Redis rate limiter
-
-        Args:
-            redis_client: Redis client instance. If None, creates default connection
-            key_prefix: Prefix for Redis keys to avoid collisions
-        """
-        self.redis = redis_client
-        self.key_prefix = key_prefix
-
-    def _get_redis_key(self, key: str) -> str:
-        """Generate Redis key with prefix"""
-        return f"{self.key_prefix}:{key}"
-
-    async def is_allowed(
-        self, key: str, limit: int, window_seconds: int
-    ) -> Tuple[bool, Dict[str, Any]]:
-        """
-        Check if request is allowed under rate limit using Redis
-
-        This uses a sliding window approach with Redis sorted sets
-        """
-        now = time.time()
-        redis_key = self._get_redis_key(key)
-
-        pipe = await self.redis.pipeline()
-
-        try:
-            await pipe.zremrangebyscore(redis_key, 0, now - window_seconds)
-
-            await pipe.zcard(redis_key)
-
-            results = await pipe.execute()
-            current_count = results[1]
-
-            if current_count >= limit:
-                oldest_requests = await self.redis.zrange(
-                    redis_key, 0, 0, withscores=True
-                )
-                if oldest_requests:
-                    oldest_time = oldest_requests[0][1]
-                    retry_after = int(window_seconds - (now - oldest_time)) + 1
-                else:
-                    retry_after = window_seconds
-
-                return False, {
-                    "limit": limit,
-                    "remaining": 0,
-                    "reset_time": datetime.fromtimestamp(
-                        oldest_time + window_seconds, tz=ZoneInfo("Asia/Ho_Chi_Minh")
-                    )
-                    if oldest_requests
-                    else datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
-                    "retry_after": retry_after,
-                }
-            unique_score = now + (time.time_ns() % 1000000) / 1000000000
-            await self.redis.zadd(redis_key, {str(unique_score): unique_score})
-            await self.redis.expire(redis_key, window_seconds + 1)
-            oldest_requests = await self.redis.zrange(redis_key, 0, 0, withscores=True)
-            reset_time = (
-                datetime.fromtimestamp(
-                    oldest_requests[0][1] + window_seconds,
-                    tz=ZoneInfo("Asia/Ho_Chi_Minh"),
-                )
-                if oldest_requests
-                else datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
-            )
-
-            return True, {
-                "limit": limit,
-                "remaining": limit - (current_count + 1),
-                "reset_time": reset_time,
-                "retry_after": None,
-            }
-
-        except redis.RedisError as e:
-            raise Exception(f"Redis rate limiter error: {e}")
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -103,7 +16,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app):
         super().__init__(app)
-        self.rate_limiter = RedisRateLimiter()
+        self.redis_client = redis_client
         self.config = RATE_LIMIT_CONFIG
 
         self.route_configs = {
@@ -125,7 +38,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         rate_limit_key = self._create_rate_limit_key(request)
 
-        allowed, limit_info = await self.rate_limiter.is_allowed(
+        allowed, limit_info = await self.redis_client.rate_limit(
             rate_limit_key,
             rate_config["requests"],
             int(rate_config["window"].total_seconds()),

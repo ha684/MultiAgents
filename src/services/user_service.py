@@ -1,33 +1,41 @@
 # src/services/user_service.py
+
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
+import asyncio
+import uuid
+from zoneinfo import ZoneInfo
+
+from sqlalchemy import and_, update, delete, func
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from sqlalchemy import and_, update, delete, func
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
-import uuid
-from src.db.repository.database_session import DatabaseSession
-from src.services.security_services import token_manager
+
+from src.config.auth_settings import auth_settings, ROLE_PERMISSIONS
+from src.connector import redis_client
 from src.db.models.user import (
-    User,
-    RefreshToken,
-    Permission,
-    UserPermission,
     LoginAttempt,
+    Permission,
+    RefreshToken,
+    User,
+    UserPermission,
     UserRole,
     UserStatus,
 )
-from src.models.auth import UserRegistrationRequest
-from src.services.security_services import security_manager
-from src.config.auth_settings import auth_settings, ROLE_PERMISSIONS
+from src.db.repository.database_session import DatabaseSession
 from src.exceptions.auth_exceptions import (
-    UserNotFoundException,
-    UserAlreadyExistsException,
     DatabaseException,
+    UserAlreadyExistsException,
+    UserNotFoundException,
 )
+from src.models.auth import UserRegistrationRequest
+from src.services.security_services import security_manager, token_manager
+from src.services.utils import send_verification_email
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
-from src.services.utils import send_verification_email
+
+
+USER_BY_ID = "user:by_id"
+USER_BY_EMAIL = "user:by_email"
 
 
 @singleton
@@ -73,27 +81,71 @@ class UserRepository:
 
     async def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email"""
-        try:
-            async with DatabaseSession() as session:
-                result = await session.execute(
-                    select(User).where(User.email == email.lower())
-                )
-            return result.scalar_one_or_none()
-        except Exception as e:
-            logger.error(f"Error getting user by email: {str(e)}")
-            raise DatabaseException("Failed to retrieve user")
+        email_l = email.lower().strip()
+
+        cached = await redis_client.get_obj(USER_BY_EMAIL, email_l)
+        if cached:
+            return _user_from_cache(cached)
+
+        lock_key = f"lock:user:email:{email_l}"
+        locked = await redis_client.get().set(lock_key, "1", nx=True, ex=5)
+
+        if locked:
+            try:
+                async with DatabaseSession() as session:
+                    result = await session.execute(
+                        select(User).where(User.email == email_l)
+                    )
+                    user = result.scalar_one_or_none()
+                    if user:
+                        await redis_client.set_obj(
+                            USER_BY_EMAIL, _user_to_cache(user), email_l
+                        )
+                        await redis_client.set_obj(
+                            USER_BY_ID, _user_to_cache(user), str(user.id)
+                        )
+                    return user
+
+            except Exception as e:
+                logger.error(f"Error getting user by email: {str(e)}")
+                raise DatabaseException("Failed to retrieve user")
+            finally:
+                await redis_client.get().delete(lock_key)
+        else:
+            await asyncio.sleep(0.05)
+            return await self.get_user_by_email(email)
 
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
         """Get user by ID"""
-        try:
-            async with DatabaseSession() as session:
-                result = await session.execute(
-                    select(User).where(User.id == uuid.UUID(user_id))
-                )
-            return result.scalar_one_or_none()
-        except Exception as e:
-            logger.error(f"Error getting user by ID: {str(e)}")
-            raise DatabaseException("Failed to retrieve user")
+        uid = str(user_id)
+
+        cached = await redis_client.get_obj(USER_BY_ID, uid)
+        if cached:
+            return _user_from_cache(cached)
+
+        lock_key = f"lock:user:id:{uid}"
+        locked = await redis_client.get().set(lock_key, "1", nx=True, ex=5)
+
+        if locked:
+            try:
+                async with DatabaseSession() as session:
+                    result = await session.execute(
+                        select(User).where(User.id == uuid.UUID(user_id))
+                    )
+                    user = result.scalar_one_or_none()
+                    if user:
+                        await redis_client.set_obj(
+                            USER_BY_ID, _user_to_cache(user), uid
+                        )
+                        return user
+            except Exception as e:
+                logger.error(f"Error getting user by ID: {str(e)}")
+                raise DatabaseException("Failed to retrieve user")
+            finally:
+                await redis_client.get().delete(lock_key)
+        else:
+            await asyncio.sleep(0.05)
+            return await self.get_user_by_id(user_id)
 
     async def get_user_with_permissions(self, user_id: str) -> Optional[User]:
         """Get user with their permissions"""
@@ -124,6 +176,9 @@ class UserRepository:
                 if not user:
                     raise UserNotFoundException()
 
+                old_email = user.email.lower().strip()
+                new_email = update_data.get("email", old_email).lower()
+
                 for field, value in update_data.items():
                     if hasattr(user, field):
                         setattr(user, field, value)
@@ -131,6 +186,9 @@ class UserRepository:
                 user.updated_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
                 await session.commit()
                 await session.refresh(user)
+                await _invalidate_user_cache(
+                    user, old_email if old_email != new_email else None
+                )
 
             return user
         except Exception as e:
@@ -146,7 +204,11 @@ class UserRepository:
                 result = await session.execute(
                     delete(User).where(User.id == uuid.UUID(user_id))
                 )
-            return result.rowcount > 0
+                user_to_delete = result.scalar_one_or_none()
+                if user_to_delete:
+                    await _invalidate_user_cache(user_to_delete)
+                    return True
+                return False
         except Exception as e:
             logger.error(f"Error deleting user: {str(e)}")
             raise DatabaseException("Failed to delete user")
@@ -174,7 +236,7 @@ class UserRepository:
                     user.email_verification_expires = None
                     user.updated_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
                     await session.flush()
-
+                    await _invalidate_user_cache(user)
             return user
         except Exception as e:
             logger.error(f"Error verifying email: {str(e)}")
@@ -184,11 +246,14 @@ class UserRepository:
         """Update user's last login timestamp"""
         try:
             async with DatabaseSession() as session:
-                await session.execute(
+                result = await session.execute(
                     update(User)
                     .where(User.id == uuid.UUID(user_id))
                     .values(last_login_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")))
                 )
+                user = result.scalar_one_or_none()
+                if user:
+                    await _invalidate_user_cache(user)
         except Exception as e:
             logger.error(f"Error updating last login: {str(e)}")
             raise DatabaseException("Failed to update last login")
@@ -210,7 +275,7 @@ class UserRepository:
             user.updated_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
             async with DatabaseSession() as session:
                 await session.flush()
-
+                await _invalidate_user_cache(user)
             return user
         except Exception as e:
             logger.error(f"Error incrementing failed login attempts: {str(e)}")
@@ -220,11 +285,14 @@ class UserRepository:
         """Reset failed login attempts after successful login"""
         try:
             async with DatabaseSession() as session:
-                await session.execute(
+                result = await session.execute(
                     update(User)
                     .where(User.id == uuid.UUID(user_id))
                     .values(failed_login_attempts=0, account_locked_until=None)
                 )
+                user = result.scalar_one_or_none()
+                if user:
+                    await _invalidate_user_cache(user)
         except Exception as e:
             logger.error(f"Error resetting failed login attempts: {str(e)}")
             raise DatabaseException("Failed to reset login attempts")
@@ -447,3 +515,52 @@ class LoginAttemptRepository:
             return attempt
         except Exception as e:
             logger.error(f"Error recording login attempt: {str(e)}")
+
+
+def _user_to_cache(u: User) -> dict:
+    return {
+        "id": str(u.id),
+        "email": u.email,
+        "username": u.username,
+        "full_name": u.full_name,
+        "hashed_password": u.hashed_password,  # chỉ giữ nếu bạn cần cho login
+        "role": u.role.value if hasattr(u.role, "value") else u.role,
+        "status": u.status.value if hasattr(u.status, "value") else u.status,
+        "email_verified": u.email_verified,
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+        "updated_at": u.updated_at.isoformat() if u.updated_at else None,
+        "last_login_at": u.last_login_at.isoformat()
+        if getattr(u, "last_login_at", None)
+        else None,
+        "failed_login_attempts": u.failed_login_attempts,
+        "account_locked_until": u.account_locked_until.isoformat()
+        if getattr(u, "account_locked_until", None)
+        else None,
+    }
+
+
+def _user_from_cache(d: dict) -> User:
+    def parse_dt(s):
+        return datetime.fromisoformat(s) if s else None
+
+    return User(
+        id=uuid.UUID(d["id"]),
+        email=d["email"],
+        username=d["username"],
+        full_name=d["full_name"],
+        hashed_password=d.get("hashed_password"),
+        role=d.get("role"),
+        status=d.get("status"),
+        email_verified=d.get("email_verified", False),
+        created_at=parse_dt(d.get("created_at")),
+        updated_at=parse_dt(d.get("updated_at")),
+        last_login_at=parse_dt(d.get("last_login_at")),
+        failed_login_attempts=d.get("failed_login_attempts", 0),
+        account_locked_until=parse_dt(d.get("account_locked_until")),
+    )
+
+
+async def _invalidate_user_cache(user: User, old_email: Optional[str] = None):
+    # invalidate
+    await redis_client.del_key(USER_BY_ID, str(user.id))
+    await redis_client.del_key(USER_BY_EMAIL, (old_email or user.email).lower())

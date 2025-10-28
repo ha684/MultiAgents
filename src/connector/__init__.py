@@ -1,6 +1,8 @@
+# src/connector/__init__.py
 from src.config import settings
-from .minio_conn import MinioClient
-from .database_conn import DatabaseConnection
+from src.connector.minio_conn import MinioClient
+from src.connector.database_conn import DatabaseConnection
+from src.connector.redis_conn import Redis
 
 database_connector = DatabaseConnection(
     db_url=settings.database_url,
@@ -12,3 +14,5 @@ minio_client = MinioClient(
     secret_key=settings.minio_secret_key,
     secure=settings.minio_secure,
 )
+
+redis_client = Redis()

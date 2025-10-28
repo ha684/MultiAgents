@@ -4,7 +4,7 @@ import asyncio
 
 from src.utils.decorators import singleton
 from src.event_pub.base import BaseEventPublisher
-from src.connector.redis_conn import redis_client
+from src.connector import redis_client
 from src.utils.logger_conf import logger
 
 
@@ -15,31 +15,31 @@ class RedisEventPublisher(BaseEventPublisher):
     """
 
     def __init__(self):
-        self.redis_client = redis_client
+        self.redis_client = redis_client.get()
 
-    def connect(self):
+    async def connect(self):
         """
         Establishes a connection to the Redis server.
         """
         try:
-            self.redis_client.ping()
+            await self.redis_client.ping()
             logger.info("RedisEventPublisher: Successfully connected to Redis.")
         except Exception:
             raise ConnectionError(
                 "Could not connect to Redis. Run docker compose first"
             )
 
-    def disconnect(self):
+    async def disconnect(self):
         """
         Closes the connection to the Redis server.
         """
         try:
-            self.redis_client.close()
+            await self.redis_client.aclose()
             logger.info("RedisEventPublisher: Disconnected from Redis.")
         except Exception:
             logger.warning("RedisEventPublisher: Error during disconnection.")
 
-    def publish(self, channel: str, event_data: dict):
+    async def publish(self, channel: str, event_data: dict):
         """
         Publishes an event to a specified Redis channel.
 
@@ -49,8 +49,7 @@ class RedisEventPublisher(BaseEventPublisher):
         """
         try:
             message = self._serialize_event(event_data)
-            # The publish command returns the number of subscribers that received the message
-            subscribers_count = self.redis_client.publish(channel, message)
+            subscribers_count = await self.redis_client.publish(channel, message)
             logger.info(
                 f"RedisEventPublisher: Published to '{channel}': {message} (Subscribers: {subscribers_count})"
             )
@@ -66,7 +65,7 @@ class RedisEventPublisher(BaseEventPublisher):
         Subscribes to a specified Redis channel asynchronously.
         """
         pubsub = self.redis_client.pubsub()
-        pubsub.subscribe(channel)
+        await pubsub.subscribe(channel)
         logger.info(f"RedisEventPublisher: Subscribed to channel '{channel}'")
 
         try:
@@ -75,7 +74,7 @@ class RedisEventPublisher(BaseEventPublisher):
                 await asyncio.sleep(0.01)  # Small delay to prevent busy waiting
 
                 # Get message with a timeout to avoid blocking
-                message = pubsub.get_message(timeout=0.01)
+                message = await pubsub.get_message(timeout=0.01)
 
                 if message is None:
                     continue
@@ -97,8 +96,8 @@ class RedisEventPublisher(BaseEventPublisher):
             logger.exception(f"RedisEventPublisher: Error in subscribe loop: {e}")
         finally:
             try:
-                pubsub.unsubscribe(channel)
-                pubsub.close()
+                await pubsub.unsubscribe(channel)
+                await pubsub.aclose()
                 logger.info(
                     f"RedisEventPublisher: Unsubscribed from channel '{channel}'"
                 )

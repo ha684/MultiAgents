@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
 from prometheus_fastapi_instrumentator import Instrumentator
+from langchain.globals import set_llm_cache
 
 from src.api.document import router as document_router
 from src.api.knowledge_base import router as knowledge_base_router
@@ -22,6 +23,7 @@ from src.api.auth import router as auth_router
 from src.config.settings import settings
 from src.utils.logger_conf import logger
 from src.connector import database_connector
+from src.connector import redis_client
 from src.rag.vector import vector_storage_migration
 from src.middleware.endpoint_manager import endpoint_manager
 from src.middleware.response_handler import ResponseHandlerMiddleware
@@ -29,26 +31,22 @@ from src.middleware.exception_handler import exception_handler
 from src.middleware.rate_limit import RateLimitMiddleware
 from src.common.types import HealthCheckResponse
 from src.tracking.observability import setup_tracing
-import redis.asyncio as redis
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan event handler for FastAPI application"""
     logger.info("Starting up application...")
-    # redis_cache = RedisCache(
-    #     redis_client=redis_client,
-    #     ttl=3600,
-    # )
-    app.state.redis = redis.from_url(settings.redis_uri, decode_responses=True)
-    await app.state.redis.ping()
+
+    await redis_client.init(settings.redis_uri)
+    app.state.redis = redis_client.get()
     try:
         setup_tracing(app)
         await database_connector.initialize()
         logger.info("Database connection initialized successfully")
         await vector_storage_migration.run_migrations()
         logger.info("Vector storage migration completed successfully")
-        # set_llm_cache(redis_cache)
+        set_llm_cache(redis_client)
         logger.info("LLM cache initialized successfully")
     except Exception as e:
         raise ConnectionError(
@@ -61,8 +59,9 @@ async def lifespan(app: FastAPI):
 
     try:
         await database_connector.close()
-        await app.state.redis.aclose()
-        # await redis_cache.aclear()
+        await redis_client.clear("llm_cache")
+        await redis_client.clear("rate_limit")
+        await redis_client.close()
         logger.info("Database connection closed successfully")
     except Exception as e:
         logger.error(f"Error closing database connection: {e}")

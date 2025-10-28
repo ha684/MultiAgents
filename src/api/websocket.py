@@ -18,7 +18,6 @@ class WebSocketManager:
         self.websocket = websocket
         self.document_id = document_id
         self.document_service = DocumentService()
-        self.event_publisher = get_event_publisher()
         self.is_connected = False
 
     async def connect(self) -> bool:
@@ -116,8 +115,9 @@ class WebSocketManager:
 
     async def listen_for_updates(self) -> None:
         """Listen for status updates from event publisher"""
+        event_publisher = await get_event_publisher()
         try:
-            async for event in self.event_publisher.subscribe(DOCUMENT_STATUS_CHANNEL):
+            async for event in event_publisher.subscribe(DOCUMENT_STATUS_CHANNEL):
                 if not self.is_connected:
                     break
 
@@ -136,6 +136,8 @@ class WebSocketManager:
             await self.send_message(
                 "error", message=f"Error in update listener: {str(e)}"
             )
+        finally:
+            await event_publisher.disconnect()
 
     async def disconnect(self) -> None:
         """Clean up WebSocket connection"""
