@@ -169,9 +169,10 @@ class UserRepository:
         """Update user information"""
         try:
             async with DatabaseSession() as session:
-                result = await session.execute(
-                    select(User).where(User.id == uuid.UUID(user_id))
-                )
+                stmt = select(User).where(User.id == uuid.UUID(user_id))
+                result = await session.execute(stmt)
+                await session.commit()
+
                 user = result.scalar_one_or_none()
                 if not user:
                     raise UserNotFoundException()
@@ -243,17 +244,24 @@ class UserRepository:
             raise DatabaseException("Failed to verify email")
 
     async def update_last_login(self, user_id: str) -> None:
-        """Update user's last login timestamp"""
+        """Update user's last login timestamp AND invalidate cache"""
         try:
             async with DatabaseSession() as session:
-                result = await session.execute(
+                stmt = (
                     update(User)
                     .where(User.id == uuid.UUID(user_id))
                     .values(last_login_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")))
+                    .returning(User)
                 )
+
+                result = await session.execute(stmt)
+                await session.commit()
+
                 user = result.scalar_one_or_none()
+
                 if user:
                     await _invalidate_user_cache(user)
+
         except Exception as e:
             logger.error(f"Error updating last login: {str(e)}")
             raise DatabaseException("Failed to update last login")
@@ -285,11 +293,15 @@ class UserRepository:
         """Reset failed login attempts after successful login"""
         try:
             async with DatabaseSession() as session:
-                result = await session.execute(
+                stmt = (
                     update(User)
                     .where(User.id == uuid.UUID(user_id))
                     .values(failed_login_attempts=0, account_locked_until=None)
+                    .returning(User)
                 )
+                result = await session.execute(stmt)
+                await session.commit()
+
                 user = result.scalar_one_or_none()
                 if user:
                     await _invalidate_user_cache(user)
@@ -444,15 +456,19 @@ class RefreshTokenRepository:
         """Revoke a refresh token"""
         try:
             async with DatabaseSession() as session:
-                result = await session.execute(
+                stmt = (
                     update(RefreshToken)
                     .where(RefreshToken.token_hash == token_hash)
                     .values(
                         is_revoked=True,
                         revoked_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
                     )
+                    .returning(RefreshToken)
                 )
-            return result.rowcount > 0
+                result = await session.execute(stmt)
+                await session.commit()
+
+            return result.scalar_one_or_none()
         except Exception as e:
             logger.error(f"Error revoking refresh token: {str(e)}")
             raise DatabaseException("Failed to revoke refresh token")
@@ -461,15 +477,19 @@ class RefreshTokenRepository:
         """Revoke all refresh tokens for a user"""
         try:
             async with DatabaseSession() as session:
-                result = await session.execute(
+                stmt = (
                     update(RefreshToken)
                     .where(RefreshToken.user_id == uuid.UUID(user_id))
                     .values(
                         is_revoked=True,
                         revoked_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
                     )
+                    .returning(RefreshToken)
                 )
-            return result.rowcount
+                result = await session.execute(stmt)
+                await session.commit()
+
+            return result.scalar_one_or_none()
         except Exception as e:
             logger.error(f"Error revoking all user tokens: {str(e)}")
             raise DatabaseException("Failed to revoke user tokens")
@@ -478,13 +498,18 @@ class RefreshTokenRepository:
         """Clean up expired refresh tokens"""
         try:
             async with DatabaseSession() as session:
-                result = await session.execute(
-                    delete(RefreshToken).where(
+                stmt = (
+                    delete(RefreshToken)
+                    .where(
                         RefreshToken.expires_at
                         < datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
                     )
+                    .returning(RefreshToken)
                 )
-            return result.rowcount
+                result = await session.execute(stmt)
+                await session.commit()
+
+            return result.scalar_one_or_none()
         except Exception as e:
             logger.error(f"Error cleaning up expired tokens: {str(e)}")
             raise DatabaseException("Failed to cleanup expired tokens")
@@ -523,7 +548,7 @@ def _user_to_cache(u: User) -> dict:
         "email": u.email,
         "username": u.username,
         "full_name": u.full_name,
-        "hashed_password": u.hashed_password,  # chỉ giữ nếu bạn cần cho login
+        "hashed_password": u.hashed_password,
         "role": u.role.value if hasattr(u.role, "value") else u.role,
         "status": u.status.value if hasattr(u.status, "value") else u.status,
         "email_verified": u.email_verified,
@@ -561,6 +586,5 @@ def _user_from_cache(d: dict) -> User:
 
 
 async def _invalidate_user_cache(user: User, old_email: Optional[str] = None):
-    # invalidate
     await redis_client.del_key(USER_BY_ID, str(user.id))
     await redis_client.del_key(USER_BY_EMAIL, (old_email or user.email).lower())

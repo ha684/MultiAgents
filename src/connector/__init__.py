@@ -15,4 +15,4 @@ minio_client = MinioClient(
     secure=settings.minio_secure,
 )
 
-redis_client = Redis()
+redis_client = Redis(uri=settings.redis_uri)

@@ -22,15 +22,14 @@ from src.config.settings import settings
 from src.connector import minio_client
 from src.db import document_repository
 from src.db.models.document import Document as DBDocument
-from src.event_pub import event_publisher
+from src.event_pub import get_event_publisher
 from src.models.document import (
     DocumentProcessingStatusResponse,
     DocumentStatusEnum,
 )
 from src.rag.processor.strategy import get_strategy
-from src.rag.processor.strategy.image import ImageStrategy
 from src.rag.vector import vector_storage
-from src.tasks.qac import _generate_qa_pairs_async
+from src.tasks.qac import generate_qa_pairs_async
 from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 from src.utils.logger_conf import logger
 
@@ -280,7 +279,7 @@ async def _generate_qa_pairs_with_error_handling(
         ]
 
         if qa_contexts:
-            await _generate_qa_pairs_async(document_id, kb_id, qa_contexts)
+            await generate_qa_pairs_async(document_id, kb_id, qa_contexts)
             logger.info(f"Generated QA pairs for document {document_id}")
     except Exception as e:
         logger.error(f"Failed to generate QA pairs for document {document_id}: {e}")
@@ -291,6 +290,7 @@ async def _publish_status_event(
 ):
     """Publish document status event"""
     try:
+        event_publisher = await get_event_publisher()
         event_publisher.publish(
             DOCUMENT_STATUS_CHANNEL,
             DocumentProcessingStatusResponse(

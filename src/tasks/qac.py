@@ -7,16 +7,11 @@ from src.utils.logger_conf import logger
 from typing import List
 
 
-async def _generate_qa_pairs_async(
+async def generate_qa_pairs_async(
     document_id: UUID, kb_id: UUID, contexts: List[str]
 ) -> None:
     """
-    Async helper function to generate QA pairs.
-
-    Args:
-        document_id (UUID): The ID of the document to process.
-        kb_id (UUID): The ID of the knowledge base to store the QA pairs.
-        contexts (List[str]): List of text contexts to generate QA pairs from.
+    Generate QA pairs asynchronously.
     """
     if not contexts:
         logger.warning("No contexts provided for QA generation.")

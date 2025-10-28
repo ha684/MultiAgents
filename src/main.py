@@ -37,8 +37,6 @@ from src.tracking.observability import setup_tracing
 async def lifespan(app: FastAPI):
     """Lifespan event handler for FastAPI application"""
     logger.info("Starting up application...")
-
-    await redis_client.init(settings.redis_uri)
     app.state.redis = redis_client.get()
     try:
         setup_tracing(app)

@@ -18,14 +18,11 @@ class Redis:
 
     def __init__(
         self,
+        uri: str,
         ttl: Optional[int] = 3600,
     ):
         self.ttl = ttl
-
-    async def init(self, uri: str):
-        """Initialize the Redis client."""
         self._client = aioredis.from_url(uri, decode_responses=True)
-        await self._client.ping()
 
     def get(self) -> aioredis.Redis:
         """Get the Redis client."""
