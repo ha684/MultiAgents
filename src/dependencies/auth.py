@@ -38,7 +38,7 @@ async def get_current_user_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> TokenData:
     """Extract and validate JWT token from request"""
-    if APP_ENV == "development" or API_KEY == "hapt68":
+    if APP_ENV == "development" or credentials.credentials == API_KEY:
         print("--- ⚠️ DEV MODE: Bypassing token auth ---")
         return TokenData(
             user_id="hafizh",
