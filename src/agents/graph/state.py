@@ -65,6 +65,11 @@ class OrchestratorState(TypedDict):
     main_context: Optional[str]
     cited_documents: Optional[List[Document]]
 
+    subgraph_policy: Dict[
+        str, Any
+    ]  # {allow: [..] | None, block: [..], extras: Dict[name, SubgraphConfig]}
+    active_subgraphs: List[str]
+
     final_answer: Optional[str]
     response_metadata: Optional[Dict[str, Any]]
 

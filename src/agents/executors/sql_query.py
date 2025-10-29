@@ -1,9 +1,10 @@
 # src/agents/executors/sql_query.py
 from typing import Any, Dict, List
 
-from src.agents.graph import sql_graph
+from src.agents.graph.sql_graph import SqlGraph
 from src.agents.graph.state import OrchestratorState, SqlState
 from src.domain.entities.graph import SubgraphOutput
+from src.database.sql_database import AsyncSQLDatabase
 
 
 def _stringify_cell(v: Any, max_len: int = 160) -> str:
@@ -37,9 +38,12 @@ def _format_table_preview(rows: List[Dict[str, Any]]) -> str:
     return "".join(lines)
 
 
-async def _run_sql_query(state: OrchestratorState) -> SubgraphOutput:
+async def _run_sql_query(
+    state: OrchestratorState, sql_db: AsyncSQLDatabase
+) -> SubgraphOutput:
     """Execute SQL query subgraph and format comprehensive context without overloading the LLM."""
     sql_state = SqlState(contextualized_query=state["contextualized_query"])
+    sql_graph = SqlGraph(sql_db)
     result = await sql_graph.ainvoke(state=sql_state)
 
     results_text = ""
@@ -155,5 +159,8 @@ async def _run_sql_query(state: OrchestratorState) -> SubgraphOutput:
 
 
 class SqlQueryExecutor:
+    def __init__(self, sql_db: AsyncSQLDatabase):
+        self.sql_db = sql_db
+
     async def __call__(self, state: OrchestratorState) -> SubgraphOutput:
-        return await _run_sql_query(state)
+        return await _run_sql_query(state, self.sql_db)

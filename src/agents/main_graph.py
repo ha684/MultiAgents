@@ -17,7 +17,7 @@ from src.agents.graph.schemas import RouteDecision
 from src.agents.graph.state import OrchestratorState
 from src.agents.shared.manager import execution_manager
 from src.agents.shared.prompts import PromptTemplates
-from src.agents.shared.registry import SubgraphRegistry
+from src.agents.shared.registry import SubgraphRegistry, seed_base_subgraphs, enable_sql
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.domain.entities.graph import ResponseMode
 from src.domain.schemas.chat import Message, RetrievalContext, TextPart
@@ -43,6 +43,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         self.conv_service = ConversationService()
         self.graph_name = "OrchestratorGraph"
         self.compiled_graph = self._build_graph()
+        seed_base_subgraphs()
 
     @property
     def graph(self) -> CompiledStateGraph:
@@ -76,7 +77,16 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         max_iterations = 3
         conversation = state["conversation"]
 
-        subgraph_definitions = SubgraphRegistry.get_definitions()
+        policy = state.get("subgraph_policy", {})
+        active_map = SubgraphRegistry.resolve_active(
+            allow=policy.get("allow"),
+            block=policy.get("block"),
+            extras=policy.get("extras"),
+        )
+        state["active_subgraphs"] = list(active_map.keys())
+
+        subgraph_definitions = SubgraphRegistry.definitions_from_map(active_map)
+
         execution_history = state.get("execution_history", [])
 
         subgraph_context = "\n\n".join(
@@ -139,7 +149,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             }
 
         route = response["route"]
-        subgraph_config = SubgraphRegistry.get_subgraph(route)
+        subgraph_config = SubgraphRegistry.get_subgraph_active(route, active_map)
 
         if not subgraph_config:
             logger.error(
@@ -217,16 +227,14 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "response_mode": response_mode,
             }
 
-        subgraph_config = SubgraphRegistry.get_subgraph(route)
+        policy = state.get("subgraph_policy", {})
 
-        if not subgraph_config or not subgraph_config.executor:
-            logger.error(f"Unknown or non-executable subgraph: {route}")
-            error_msg = f"The router agent is pointing to an invalid subgraph: {route}"
-            return {
-                "subgraph_result": "error",
-                "subgraph_error": error_msg,
-                "response_mode": ResponseMode.ERROR,
-            }
+        active_map = SubgraphRegistry.resolve_active(
+            allow=policy.get("allow"),
+            block=policy.get("block"),
+            extras=policy.get("extras"),
+        )
+        subgraph_config = SubgraphRegistry.get_subgraph_active(route, active_map)
 
         exec_ref = subgraph_config.executor
         if isinstance(exec_ref, str):
@@ -411,7 +419,27 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         self, conversation: List[BaseMessage]
     ) -> AsyncGenerator[StreamEvent, None]:
         """Execute orchestrator graph with full conversation"""
-        initial_state = OrchestratorState(conversation=conversation)
+        meta = conversation[-1].additional_kwargs or {}
+        conversation_id = meta.get("conversation_id")
+        db_url = meta.get("db_url")
+        allow_tables = meta.get("allow_tables", [])
+        allow = meta.get("enabled_subgraphs")
+        block = meta.get("disabled_subgraphs")
+
+        extras = {}
+        if db_url and allow_tables:
+            extras["sql_query"] = enable_sql(db_url, allow_tables)
+
+        subgraph_policy = {
+            "allow": allow or None,
+            "block": block or [],
+            "extras": extras,
+        }
+
+        initial_state = OrchestratorState(
+            conversation=conversation,
+            subgraph_policy=subgraph_policy,
+        )
         conversation_id = conversation[-1].additional_kwargs.get("conversation_id")
         execution_manager.start_execution(conversation_id)
         try:
