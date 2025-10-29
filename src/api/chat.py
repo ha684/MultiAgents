@@ -57,7 +57,7 @@ async def ask_sse(
     try:
         return StreamingResponse(
             await chat_service.ask_sse(request),
-            media_type="text/plain",
+            media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
                 "Connection": "keep-alive",

@@ -125,7 +125,7 @@ class UserRepository:
             try:
                 async with DatabaseSession() as session:
                     result = await session.execute(
-                        select(User).where(User.id == uuid.UUID(user_id))
+                        select(User).where(User.id == user_id)
                     )
                     user = result.scalar_one_or_none()
                     if user:
