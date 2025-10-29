@@ -2,7 +2,7 @@
 from typing import List, Sequence
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from langchain_core.documents import Document
 
 from src.domain.schemas.knowledge_base import (
@@ -15,8 +15,12 @@ from src.domain.schemas.knowledge_base import (
 )
 from src.domain.schemas.qa import DocumentQAResponse
 from src.services.knowledge_base_service import KnowledgeBaseService
+from src.database.models.user import User
+from src.dependencies.auth import get_current_user
 
-router = APIRouter(prefix="/kb", tags=["Knowledge Base"])
+router = APIRouter(
+    prefix="/kb", tags=["Knowledge Base"], dependencies=[Depends(get_current_user)]
+)
 kb_service = KnowledgeBaseService()
 
 
@@ -64,7 +68,9 @@ async def create_knowledge_base(
 
 
 @router.get("/{kb_id}")
-async def get_knowledge_base_by_id(kb_id: str, user_id: str) -> KnowledgeBaseResponse:
+async def get_knowledge_base_by_id(
+    kb_id: str, current_user: User = Depends(get_current_user)
+) -> KnowledgeBaseResponse:
     """
     Get a knowledge base by its ID.
 
@@ -76,7 +82,7 @@ async def get_knowledge_base_by_id(kb_id: str, user_id: str) -> KnowledgeBaseRes
         The knowledge base details.
     """
     try:
-        return await kb_service.get_knowledge_base_by_id(kb_id, user_id)
+        return await kb_service.get_knowledge_base_by_id(kb_id, current_user.id)
     except Exception as e:
         raise e
 
