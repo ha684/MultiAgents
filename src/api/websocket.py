@@ -3,14 +3,17 @@ import asyncio
 from typing import Any, Dict, Optional
 import uuid
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 
 from src.infrastructure.events import get_event_publisher
 from src.services.document_service import DocumentService
 from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 from src.utils.logger_conf import logger
+from src.dependencies.auth import get_current_user
 
-router = APIRouter(prefix="/websocket", tags=["WebSocket"])
+router = APIRouter(
+    prefix="/websocket", tags=["WebSocket"], dependencies=[Depends(get_current_user)]
+)
 
 
 class WebSocketManager:

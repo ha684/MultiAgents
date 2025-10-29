@@ -162,12 +162,9 @@ async def _process_document_async(
                 f"Extracted metadata for {len(chunks)} chunks in {metadata_time:.2f}s"
             )
 
-            if chunks:
-                asyncio.create_task(
-                    _generate_qa_pairs_with_error_handling(
-                        document_id, document.knowledge_base_id, chunks
-                    )
-                )
+            await _generate_qa_pairs_with_error_handling(
+                document_id, document.knowledge_base_id, chunks
+            )
 
             storage_start = time.time()
             storage = vector_storage

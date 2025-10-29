@@ -2,7 +2,7 @@
 from typing import List, Optional, Sequence, Dict, Any
 import uuid
 
-from fastapi import APIRouter, UploadFile, File, Request, HTTPException
+from fastapi import APIRouter, UploadFile, File, Request, HTTPException, Depends
 
 from src.domain.schemas.document import (
     DocumentResponse,
@@ -15,8 +15,12 @@ from src.domain.schemas.document import (
 )
 from src.domain.schemas.qa import DocumentQAResponse
 from src.services.document_service import DocumentService
+from src.database.models.user import User
+from src.dependencies.auth import get_current_user
 
-router = APIRouter(prefix="/documents", tags=["Document"])
+router = APIRouter(
+    prefix="/documents", tags=["Document"], dependencies=[Depends(get_current_user)]
+)
 document_service = DocumentService()
 
 
@@ -24,9 +28,9 @@ document_service = DocumentService()
 async def upload_document(
     request: Request,
     knowledge_base_id: uuid.UUID,
-    tenant_id: Optional[str] = None,
     file: UploadFile = File(...),
     metadata: Optional[Dict[str, Any]] = None,
+    current_user: User = Depends(get_current_user),
 ) -> DocumentUploadResponse:
     """
     Upload a document to a knowledge base.
@@ -44,7 +48,7 @@ async def upload_document(
         document, task_id = await document_service.upload_and_process_document(
             knowledge_base_id=knowledge_base_id,
             file=file,
-            tenant_id=tenant_id,
+            tenant_id=current_user.id,
             metadata=metadata,
         )
 

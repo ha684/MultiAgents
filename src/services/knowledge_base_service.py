@@ -1,5 +1,5 @@
 # src/services/knowledge_base_service.py
-from typing import List, Sequence
+from typing import List, Optional, Sequence
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -7,12 +7,8 @@ from langchain_core.documents import Document
 
 from src.database import document_repository, knowledge_base_repository, qa_repository
 from src.domain.schemas.knowledge_base import (
-    KnowledgeBaseCreateRequest,
-    KnowledgeBaseDeleteRequest,
-    KnowledgeBaseListRequest,
     KnowledgeBaseListResponse,
     KnowledgeBaseResponse,
-    KnowledgeBaseUpdateRequest,
 )
 from src.domain.schemas.qa import DocumentQAResponse
 from src.rag.vectorstores import vector_retrieval, vector_storage
@@ -29,11 +25,11 @@ class KnowledgeBaseService:
         self.qa_repository = qa_repository
 
     async def list_knowledge_bases(
-        self, request: KnowledgeBaseListRequest
+        self, skip: int, limit: int, user_id: str
     ) -> KnowledgeBaseListResponse:
         """Get a list of all knowledge bases."""
         logger.info("Fetching list of all knowledge bases")
-        return await self.kb_repository.list(request)
+        return await self.kb_repository.list(skip, limit, user_id)
 
     async def list_knowledge_bases_all(
         self, skip: int, limit: int
@@ -42,13 +38,17 @@ class KnowledgeBaseService:
         logger.info("Fetching list of all knowledge bases")
         return await self.kb_repository.list_all(skip, limit)
 
-    async def create_knowledge_base(self, knowledge_base: KnowledgeBaseCreateRequest):
+    async def create_knowledge_base(
+        self, name: str, description: Optional[str], user_id: str
+    ):
         """Create a new knowledge base."""
-        logger.info(f"Creating knowledge base: {knowledge_base.name}")
-        return await self.kb_repository.create(knowledge_base)
+        logger.info(f"Creating knowledge base: {name}")
+        return await self.kb_repository.create(
+            name=name, description=description, user_id=user_id
+        )
 
     async def get_knowledge_base_by_id(
-        self, kb_id: str, user_id: str
+        self, kb_id: str, user_id: Optional[str] = None
     ) -> KnowledgeBaseResponse:
         """Get a knowledge base by its ID."""
         logger.info(f"Fetching knowledge base with ID: {kb_id}")
@@ -72,28 +72,28 @@ class KnowledgeBaseService:
 
         return documents
 
-    async def delete_knowledge_base(self, request: KnowledgeBaseDeleteRequest) -> dict:
+    async def delete_knowledge_base(self, kb_id: str, user_id: str) -> dict:
         """Delete a knowledge base and all its documents."""
-        kb = await self.kb_repository.get(kb_id=request.id, user_id=request.user_id)
+        kb = await self.kb_repository.get(kb_id=kb_id, user_id=user_id)
         if not kb:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
 
-        logger.info(f"Deleting knowledge base {request.id} and all its documents")
+        logger.info(f"Deleting knowledge base {kb_id} and all its documents")
 
         try:
             total = await self.document_repository.count_documents_in_kb(kb.id)
             await self.kb_repository.delete(kb.id)
-            await vector_storage.delete_chunks_by_kb_id(request.id)
+            await vector_storage.delete_chunks_by_kb_id(kb_id)
 
             logger.info(
-                f"Successfully deleted knowledge base {request.id} with {total} documents files"
+                f"Successfully deleted knowledge base {kb_id} with {total} documents files"
             )
             return {
                 "detail": f"Knowledge base deleted successfully. Removed {total} documents files."
             }
         except Exception as e:
             logger.exception(
-                f"Unexpected error deleting knowledge base {request.id}: {str(e)}"
+                f"Unexpected error deleting knowledge base {kb_id}: {str(e)}"
             )
             raise HTTPException(
                 status_code=500, detail="Failed to delete knowledge base"
@@ -114,7 +114,18 @@ class KnowledgeBaseService:
         return qas
 
     async def update_knowledge_base(
-        self, knowledge_base_update_request: KnowledgeBaseUpdateRequest
+        self,
+        kb_id: UUID,
+        name: Optional[str],
+        description: Optional[str],
+        is_active: Optional[bool],
+        user_id: str,
     ):
         """Update a knowledge base."""
-        return await self.kb_repository.update(knowledge_base_update_request)
+        return await self.kb_repository.update(
+            kb_id=kb_id,
+            name=name,
+            description=description,
+            is_active=is_active,
+            user_id=user_id,
+        )

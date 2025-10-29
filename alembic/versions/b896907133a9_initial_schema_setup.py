@@ -518,6 +518,7 @@ def upgrade() -> None:
         sa.Column(
             "content_hash", sa.VARCHAR(length=64), autoincrement=False, nullable=True
         ),
+        sa.Column("full_text_content", sa.TEXT(), autoincrement=False, nullable=True),
         sa.ForeignKeyConstraint(
             ["knowledge_base_id"],
             ["knowledge_bases.id"],
