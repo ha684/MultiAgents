@@ -189,6 +189,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 return ResponseMode.NO_VIABLE_OPTION
             if len(state["conversation"]) > 2:
                 return ResponseMode.FOLLOWUP
+
             return ResponseMode.CHITCHAT
 
         if route == "deep_research":
