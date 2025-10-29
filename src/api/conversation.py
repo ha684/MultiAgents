@@ -35,10 +35,11 @@ async def create_conversation(
 
 @router.get("/message/list")
 async def list_messages(
-    conversation_id: uuid.UUID, current_user: User = Depends(get_current_user)
+    conversation_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
 ) -> List[Message]:
     """List the messages for a conversation"""
-    result = await conversation_service.list_messages(conversation_id, current_user.id)
+    result = await conversation_service.list_messages(conversation_id=conversation_id)
     return result
 
 
