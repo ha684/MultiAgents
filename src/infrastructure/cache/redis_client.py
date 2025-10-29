@@ -7,12 +7,14 @@ import time
 from typing import Any, Dict, Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from langchain_core.caches import RETURN_VAL_TYPE
+from langchain_core.load.dump import dumps
+from langchain_core.caches import RETURN_VAL_TYPE, BaseCache
+
 import redis.asyncio as aioredis
 from redis.commands.json.path import Path as JSONPath
 
 
-class Redis:
+class Redis(BaseCache):
     _client: Optional[aioredis.Redis] = None
 
     def __init__(
@@ -45,8 +47,9 @@ class Redis:
     async def set_obj(
         self, prefix: str, value: Any, *parts: str, ttl: Optional[int] = None
     ):
+        json_value = json.loads(dumps(value))
         key = self._key(prefix, *parts)
-        await self.get().json().set(key, JSONPath.root_path(), value)
+        await self.get().json().set(key, JSONPath.root_path(), json_value)
         await self.get().expire(key, ttl if ttl is not None else self.ttl)
 
     async def del_key(self, prefix: str, *parts: str):
@@ -65,6 +68,9 @@ class Redis:
             return [loads(json.dumps(result))]
         return None
 
+    async def alookup(self, prompt: str, llm_string: str) -> Optional[RETURN_VAL_TYPE]:
+        return await self.lookup(prompt, llm_string)
+
     async def update(
         self, prompt: str, llm_string: str, return_val: RETURN_VAL_TYPE
     ) -> None:
@@ -75,6 +81,11 @@ class Redis:
         """
         prefix = "llm_cache"
         await self.set_obj(prefix, return_val[0], prompt, llm_string, ttl=self.ttl)
+
+    async def aupdate(
+        self, prompt: str, llm_string: str, return_val: RETURN_VAL_TYPE
+    ) -> None:
+        return await self.update(prompt, llm_string, return_val)
 
     async def rate_limit(
         self, key: str, limit: int, window_seconds: int
