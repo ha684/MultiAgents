@@ -1,16 +1,16 @@
 # src/agents/graph/base.py
 from __future__ import annotations
-from typing import Optional, TypeVar, Generic, AsyncGenerator, Literal
 from abc import ABC, abstractmethod
 import asyncio
 from dataclasses import dataclass
+from typing import AsyncGenerator, Generic, Literal, Optional, TypeVar
 
-from langgraph.graph.state import CompiledStateGraph
 from langchain_core.runnables.schema import StreamEvent
+from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.basic.base import BaseAgent
+from src.domain.entities.graph import RunConfig
 from src.utils.logger_conf import logger
-from src.agents.com.types import RunConfig
 
 StateT = TypeVar("StateT")
 Status = Literal["success", "timeout", "recursion_limit", "error"]

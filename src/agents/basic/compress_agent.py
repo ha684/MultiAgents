@@ -1,13 +1,15 @@
 # src/agents/basic/compress_agent.py
+import textwrap
 from typing import List
+
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from src.llm.factory import get_llm
-from src.utils.logger_conf import logger
-from src.utils.decorators import singleton
-from src.agents.tools.server.mcp_retrieve_tools import think
+
 from src.agents.basic.base import BaseAgent
-import textwrap
+from src.agents.tools.server.mcp_retrieve_tools import think
+from src.llm.factory import get_llm
+from src.utils.decorators import singleton
+from src.utils.logger_conf import logger
 
 COMPRESS_PROMPT_TEMPLATE = textwrap.dedent("""\
 <role>

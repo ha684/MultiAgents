@@ -1,6 +1,9 @@
-from typing import List, Optional, Any
-from tavily import AsyncTavilyClient
+# src/services/web_search/tavily.py
+from typing import Any, List, Optional
+
 from langchain_core.documents import Document
+from tavily import AsyncTavilyClient
+
 from src.services.web_search.base import BaseSearchService
 from src.utils.logger_conf import logger
 

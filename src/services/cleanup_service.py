@@ -1,16 +1,19 @@
-from datetime import datetime, timezone, timedelta
-from sqlalchemy import select, delete, and_
-from src.db.repository.database_session import DatabaseSession
-from src.db.models.user import User, UserStatus
-from src.utils.logger_conf import logger
+# src/services/cleanup_service.py
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-import pytz
+from sqlalchemy import and_, delete, select
+
+from src.database.models.user import User, UserStatus
+from src.dependencies.database_session import DatabaseSession
+from src.utils.logger_conf import logger
 
 
 class UserCleanupService:
     def __init__(self):
-        self.scheduler = AsyncIOScheduler(timezone=pytz.UTC)
+        self.scheduler = AsyncIOScheduler(timezone=ZoneInfo("UTC"))
         self.setup_cleanup_jobs()
 
     def setup_cleanup_jobs(self):
@@ -34,7 +37,7 @@ class UserCleanupService:
     async def cleanup_expired_users(self):
         """Clean up users with expired verification tokens"""
         try:
-            current_time = datetime.now(timezone.utc)
+            current_time = datetime.now(ZoneInfo("UTC"))
             logger.info("Starting cleanup of expired unverified users...")
 
             async with DatabaseSession() as session:
@@ -87,7 +90,7 @@ class UserCleanupService:
     async def send_verification_reminders(self):
         """Send reminder emails to users whose verification will expire soon"""
         try:
-            current_time = datetime.now(timezone.utc)
+            current_time = datetime.now(ZoneInfo("UTC"))
             reminder_threshold = current_time + timedelta(hours=24)
             logger.info("Checking for users needing verification reminders...")
             async with DatabaseSession() as session:
@@ -136,7 +139,7 @@ class UserCleanupService:
     async def manual_cleanup(self, dry_run: bool = True):
         """Manual cleanup for testing/admin purposes"""
         try:
-            current_time = datetime.now(timezone.utc)
+            current_time = datetime.now(ZoneInfo("UTC"))
 
             async with DatabaseSession() as session:
                 result = await session.execute(

@@ -1,12 +1,16 @@
+# src/agents/basic/summary_agent.py
+
 from typing import List
-from langchain_core.messages import SystemMessage, HumanMessage
-from src.common.types import Message
-from langchain_core.prompts import ChatPromptTemplate
-from src.llm.factory import get_llm
-from src.utils.logger_conf import logger
-from src.utils.decorators import singleton
-from pydantic import BaseModel
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.messages import get_buffer_string
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel
+
+from src.domain.schemas.chat import Message
+from src.llm.factory import get_llm
+from src.utils.decorators import singleton
+from src.utils.logger_conf import logger
 
 
 class ConversationSummary(BaseModel):

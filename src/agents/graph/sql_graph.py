@@ -4,28 +4,28 @@ SQL Graph - Text-to-SQL subgraph for database querying with natural language
 """
 
 from __future__ import annotations
-
 import json
 from typing import Any, Dict, List, Optional
 
-import pandas as pd
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+import pandas as pd
 
-from src.agents.graph.base import GraphAgentBase, RunConfig
-from src.agents.com.prompts import PromptTemplates
+from src.agents.graph.base import GraphAgentBase
+from src.domain.entities.graph import RunConfig
 from src.agents.graph.schemas import (
-    SqlGenerationSchema,
-    SqlAnalysisSchema,
     ChartGenerationSchema,
     RelevanceValidationSchema,
+    SqlAnalysisSchema,
+    SqlGenerationSchema,
 )
-from src.agents.com.sql_validator import SqlValidator
-from src.db.sql_database import AsyncSQLDatabase
 from src.agents.graph.state import SqlState
+from src.agents.shared.prompts import PromptTemplates
+from src.agents.shared.sql_validator import SqlValidator
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.config.settings import settings
+from src.core.config.settings import settings
+from src.database.sql_database import AsyncSQLDatabase
 from src.llm.factory import get_llm
 from src.utils import parse_response
 from src.utils.logger_conf import logger

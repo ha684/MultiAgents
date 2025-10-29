@@ -1,9 +1,9 @@
 # src/worker.py
-from src.config.celery_app import celery_app
+from src.core.config.celery_app import celery_app
 from src.utils.logger_conf import logger
 
 if __name__ == "__main__":
-    logger.info("Starting optimized Celery worker for document processing")
+    logger.info("Starting Celery worker for document processing")
     celery_app.worker_main(
         argv=[
             "worker",

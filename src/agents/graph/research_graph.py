@@ -1,27 +1,27 @@
 # src/agents/graph/research_graph.py
 from __future__ import annotations
-
 import json
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
-from langgraph.graph import StateGraph, END
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langchain_core.messages import SystemMessage, HumanMessage, BaseMessage
 
 from src.agents.basic import citation_agent, compress_agent
-from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search, think
-from src.utils.logger_conf import logger
-from src.agents.graph.state import SearchResult, ResearchState, SearchQuery
-from src.agents.com.prompts import PromptTemplates
+from src.agents.graph.base import GraphAgentBase
 from src.agents.graph.schemas import (
-    SearchPlanSchema,
-    VerificationSchema,
     DynamicQueriesSchema,
     ReflectionSchema,
+    SearchPlanSchema,
+    VerificationSchema,
 )
+from src.agents.graph.state import ResearchState, SearchQuery, SearchResult
+from src.agents.shared.prompts import PromptTemplates
+from src.agents.tools.server.mcp_retrieve_tools import rag_search, think, web_search
+from src.domain.entities.graph import RunConfig
 from src.llm.factory import get_llm
-from src.agents.graph.base import GraphAgentBase, RunConfig
 from src.utils import parse_response
+from src.utils.logger_conf import logger
 
 
 class ResearchGraph(GraphAgentBase[ResearchState]):

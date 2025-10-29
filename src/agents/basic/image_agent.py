@@ -1,10 +1,13 @@
+# src/agents/basic/image_agent.py
 import base64
 import mimetypes
 from pathlib import Path
-from langchain_core.messages import SystemMessage, HumanMessage
+
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
+
 from src.llm.factory import get_llm
-from src.prompts.get_prompt_template import load_prompt_template
+from src.agents.prompts.get_prompt_template import load_prompt_template
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 

@@ -1,12 +1,14 @@
 # src/agents/basic/verification_agent.py
 from typing import List
+
 from langchain_core.documents import Document
-from src.llm.factory import get_llm
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from src.utils.logger_conf import logger
-from src.utils.decorators import singleton
-from src.agents.tools.server.mcp_retrieve_tools import think
+
 from src.agents.basic.base import BaseAgent
+from src.agents.tools.server.mcp_retrieve_tools import think
+from src.llm.factory import get_llm
+from src.utils.decorators import singleton
+from src.utils.logger_conf import logger
 
 VERIFICATION_PROMPT_TEMPLATE = """
 """

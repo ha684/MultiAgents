@@ -1,13 +1,13 @@
 # src/api/conversation.py
+from typing import Dict, List
 import uuid
-from typing import List, Dict
 
 from fastapi import APIRouter
 
+from src.agents.shared.manager import execution_manager
+from src.core.exceptions.chat_exceptions import ResearchNotFoundError
+from src.domain.schemas.chat import Conversation, Message
 from src.services.conversation_service import ConversationService
-from src.services.types import Message, Conversation
-from src.agents.com.manager import execution_manager
-from src.exceptions.chat_exceptions import ResearchNotFoundError
 
 router = APIRouter(tags=["Conversation"])
 conversation_service = ConversationService()

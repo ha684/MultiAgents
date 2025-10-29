@@ -1,6 +1,9 @@
-from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+# src/rag/graph/custom_reranker.py
 from typing import override
-from src.rag.reranking import get_reranker
+
+from graphiti_core.cross_encoder.openai_reranker_client import OpenAIRerankerClient
+
+from src.rag.rerankers import get_reranker
 
 reranker = get_reranker()
 

@@ -1,18 +1,18 @@
 # src/agents/basic/response_agent.py
-from typing import List, Dict, AsyncGenerator, Union, Any
+from typing import Any, AsyncGenerator, Dict, List, Union
 
 from langchain_core.documents import Document
-from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.messages import BaseMessage
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate
 
-from src.config.llm_config import SupportedLLMProviders
-from src.llm.factory import get_llm
-from src.utils.logger_conf import logger
-from src.utils.decorators import singleton
 from src.agents.basic.base import BaseAgent
-from src.agents.com.types import ResponseMode
-from src.agents.com.prompts import PromptTemplates
+from src.agents.shared.prompts import PromptTemplates
+from src.domain.entities.graph import ResponseMode
+from src.core.config.llm_config import SupportedLLMProviders
+from src.llm.factory import get_llm
+from src.utils.decorators import singleton
+from src.utils.logger_conf import logger
 
 HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research assistant with access to a collection of documents. Your task is to provide accurate, well-cited answers based strictly on the information in the provided documents.
 

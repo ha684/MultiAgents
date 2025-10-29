@@ -1,9 +1,9 @@
 # src/agents/executors/simple_search.py
 from typing import Any, Dict
 
-from src.agents.graph.state import SimpleSearchState, OrchestratorState
-from src.agents.com.types import SubgraphOutput
 from src.agents.graph import simple_search_graph
+from src.agents.graph.state import OrchestratorState, SimpleSearchState
+from src.domain.entities.graph import SubgraphOutput
 
 
 def _prepare_web_metadata(state: OrchestratorState, web_active: bool) -> Dict[str, Any]:

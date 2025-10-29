@@ -14,9 +14,9 @@ from google.oauth2 import id_token
 import httpx
 
 from src.dependencies.auth import get_current_user, require_admin
-from src.config.settings import settings
-from src.db.models.user import User
-from src.models.auth import (
+from src.core.config.settings import settings
+from src.database.models.user import User, UserStatus
+from src.domain.schemas.auth import (
     EmailVerificationRequest,
     PasswordChangeRequest,
     PasswordResetConfirmRequest,
@@ -26,10 +26,9 @@ from src.models.auth import (
     UserProfileResponse,
     UserRegistrationRequest,
 )
-from src.services.auth_service import AuthenticationService
-from src.db.models.user import UserStatus
-from src.services.security_services import token_manager
-from src.connector import redis_client
+from src.services.auth_service import AuthService
+from src.core.security import TokenManager
+from src.infrastructure.cache import redis_client
 from src.utils.logger_conf import logger
 
 
@@ -43,7 +42,7 @@ class GoogleOAuthCodeRequest(BaseModel):
 
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-auth_service = AuthenticationService()
+auth_service = AuthService()
 
 
 @router.get("/google/login")
@@ -61,7 +60,7 @@ async def google_oauth_redirect(
 
         oauth_params = {
             "client_id": settings.google_client_id,
-            "redirect_uri": settings.google_redirect_uri,
+            "redirect_uri": settings.oauth_redirect_url,
             "response_type": "code",
             "scope": "openid email profile",
             "access_type": "offline",
@@ -107,7 +106,7 @@ async def google_oauth_callback(
             "code": code,
             "client_id": settings.google_client_id,
             "client_secret": settings.google_client_secret,
-            "redirect_uri": settings.google_redirect_uri,
+            "redirect_uri": settings.oauth_redirect_url,
             "grant_type": "authorization_code",
         }
 
@@ -411,7 +410,7 @@ async def resend_verification_email(current_user: User = Depends(get_current_use
         if current_user.email_verified:
             return "Email is already verified"
 
-        verification_token, expires_at = token_manager.create_verification_token()
+        verification_token, expires_at = TokenManager.create_verification_token()
 
         await auth_service.update_user(
             str(current_user.id),
@@ -421,7 +420,7 @@ async def resend_verification_email(current_user: User = Depends(get_current_use
             },
         )
 
-        # TODO: Send verification email
+        await auth_service.send_verification_email(current_user)
         return "Verification email sent"
     except Exception as e:
         raise e

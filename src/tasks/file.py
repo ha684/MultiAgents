@@ -1,34 +1,34 @@
 # src/tasks/file.py
 import asyncio
-import json
-import os
-import random
-import time
-import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
+import json
+import os
 from pathlib import Path
+import random
+import time
 from typing import Any, Dict, List
+import uuid
 from zoneinfo import ZoneInfo
 
-import httpx
-import requests
 from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded, WorkerLostError
 from celery.signals import worker_process_init, worker_process_shutdown
+import httpx
 from langchain_core.documents import Document as LangchainDocument
+import requests
 
-from src.config.settings import settings
-from src.connector import minio_client
-from src.db import document_repository
-from src.db.models.document import Document as DBDocument
-from src.event_pub import get_event_publisher
-from src.models.document import (
+from src.core.config.settings import settings
+from src.database import document_repository
+from src.database.models.document import Document as DBDocument
+from src.domain.schemas.document import (
     DocumentProcessingStatusResponse,
     DocumentStatusEnum,
 )
-from src.rag.processor.strategy import get_strategy
-from src.rag.vector import vector_storage
+from src.infrastructure.events import get_event_publisher
+from src.infrastructure.storage import minio_client
+from src.rag.processors.strategy import get_strategy
+from src.rag.vectorstores import vector_storage
 from src.tasks.qac import generate_qa_pairs_async
 from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 from src.utils.logger_conf import logger

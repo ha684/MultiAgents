@@ -1,7 +1,10 @@
-import re
-import json
+# src/utils/__init__.py
 from datetime import datetime
+import json
+import re
 from zoneinfo import ZoneInfo
+
+from src.domain.schemas.chat import Message
 from src.utils.logger_conf import logger
 
 
@@ -47,3 +50,25 @@ def parse_response(content: str) -> dict | None:
 def get_current_time() -> str:
     """Get the current time in the Asia/Ho_Chi_Minh timezone"""
     return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).isoformat()
+
+
+def get_message_id(m: Message | None) -> str | None:
+    """Get message ID with error handling"""
+    try:
+        if not m or not m.metadata or "message_id" not in m.metadata:
+            return None
+        return m.metadata["message_id"]
+    except Exception as e:
+        logger.error(f"Error getting message ID: {e}")
+        return None
+
+
+def get_last_message_id(m: Message | None) -> str | None:
+    """Get last message ID with error handling"""
+    try:
+        if not m or not m.metadata or "last_message_id" not in m.metadata:
+            return None
+        return m.metadata["last_message_id"]
+    except Exception as e:
+        logger.error(f"Error getting last message ID: {e}")
+        return None

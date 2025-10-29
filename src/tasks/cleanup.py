@@ -1,9 +1,14 @@
 # src/tasks/cleanup.py
 from typing import Any, Dict
+
 from celery import shared_task
-from src.db.repository.document import DocumentRepository
-from src.event_pub import get_event_publisher
-from src.models.document import DocumentProcessingStatusResponse, DocumentStatusEnum
+
+from src.database.repositories.document_repository import DocumentRepository
+from src.domain.schemas.document import (
+    DocumentProcessingStatusResponse,
+    DocumentStatusEnum,
+)
+from src.infrastructure.events import get_event_publisher
 from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 from src.utils.logger_conf import logger
 

@@ -1,8 +1,8 @@
 # src/api/chunks.py
 from typing import List
 
-from langchain_core.documents import Document
 from fastapi import APIRouter
+from langchain_core.documents import Document
 from pydantic import BaseModel
 
 from src.services.chunks_service import ChunksService

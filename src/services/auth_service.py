@@ -1,12 +1,12 @@
 # src/services/auth_service.py
 from datetime import datetime, timedelta
-from typing import Any, List, Optional
+from typing import Any, List
 from zoneinfo import ZoneInfo
+
 from sqlalchemy import and_, select
-from src.config.auth_settings import auth_settings
-from src.db.models.user import User, UserStatus
-from src.db.repository.database_session import DatabaseSession
-from src.exceptions.auth_exceptions import (
+
+from src.core.config.settings import settings
+from src.core.exceptions.auth_exceptions import (
     AccountLockedException,
     AccountNotVerifiedException,
     AccountSuspendedException,
@@ -16,10 +16,15 @@ from src.exceptions.auth_exceptions import (
     UserAlreadyExistsException,
     UserNotFoundException,
 )
-from src.models.auth import (
+from src.core.security import JWTManager, PasswordManager, TokenManager
+from src.database.models.user import User, UserStatus
+from src.database.repositories.login_attempt_repository import LoginAttemptRepository
+from src.database.repositories.refresh_token_repository import RefreshTokenRepository
+from src.database.repositories.user_repository import UserRepository
+from src.dependencies.database_session import DatabaseSession
+from src.domain.schemas.auth import (
     PasswordChangeRequest,
     PasswordResetConfirmRequest,
-    TokenData,
     TokenResponse,
     UserLoginRequest,
     UserPermissionResponse,
@@ -27,26 +32,17 @@ from src.models.auth import (
     UserRegistrationRequest,
     UserWithPermissionsResponse,
 )
-from src.services.security_services import jwt_manager, security_manager, token_manager
-from src.services.user_service import (
-    LoginAttemptRepository,
-    RefreshTokenRepository,
-    UserRepository,
-)
-from src.services.utils import send_password_reset_email
+from src.infrastructure.email import gmail_api
 from src.utils.logger_conf import logger
 
 
-class AuthenticationService:
+class AuthService:
     """Main authentication service"""
 
     def __init__(self):
         self.user_repo = UserRepository()
         self.refresh_token_repo = RefreshTokenRepository()
         self.login_attempt_repo = LoginAttemptRepository()
-        self.jwt_manager = jwt_manager
-        self.security_manager = security_manager
-        self.token_manager = token_manager
 
     async def register_user(
         self,
@@ -78,19 +74,19 @@ class AuthenticationService:
         """Generate tokens for user"""
         await self.user_repo.update_last_login(str(user.id))
 
-        session_id = self.security_manager.generate_session_id()
-        access_token = self.jwt_manager.create_access_token(
+        session_id = PasswordManager.generate_session_id()
+        access_token = JWTManager.create_access_token(
             user_id=str(user.id),
             email=user.email,
             role=user.role,
             session_id=session_id,
         )
 
-        refresh_token = self.jwt_manager.create_refresh_token()
-        refresh_token_hash = self.security_manager.hash_token(refresh_token)
+        refresh_token = TokenManager.generate_secure_token()
+        refresh_token_hash = TokenManager.hash_token(refresh_token)
 
         expires_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
-            days=auth_settings.jwt_refresh_token_expire_days
+            days=settings.jwt_refresh_token_expire_days
         )
 
         await self.refresh_token_repo.create_refresh_token(
@@ -110,7 +106,7 @@ class AuthenticationService:
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer",
-            expires_in=auth_settings.jwt_access_token_expire_minutes * 60,
+            expires_in=settings.jwt_access_token_expire_minutes * 60,
         )
 
     async def authenticate_user(
@@ -150,7 +146,7 @@ class AuthenticationService:
                 )
                 raise AccountSuspendedException()
 
-            if not self.security_manager.verify_password(
+            if not PasswordManager.verify_password(
                 login_data.password, user.hashed_password
             ):
                 await self.user_repo.increment_failed_login_attempts(user.email)
@@ -186,7 +182,7 @@ class AuthenticationService:
         """Refresh access token using refresh token"""
         try:
             logger.info("Refreshing access token")
-            token_hash = self.security_manager.hash_token(refresh_token)
+            token_hash = TokenManager.hash_token(refresh_token)
             stored_token = await self.refresh_token_repo.get_refresh_token(token_hash)
             if not stored_token:
                 raise RefreshTokenException("Invalid refresh token")
@@ -204,8 +200,8 @@ class AuthenticationService:
             if user.status != UserStatus.ACTIVE:
                 raise RefreshTokenException("User account is not active")
 
-            session_id = self.security_manager.generate_session_id()
-            new_access_token = self.jwt_manager.create_access_token(
+            session_id = PasswordManager.generate_session_id()
+            new_access_token = JWTManager.create_access_token(
                 user_id=str(user.id),
                 email=user.email,
                 role=user.role,
@@ -213,14 +209,14 @@ class AuthenticationService:
             )
 
             new_refresh_token = refresh_token
-            if auth_settings.jwt_refresh_token_expire_days <= 1:
-                new_refresh_token = self.jwt_manager.create_refresh_token()
-                new_token_hash = self.security_manager.hash_token(new_refresh_token)
+            if settings.jwt_refresh_token_expire_days <= 1:
+                new_refresh_token = TokenManager.generate_secure_token()
+                new_token_hash = TokenManager.hash_token(new_refresh_token)
 
                 await self.refresh_token_repo.revoke_refresh_token(token_hash)
 
                 expires_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")) + timedelta(
-                    days=auth_settings.jwt_refresh_token_expire_days
+                    days=settings.jwt_refresh_token_expire_days
                 )
 
                 await self.refresh_token_repo.create_refresh_token(
@@ -235,7 +231,7 @@ class AuthenticationService:
                 access_token=new_access_token,
                 refresh_token=new_refresh_token,
                 token_type="bearer",
-                expires_in=auth_settings.jwt_access_token_expire_minutes * 60,
+                expires_in=settings.jwt_access_token_expire_minutes * 60,
             )
 
         except Exception as e:
@@ -245,7 +241,7 @@ class AuthenticationService:
     async def logout_user(self, refresh_token: str) -> bool:
         """Logout user by revoking refresh token"""
         try:
-            token_hash = self.security_manager.hash_token(refresh_token)
+            token_hash = TokenManager.hash_token(refresh_token)
             revoked = await self.refresh_token_repo.revoke_refresh_token(token_hash)
 
             if revoked:
@@ -303,7 +299,7 @@ class AuthenticationService:
                 logger.info(f"Password reset requested for non-existent user: {email}")
                 return True
 
-            reset_token, expires_at = self.token_manager.create_verification_token()
+            reset_token, expires_at = TokenManager.create_verification_token()
 
             await self.user_repo.update_user(
                 str(user.id),
@@ -313,7 +309,7 @@ class AuthenticationService:
                 },
             )
 
-            await send_password_reset_email(user, reset_token)
+            await self.send_password_reset_email(user, reset_token)
 
             logger.info(f"Password reset requested for user: {user.id}")
             return True
@@ -341,9 +337,7 @@ class AuthenticationService:
             if not user:
                 raise InvalidTokenException("Invalid or expired reset token")
 
-            new_password_hash = self.security_manager.hash_password(
-                reset_data.new_password
-            )
+            new_password_hash = PasswordManager.hash_password(reset_data.new_password)
 
             await self.user_repo.update_user(
                 str(user.id),
@@ -374,14 +368,12 @@ class AuthenticationService:
             if not user:
                 raise UserNotFoundException()
 
-            if not self.security_manager.verify_password(
+            if not PasswordManager.verify_password(
                 change_data.current_password, user.hashed_password
             ):
                 raise InvalidCredentialsException("Current password is incorrect")
 
-            new_password_hash = self.security_manager.hash_password(
-                change_data.new_password
-            )
+            new_password_hash = PasswordManager.hash_password(change_data.new_password)
 
             await self.user_repo.update_user(
                 user_id, {"hashed_password": new_password_hash}
@@ -428,16 +420,7 @@ class AuthenticationService:
             )
 
         except Exception as e:
-            logger.error(f"Get user profile failed for {user_id}: {str(e)}")
-            raise
-
-    async def validate_token(self, token: str) -> Optional[TokenData]:
-        """Validate JWT token and return token data"""
-        try:
-            return self.jwt_manager.verify_token(token)
-        except Exception as e:
-            logger.error(f"Token validation failed: {str(e)}")
-            return None
+            raise e
 
     async def update_user(self, user_id: str, update_data: dict) -> UserProfileResponse:
         """Update user profile"""
@@ -455,8 +438,7 @@ class AuthenticationService:
                 last_login_at=user.last_login_at,
             )
         except Exception as e:
-            logger.error(f"Update user profile failed for {user_id}: {str(e)}")
-            raise
+            raise e
 
     async def count_users(self) -> int:
         """Count all users"""
@@ -486,3 +468,70 @@ class AuthenticationService:
     async def create_oauth_user(self, user_data: dict) -> User:
         """Create user from OAuth data"""
         return await self.user_repo.create_oauth_user(user_data)
+
+    async def send_verification_email(self, user: User) -> None:
+        """Send verification code email to user"""
+        try:
+            subject = "Your Email Verification Code"
+            verification_code = user.email_verification_token
+
+            body = f"""
+    Hello {user.full_name},
+
+    Thank you for registering with our service!
+
+    Your email verification code is: {verification_code}
+
+    Please enter this code on the verification page to complete your registration.
+
+    This verification code will expire on {user.email_verification_expires.strftime("%Y-%m-%d %H:%M:%S UTC")}.
+
+    If you didn't create this account, you can safely ignore this email.
+
+    Best regards,
+    The Team
+            """.strip()
+
+            await gmail_api.send_message(
+                to_email=user.email, subject=subject, body=body
+            )
+        except Exception as e:
+            logger.error(f"Failed to send verification email to {user.email}: {str(e)}")
+            raise e
+
+    async def send_password_reset_email(self, user: User, reset_token: str) -> None:
+        """Send password reset email to user"""
+        try:
+            subject = "Your Password Reset Code"
+
+            body = f"""
+            Hello {user.full_name},
+
+            Thank you for requesting a password reset!
+
+            Your password reset code is: {reset_token}
+
+            Please enter this code on the password reset page to complete your password reset.
+
+            This password reset code will expire on {user.password_reset_expires.strftime("%Y-%m-%d %H:%M:%S UTC")}.
+
+            If you didn't request a password reset, you can safely ignore this email.
+
+            Best regards,
+            The Team
+            """.strip()
+
+            result = await gmail_api.send_message(
+                to_email=user.email, subject=subject, body=body
+            )
+
+            if result:
+                logger.info(f"Password reset email sent to {user.email}")
+            else:
+                logger.error(f"Failed to send password reset email to {user.email}")
+                raise Exception("Failed to send password reset email")
+        except Exception as e:
+            logger.error(
+                f"Failed to send password reset email to {user.email}: {str(e)}"
+            )
+            raise

@@ -3,11 +3,11 @@ from typing import Optional, List
 from fastapi import Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime
-from src.models.auth import TokenData, UserRole, AccessControlContext
-from src.db.models.user import User, UserStatus
-from src.services.user_service import UserRepository
-from src.services.security_services import jwt_manager, access_control
-from src.exceptions.auth_exceptions import (
+from src.domain.schemas.auth import TokenData, UserRole, AccessControlContext
+from src.database.models.user import User, UserStatus
+from src.database.repositories.user_repository import UserRepository
+from src.core.security import JWTManager, AccessControlManager
+from src.core.exceptions.auth_exceptions import (
     InvalidTokenException,
     TokenNotFoundException,
     InsufficientPermissionsException,
@@ -15,7 +15,7 @@ from src.exceptions.auth_exceptions import (
     UserNotFoundException,
     SessionExpiredException,
 )
-from src.config.auth_settings import ROLE_PERMISSIONS
+from src.core.config.settings import ROLE_PERMISSIONS
 from zoneinfo import ZoneInfo
 
 security = HTTPBearer(
@@ -33,7 +33,7 @@ async def get_current_user_token(
     if not credentials:
         raise TokenNotFoundException()
 
-    token_data = jwt_manager.verify_token(credentials.credentials)
+    token_data = JWTManager.verify_token(credentials.credentials)
     if not token_data:
         raise InvalidTokenException()
     return token_data
@@ -80,7 +80,6 @@ def require_roles(required_roles: List[UserRole]):
     return roles_dependency
 
 
-# Permission-based dependencies
 def require_permission(resource: str, action: str):
     """Dependency factory for permission-based access control"""
 
@@ -89,7 +88,9 @@ def require_permission(resource: str, action: str):
     ) -> User:
         # Check role-based permission first
         required_permission = f"{resource}:{action}"
-        if access_control.has_role_permission(current_user.role, required_permission):
+        if AccessControlManager.has_role_permission(
+            current_user.role, required_permission
+        ):
             return current_user
 
         # Check user-specific permissions
@@ -105,7 +106,9 @@ def require_permission(resource: str, action: str):
             or up.expires_at > datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
         ]
 
-        if not access_control.has_resource_access(user_permissions, resource, action):
+        if not AccessControlManager.has_resource_access(
+            user_permissions, resource, action
+        ):
             raise InsufficientPermissionsException(
                 f"Permission required: {required_permission}"
             )
@@ -129,11 +132,13 @@ def require_resource_access(
 
         # Check role-based permission first
         required_permission = f"{resource}:{action}"
-        if access_control.has_role_permission(current_user.role, required_permission):
+        if AccessControlManager.has_role_permission(
+            current_user.role, required_permission
+        ):
             return current_user
 
         # Check if user can access this specific resource
-        if not access_control.can_access_user_data(
+        if not AccessControlManager.can_access_user_data(
             str(current_user.id), resource_id, current_user.role
         ):
             raise InsufficientPermissionsException(

@@ -1,9 +1,10 @@
 # src/agents/basic/filename_agent.py
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel
+
 from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
-from langchain_core.messages import SystemMessage, HumanMessage
 
 EXTRACT_FILENAME_PROMPT = """
 You are an AI assistant that extracts the filename from a given arbitrary query. If
