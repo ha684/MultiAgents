@@ -176,3 +176,70 @@ async def document_status_ws(websocket: WebSocket, document_id: uuid.UUID):
         await ws_manager.send_message("error", message=f"Unexpected error: {str(e)}")
     finally:
         await ws_manager.disconnect()
+
+
+@router.get(
+    "/document_status/{document_id}/info",
+    tags=["WebSocket Docs"],
+    summary="WebSocket Documentation: Document Status Updates",
+)
+async def document_status_info(document_id: uuid.UUID):
+    """
+    ## 📡 WebSocket: `/ws/document_status/{document_id}`
+
+    **Purpose:**
+    Receive **real-time updates** about a document's processing status (e.g., uploading, extracting, embedding).
+
+    **WebSocket URL Example:**
+    ```
+    ws://localhost:8000/ws/document_status/123e4567-e89b-12d3-a456-426614174000
+    ```
+
+    **Connection Flow:**
+    - FE connects via WebSocket.
+    - Server sends initial status immediately.
+    - Server pushes incremental updates (e.g., progress %, success, error).
+
+    **Event Format (JSON):**
+    ```json
+    {
+        "event": "status_update",
+        "data": {
+            "phase": "embedding",
+            "progress": 0.65,
+            "message": "Embedding document chunks..."
+        }
+    }
+    ```
+
+    **Possible Event Types:**
+    - `status_update` → progress or stage change
+    - `completed` → document successfully processed
+    - `error` → failure occurred
+    - `info` → general message
+
+    **Example JavaScript client:**
+    ```javascript
+    const docId = "123e4567-e89b-12d3-a456-426614174000";
+    const ws = new WebSocket(`ws://localhost:8000/ws/document_status/${docId}`);
+
+    ws.onopen = () => console.log("✅ Connected to document status stream");
+    ws.onmessage = (event) => {
+        const payload = JSON.parse(event.data);
+        console.log("📨", payload);
+    };
+    ws.onclose = () => console.log("❌ Disconnected");
+    ```
+    """
+    return {
+        "websocket_url": f"ws://localhost:8000/ws/document_status/{document_id}",
+        "description": "Use this WebSocket to receive real-time updates about a document's processing status.",
+        "example_event": {
+            "event": "status_update",
+            "data": {
+                "phase": "extracting_text",
+                "progress": 0.45,
+                "message": "Extracting text from PDF...",
+            },
+        },
+    }

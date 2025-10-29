@@ -13,13 +13,6 @@ from fastapi.responses import StreamingResponse, HTMLResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from langchain.globals import set_llm_cache
 
-from src.api.document import router as document_router
-from src.api.knowledge_base import router as knowledge_base_router
-from src.api.chat import router as chat_router
-from src.api.chunks import router as chunks_router
-from src.api.websocket import router as websocket_router
-from src.api.conversation import router as conversation_router
-from src.api.auth import router as auth_router
 from src.core.config.settings import settings
 from src.utils.logger_conf import logger
 from src.infrastructure.database import database_connector
@@ -31,6 +24,7 @@ from src.middlewares.exception_handler import exception_handler
 from src.middlewares.rate_limit import RateLimitMiddleware
 from src.domain.schemas.chat import HealthCheckResponse
 from src.core.monitoring.observability import setup_tracing
+from src.api import ROUTERS
 
 
 @asynccontextmanager
@@ -165,13 +159,8 @@ async def endpoint_health_check(
 
 Instrumentator().instrument(app).expose(app)
 
-app.include_router(websocket_router)
-app.include_router(document_router)
-app.include_router(knowledge_base_router)
-app.include_router(chat_router)
-app.include_router(chunks_router)
-app.include_router(conversation_router)
-app.include_router(auth_router)
+for router in ROUTERS:
+    app.include_router(router)
 
 if __name__ == "__main__":
     host = "0.0.0.0"
