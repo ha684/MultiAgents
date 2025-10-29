@@ -95,10 +95,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 ]
             )
 
-        conversation_context = ""
-        if len(conversation) > 1:
-            recent_messages = conversation[-4:-1]
-            conversation_context = get_buffer_string(recent_messages)
+        conversation_context = get_buffer_string(conversation)
 
         system_prompt = SystemMessage(content=PromptTemplates.ROUTER_PROMPT)
 
@@ -416,7 +413,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         initial_state = OrchestratorState(conversation=conversation)
         conversation_id = conversation[-1].additional_kwargs.get("conversation_id")
         execution_manager.start_execution(conversation_id)
-
         try:
             async for event in super().astream(initial_state):
                 yield event

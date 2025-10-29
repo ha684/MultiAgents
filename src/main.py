@@ -121,9 +121,9 @@ def landing():
     return """
     <!doctype html>
     <html>
-        <head><meta charset="utf-8"><title>KMS Service</title></head>
+        <head><meta charset="utf-8"><title>Service</title></head>
         <body style="font-family: system-ui; max-width: 720px; margin: 40px auto;">
-        <h1>KMS Service</h1>
+        <h1>Service</h1>
             <ul>
                 <li><a href="/docs">Swagger UI</a></li>
                 <li><a href="/redoc">ReDoc</a></li>

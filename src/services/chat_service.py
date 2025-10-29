@@ -591,7 +591,6 @@ class ChatService:
                 retrieval_context=retrieval_context,
             )
 
-            # Save both messages together
             await self._save_message_pair(
                 user_message, agent_message, metadata.get("conversation_id")
             )
