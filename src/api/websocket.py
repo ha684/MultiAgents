@@ -178,11 +178,7 @@ async def document_status_ws(websocket: WebSocket, document_id: uuid.UUID):
         await ws_manager.disconnect()
 
 
-@router.get(
-    "/document_status/{document_id}/info",
-    tags=["WebSocket Docs"],
-    summary="WebSocket Documentation: Document Status Updates",
-)
+@router.get("/document_status/{document_id}/info")
 async def document_status_info(document_id: uuid.UUID):
     """
     ## 📡 WebSocket: `/ws/document_status/{document_id}`

@@ -6,7 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
 from src.core.config.settings import RATE_LIMIT_CONFIG
-from src.core.security import jwt_manager
+from src.core.security import JWTManager
 from src.infrastructure.cache import redis_client
 from src.utils.logger_conf import logger
 
@@ -120,7 +120,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         if auth_header and auth_header.startswith("Bearer "):
             try:
                 token = auth_header.split(" ")[1]
-                token_data = jwt_manager.verify_token(token)
+                token_data = JWTManager.verify_token(token)
                 if token_data:
                     return f"user:{token_data.user_id}:{request.url.path}"
             except Exception:

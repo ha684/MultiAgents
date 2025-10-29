@@ -17,7 +17,9 @@ def load_prompt_template(
     :return: The formatted prompt string.
     """
 
-    file_path = f"src/prompts/{task_name.lower()}.yaml"  # Adjust the path if needed
+    file_path = (
+        f"src/agents/prompts/{task_name.lower()}.yaml"  # Adjust the path if needed
+    )
     prompt_item = f"prompt_{language_code}"
     try:
         with open(file_path, "r", encoding="utf-8") as file:

@@ -6,7 +6,7 @@ from datetime import datetime
 from src.domain.schemas.auth import TokenData, UserRole, AccessControlContext
 from src.database.models.user import User, UserStatus
 from src.database.repositories.user_repository import UserRepository
-from src.core.security import jwt_manager, access_control_manager
+from src.core.security import JWTManager, AccessControlManager
 from src.core.exceptions.auth_exceptions import (
     InvalidTokenException,
     TokenNotFoundException,
@@ -33,7 +33,7 @@ async def get_current_user_token(
     if not credentials:
         raise TokenNotFoundException()
 
-    token_data = jwt_manager.verify_token(credentials.credentials)
+    token_data = JWTManager.verify_token(credentials.credentials)
     if not token_data:
         raise InvalidTokenException()
     return token_data
@@ -88,7 +88,7 @@ def require_permission(resource: str, action: str):
     ) -> User:
         # Check role-based permission first
         required_permission = f"{resource}:{action}"
-        if access_control_manager.has_role_permission(
+        if AccessControlManager.has_role_permission(
             current_user.role, required_permission
         ):
             return current_user
@@ -106,7 +106,7 @@ def require_permission(resource: str, action: str):
             or up.expires_at > datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
         ]
 
-        if not access_control_manager.has_resource_access(
+        if not AccessControlManager.has_resource_access(
             user_permissions, resource, action
         ):
             raise InsufficientPermissionsException(
@@ -132,13 +132,13 @@ def require_resource_access(
 
         # Check role-based permission first
         required_permission = f"{resource}:{action}"
-        if access_control_manager.has_role_permission(
+        if AccessControlManager.has_role_permission(
             current_user.role, required_permission
         ):
             return current_user
 
         # Check if user can access this specific resource
-        if not access_control_manager.can_access_user_data(
+        if not AccessControlManager.can_access_user_data(
             str(current_user.id), resource_id, current_user.role
         ):
             raise InsufficientPermissionsException(

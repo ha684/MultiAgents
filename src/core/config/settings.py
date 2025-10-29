@@ -28,9 +28,9 @@ class Settings(BaseSettings):
     vector_collection_name: str = "kms_vector_store"
 
     # Neo4j configuration
-    neo4j_uri: str
-    neo4j_user: str
-    neo4j_password: str
+    neo4j_uri: str = "neo4j://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "password"
 
     # ReRank API configuration
     rerank_url: str

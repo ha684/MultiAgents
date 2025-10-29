@@ -16,7 +16,7 @@ from src.core.exceptions.auth_exceptions import (
     UserAlreadyExistsException,
     UserNotFoundException,
 )
-from src.core.security import token_manager, password_manager
+from src.core.security import TokenManager, PasswordManager
 from src.database.models.user import (
     Permission,
     User,
@@ -41,9 +41,9 @@ class UserRepository:
     async def create_user(self, user_data: UserRegistrationRequest) -> User:
         """Create a new user"""
         try:
-            hashed_password = password_manager.hash_password(user_data.password)
+            hashed_password = PasswordManager.hash_password(user_data.password)
             verification_token, verification_expires = (
-                token_manager.create_verification_token()
+                TokenManager.create_verification_token()
             )
 
             new_user = User(
