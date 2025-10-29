@@ -1,6 +1,6 @@
 # src/database/repositories/knowledge_base_repository.py
-from typing import List, Optional
 import uuid
+from typing import List, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -8,11 +8,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from src.database.models.document import Document, KnowledgeBase
 from src.dependencies.database_session import DatabaseSession
 from src.domain.schemas.knowledge_base import (
-    KnowledgeBaseCreateRequest,
-    KnowledgeBaseListRequest,
     KnowledgeBaseListResponse,
     KnowledgeBaseResponse,
-    KnowledgeBaseUpdateRequest,
 )
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
@@ -24,15 +21,17 @@ class KnowledgeBaseRepository:
 
     async def create(
         self,
-        request: KnowledgeBaseCreateRequest,
+        name: str,
+        description: Optional[str],
+        user_id: str,
     ) -> KnowledgeBaseResponse:
         """Create a new knowledge base"""
         try:
             async with DatabaseSession() as session:
                 kb = KnowledgeBase(
-                    name=request.name,
-                    description=request.description,
-                    user_id=request.user_id,
+                    name=name,
+                    description=description,
+                    user_id=user_id,
                 )
                 session.add(kb)
                 await session.flush()
@@ -42,13 +41,15 @@ class KnowledgeBaseRepository:
             logger.error(f"Error creating knowledge base: {e.args[0]}")
             raise e
 
-    async def get(self, kb_id: uuid.UUID) -> Optional[KnowledgeBase]:
+    async def get(
+        self, kb_id: uuid.UUID, user_id: Optional[str] = None
+    ) -> Optional[KnowledgeBase]:
         """Get a knowledge base by ID"""
         try:
             async with DatabaseSession() as session:
                 stmt = select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
-                # if user_id:
-                #     stmt = stmt.where(KnowledgeBase.user_id == user_id)
+                if user_id:
+                    stmt = stmt.where(KnowledgeBase.user_id == user_id)
                 result = await session.execute(stmt)
             return result.scalar_one_or_none()
         except SQLAlchemyError as e:
@@ -69,19 +70,30 @@ class KnowledgeBaseRepository:
             raise e
 
     async def update(
-        self, request: KnowledgeBaseUpdateRequest
+        self,
+        kb_id: uuid.UUID,
+        name: Optional[str],
+        description: Optional[str],
+        is_active: Optional[bool],
+        user_id: str,
     ) -> Optional[KnowledgeBaseResponse]:
         """Update a knowledge base"""
         try:
             async with DatabaseSession() as session:
-                stmt = select(KnowledgeBase).where(KnowledgeBase.id == request.id)
+                stmt = select(KnowledgeBase).where(
+                    (KnowledgeBase.id == kb_id) & (KnowledgeBase.user_id == user_id)
+                )
                 result = await session.execute(stmt)
                 kb = result.scalar_one_or_none()
 
                 if not kb:
                     return None
 
-                update_data = request.model_dump(exclude_unset=True)
+                update_data = {
+                    "name": name,
+                    "description": description,
+                    "is_active": is_active,
+                }
 
                 if "name" in update_data:
                     kb.name = update_data["name"]
@@ -115,21 +127,23 @@ class KnowledgeBaseRepository:
 
     async def list(
         self,
-        request: KnowledgeBaseListRequest,
+        skip: int,
+        limit: int,
+        user_id: str,
     ) -> KnowledgeBaseListResponse:
         """List knowledge bases with pagination and search"""
         try:
             async with DatabaseSession() as session:
                 stmt = select(KnowledgeBase)
-                if request.user_id:
-                    stmt = stmt.where(KnowledgeBase.user_id == request.user_id)
+                if user_id:
+                    stmt = stmt.where(KnowledgeBase.user_id == user_id)
 
                 count_stmt = select(func.count()).select_from(stmt.subquery())
                 total_result = await session.execute(count_stmt)
                 total = total_result.scalar()
 
                 stmt = stmt.order_by(KnowledgeBase.created_at.desc())
-                stmt = stmt.offset(request.skip).limit(request.limit)
+                stmt = stmt.offset(skip).limit(limit)
 
                 result = await session.execute(stmt)
                 kb_list = list(result.scalars().all())
@@ -141,7 +155,7 @@ class KnowledgeBaseRepository:
                     result_list.append(kb_response)
 
             return await self.build_list_response(
-                kb_list=result_list, total=total, skip=request.skip, limit=request.limit
+                kb_list=result_list, total=total, skip=skip, limit=limit
             )
         except SQLAlchemyError as e:
             logger.error(f"Error listing knowledge bases: {e.args[0]}")

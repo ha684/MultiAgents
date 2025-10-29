@@ -29,7 +29,6 @@ async def generate_qa_pairs_async(
     await qa_repository.delete_qa_by_doc_id(document_id)
 
     qa_pairs = await qac_agent.generate_qa(contexts)
-
     if not qa_pairs:
         raise ValueError(f"No QA pairs generated for document {document_id}")
 

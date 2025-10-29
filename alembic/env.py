@@ -5,8 +5,8 @@ from logging.config import fileConfig
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
-from src.config.settings import settings
-from src.connector.database_conn import Base
+from src.core.config.settings import settings
+from src.infrastructure.database.connection import Base
 
 config = context.config
 

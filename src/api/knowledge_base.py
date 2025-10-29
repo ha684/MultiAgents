@@ -5,9 +5,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from langchain_core.documents import Document
 
+from src.database.models.user import User
+from src.dependencies.auth import get_current_user
 from src.domain.schemas.knowledge_base import (
     KnowledgeBaseCreateRequest,
-    KnowledgeBaseDeleteRequest,
     KnowledgeBaseListRequest,
     KnowledgeBaseListResponse,
     KnowledgeBaseResponse,
@@ -15,8 +16,6 @@ from src.domain.schemas.knowledge_base import (
 )
 from src.domain.schemas.qa import DocumentQAResponse
 from src.services.knowledge_base_service import KnowledgeBaseService
-from src.database.models.user import User
-from src.dependencies.auth import get_current_user
 
 router = APIRouter(
     prefix="/kb", tags=["Knowledge Base"], dependencies=[Depends(get_current_user)]
@@ -43,7 +42,7 @@ async def get_list_knowledge_bases_for_admin(
 
 @router.post("/user")
 async def get_list_knowledge_bases_for_user(
-    request: KnowledgeBaseListRequest,
+    request: KnowledgeBaseListRequest, current_user: User = Depends(get_current_user)
 ) -> KnowledgeBaseListResponse:
     """
     Get a list of all knowledge bases.
@@ -52,7 +51,9 @@ async def get_list_knowledge_bases_for_user(
         A list of knowledge bases.
     """
     try:
-        return await kb_service.list_knowledge_bases(request)
+        return await kb_service.list_knowledge_bases(
+            skip=request.skip, limit=request.limit, user_id=current_user.id
+        )
     except Exception as e:
         raise e
 
@@ -60,9 +61,12 @@ async def get_list_knowledge_bases_for_user(
 @router.post("/create")
 async def create_knowledge_base(
     knowledge_base: KnowledgeBaseCreateRequest,
+    current_user: User = Depends(get_current_user),
 ) -> KnowledgeBaseResponse:
     try:
-        return await kb_service.create_knowledge_base(knowledge_base)
+        return await kb_service.create_knowledge_base(
+            knowledge_base.name, knowledge_base.description, current_user.id
+        )
     except Exception as e:
         raise e
 
@@ -107,24 +111,14 @@ async def query_knowledge_base(kb_id: str, query: str) -> List[Document]:
 
 
 @router.delete("/{kb_id}", response_model=dict)
-async def delete_knowledge_base(request: KnowledgeBaseDeleteRequest) -> dict:
+async def delete_knowledge_base(
+    kb_id: str, current_user: User = Depends(get_current_user)
+) -> dict:
     """
     Delete a knowledge base and all its documents.
-
-    This will:
-    1. Get all documents in the knowledge base
-    2. Delete all vector chunks associated with the documents
-    3. Delete all documents from the database
-    4. Delete the knowledge base itself
-
-    Args:
-        request: The request containing the ID of the knowledge base to delete.
-
-    Returns:
-        A success message if deletion was successful.
     """
     try:
-        return await kb_service.delete_knowledge_base(request)
+        return await kb_service.delete_knowledge_base(kb_id, current_user.id)
     except Exception as e:
         raise e
 
@@ -151,6 +145,7 @@ async def get_qa_pairs_by_kb_id(
 @router.put("/{kb_id}/update")
 async def update_knowledge_base(
     knowledge_base: KnowledgeBaseUpdateRequest,
+    current_user: User = Depends(get_current_user),
 ) -> KnowledgeBaseResponse:
     """
     Update a knowledge base.
@@ -162,6 +157,12 @@ async def update_knowledge_base(
         The updated knowledge base.
     """
     try:
-        return await kb_service.update_knowledge_base(knowledge_base)
+        return await kb_service.update_knowledge_base(
+            kb_id=knowledge_base.kb_id,
+            name=knowledge_base.name,
+            description=knowledge_base.description,
+            is_active=knowledge_base.is_active,
+            user_id=current_user.id,
+        )
     except Exception as e:
         raise e

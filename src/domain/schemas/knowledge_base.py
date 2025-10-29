@@ -8,14 +8,12 @@ from pydantic import BaseModel, Field
 
 class KnowledgeBaseCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
-    user_id: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
 
 
 class KnowledgeBaseUpdateRequest(BaseModel):
-    id: uuid.UUID
+    kb_id: uuid.UUID
     name: Optional[str] = Field(None, min_length=1, max_length=255)
-    user_id: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -45,9 +43,3 @@ class KnowledgeBaseListResponse(BaseModel):
 class KnowledgeBaseListRequest(BaseModel):
     skip: int = 0
     limit: int = 10
-    user_id: str = Field(..., min_length=1, max_length=255)
-
-
-class KnowledgeBaseDeleteRequest(BaseModel):
-    id: uuid.UUID
-    user_id: str = Field(..., min_length=1, max_length=255)
