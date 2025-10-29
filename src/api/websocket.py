@@ -1,11 +1,13 @@
 # src/api/websocket.py
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from src.services.document_service import DocumentService
-from src.event_pub import get_event_publisher
-from src.utils.constants import DOCUMENT_STATUS_CHANNEL
-import uuid
 import asyncio
-from typing import Dict, Any, Optional
+from typing import Any, Dict, Optional
+import uuid
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from src.infrastructure.events import get_event_publisher
+from src.services.document_service import DocumentService
+from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 from src.utils.logger_conf import logger
 
 router = APIRouter(prefix="/websocket", tags=["WebSocket"])

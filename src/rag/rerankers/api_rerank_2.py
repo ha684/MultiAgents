@@ -1,9 +1,11 @@
+# src/rag/rerankers/api_rerank_2.py
 from typing import List
+
 import httpx
 from pydantic.type_adapter import TypeAdapter
-from src.config import settings
 
-from .base import BaseReranker, Rank
+from src.core.config.settings import settings
+from src.rag.rerankers.base import BaseReranker, Rank
 
 
 class InferenceAPIReranker2(BaseReranker):

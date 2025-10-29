@@ -1,10 +1,10 @@
 # src/agents/executors/deep_research.py
 import asyncio
 
-from src.agents.graph.state import OrchestratorState, ResearchState
-from src.agents.com.types import SubgraphOutput
 from src.agents.graph import research_graph
-from src.agents.com.manager import execution_manager
+from src.agents.graph.state import OrchestratorState, ResearchState
+from src.agents.shared.manager import execution_manager
+from src.domain.entities.graph import SubgraphOutput
 from src.utils.logger_conf import logger
 
 

@@ -1,6 +1,7 @@
-# src/agents/com/manager.py
+# src/agents/shared/manager.py
 from typing import Dict, Optional
-from src.agents.com.types import Execution
+
+from src.domain.entities.graph import Execution
 from src.utils.decorators import singleton
 
 

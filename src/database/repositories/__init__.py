@@ -1,4 +1,4 @@
-# src/db/repository/__init__.py
+# src/database/repositories/__init__.py
 """
 Database Repository Module
 
@@ -6,10 +6,10 @@ This module provides repository classes for database operations.
 Use the UnifiedRepository for a single interface to all database operations.
 """
 
-from .knowledge_base import KnowledgeBaseRepository
-from .document import DocumentRepository
-from .qa import QARepository
-from .conversation import ConversationRepository
+from src.database.repositories.knowledge_base_repository import KnowledgeBaseRepository
+from src.database.repositories.document_repository import DocumentRepository
+from src.database.repositories.qa_repository import QARepository
+from src.database.repositories.conversation_repository import ConversationRepository
 
 
 __all__ = [

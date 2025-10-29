@@ -1,38 +1,34 @@
-# src/services/user_service.py
+# src/database/repositories/user_repository.py
 
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
 import asyncio
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 import uuid
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, update, delete, func
+from sqlalchemy import and_, delete, func, update
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
-from src.config.auth_settings import auth_settings, ROLE_PERMISSIONS
-from src.connector import redis_client
-from src.db.models.user import (
-    LoginAttempt,
+from src.core.config.settings import settings
+from src.core.exceptions.auth_exceptions import (
+    DatabaseException,
+    UserAlreadyExistsException,
+    UserNotFoundException,
+)
+from src.core.security import token_manager, password_manager
+from src.database.models.user import (
     Permission,
-    RefreshToken,
     User,
     UserPermission,
     UserRole,
     UserStatus,
 )
-from src.db.repository.database_session import DatabaseSession
-from src.exceptions.auth_exceptions import (
-    DatabaseException,
-    UserAlreadyExistsException,
-    UserNotFoundException,
-)
-from src.models.auth import UserRegistrationRequest
-from src.services.security_services import security_manager, token_manager
-from src.services.utils import send_verification_email
+from src.dependencies.database_session import DatabaseSession
+from src.domain.schemas.auth import UserRegistrationRequest
+from src.infrastructure.cache import redis_client
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
-
 
 USER_BY_ID = "user:by_id"
 USER_BY_EMAIL = "user:by_email"
@@ -45,7 +41,7 @@ class UserRepository:
     async def create_user(self, user_data: UserRegistrationRequest) -> User:
         """Create a new user"""
         try:
-            hashed_password = security_manager.hash_password(user_data.password)
+            hashed_password = password_manager.hash_password(user_data.password)
             verification_token, verification_expires = (
                 token_manager.create_verification_token()
             )
@@ -67,7 +63,6 @@ class UserRepository:
                 session.add(new_user)
                 await session.flush()
                 await session.refresh(new_user)
-                await send_verification_email(new_user)
 
             await self.assign_default_permissions(new_user.id)
 
@@ -275,10 +270,10 @@ class UserRepository:
 
             user.failed_login_attempts += 1
 
-            if user.failed_login_attempts >= auth_settings.max_login_attempts:
+            if user.failed_login_attempts >= settings.max_login_attempts:
                 user.account_locked_until = datetime.now(
                     ZoneInfo("Asia/Ho_Chi_Minh")
-                ) + timedelta(minutes=auth_settings.account_lockout_duration_minutes)
+                ) + timedelta(minutes=settings.account_lockout_duration_minutes)
 
             user.updated_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
             async with DatabaseSession() as session:
@@ -323,7 +318,7 @@ class UserRepository:
     async def assign_default_permissions(self, user_id: uuid.UUID) -> None:
         """Assign default permissions to a new user"""
         try:
-            default_perms = ROLE_PERMISSIONS.get("user", [])
+            default_perms = settings.ROLE_PERMISSIONS.get("user", [])
 
             async with DatabaseSession() as session:
                 for perm_name in default_perms:
@@ -401,145 +396,6 @@ class UserRepository:
         except Exception as e:
             logger.error(f"Error creating OAuth user: {str(e)}")
             raise DatabaseException("Failed to create OAuth user")
-
-
-class RefreshTokenRepository:
-    """Refresh token database operations"""
-
-    async def create_refresh_token(
-        self,
-        user_id: str,
-        token_hash: str,
-        expires_at: datetime,
-    ) -> RefreshToken:
-        """Create a new refresh token"""
-        try:
-            refresh_token = RefreshToken(
-                user_id=uuid.UUID(user_id),
-                token_hash=token_hash,
-                expires_at=expires_at,
-                created_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
-            )
-
-            async with DatabaseSession() as session:
-                session.add(refresh_token)
-                await session.flush()
-                await session.refresh(refresh_token)
-
-            return refresh_token
-        except Exception as e:
-            logger.error(f"Error creating refresh token: {str(e)}")
-            raise DatabaseException("Failed to create refresh token")
-
-    async def get_refresh_token(self, token_hash: str) -> Optional[RefreshToken]:
-        """Get refresh token by hash"""
-        try:
-            async with DatabaseSession() as session:
-                result = await session.execute(
-                    select(RefreshToken)
-                    .options(selectinload(RefreshToken.user))
-                    .where(
-                        and_(
-                            RefreshToken.token_hash == token_hash,
-                            not RefreshToken.is_revoked,
-                            RefreshToken.expires_at
-                            > datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
-                        )
-                    )
-                )
-            return result.scalar_one_or_none()
-        except Exception as e:
-            logger.error(f"Error getting refresh token: {str(e)}")
-            raise DatabaseException("Failed to retrieve refresh token")
-
-    async def revoke_refresh_token(self, token_hash: str) -> bool:
-        """Revoke a refresh token"""
-        try:
-            async with DatabaseSession() as session:
-                stmt = (
-                    update(RefreshToken)
-                    .where(RefreshToken.token_hash == token_hash)
-                    .values(
-                        is_revoked=True,
-                        revoked_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
-                    )
-                    .returning(RefreshToken)
-                )
-                result = await session.execute(stmt)
-                await session.commit()
-
-            return result.scalar_one_or_none()
-        except Exception as e:
-            logger.error(f"Error revoking refresh token: {str(e)}")
-            raise DatabaseException("Failed to revoke refresh token")
-
-    async def revoke_all_user_tokens(self, user_id: str) -> int:
-        """Revoke all refresh tokens for a user"""
-        try:
-            async with DatabaseSession() as session:
-                stmt = (
-                    update(RefreshToken)
-                    .where(RefreshToken.user_id == uuid.UUID(user_id))
-                    .values(
-                        is_revoked=True,
-                        revoked_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
-                    )
-                    .returning(RefreshToken)
-                )
-                result = await session.execute(stmt)
-                await session.commit()
-
-            return result.scalar_one_or_none()
-        except Exception as e:
-            logger.error(f"Error revoking all user tokens: {str(e)}")
-            raise DatabaseException("Failed to revoke user tokens")
-
-    async def cleanup_expired_tokens(self) -> int:
-        """Clean up expired refresh tokens"""
-        try:
-            async with DatabaseSession() as session:
-                stmt = (
-                    delete(RefreshToken)
-                    .where(
-                        RefreshToken.expires_at
-                        < datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
-                    )
-                    .returning(RefreshToken)
-                )
-                result = await session.execute(stmt)
-                await session.commit()
-
-            return result.scalar_one_or_none()
-        except Exception as e:
-            logger.error(f"Error cleaning up expired tokens: {str(e)}")
-            raise DatabaseException("Failed to cleanup expired tokens")
-
-
-class LoginAttemptRepository:
-    """Login attempt tracking"""
-
-    async def record_login_attempt(
-        self,
-        email: str,
-        success: bool,
-        failure_reason: Optional[str] = None,
-    ) -> LoginAttempt:
-        """Record a login attempt"""
-        try:
-            attempt = LoginAttempt(
-                email=email.lower(),
-                success=success,
-                failure_reason=failure_reason,
-                attempted_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
-            )
-
-            async with DatabaseSession() as session:
-                session.add(attempt)
-                await session.flush()
-
-            return attempt
-        except Exception as e:
-            logger.error(f"Error recording login attempt: {str(e)}")
 
 
 def _user_to_cache(u: User) -> dict:

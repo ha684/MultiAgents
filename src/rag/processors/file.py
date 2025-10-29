@@ -1,6 +1,7 @@
-# src/rag/processor/file.py
+# src/rag/processors/file.py
 from typing import List
-from src.config import celery_app
+
+from src.core.config.celery_app import celery_app
 from src.utils.decorators import singleton
 
 

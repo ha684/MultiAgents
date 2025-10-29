@@ -4,15 +4,16 @@ import uuid
 
 from fastapi import APIRouter, UploadFile, File, Request, HTTPException
 
-from src.models.document import (
+from src.domain.schemas.document import (
     DocumentResponse,
     DocumentStatusEnum,
     DocumentUploadResponse,
     DocumentListResponse,
     DocumentProcessingStatusResponse,
+    PaginationParams,
+    SearchParams,
 )
-from src.models.common import PaginationParams, SearchParams
-from src.models.qa import DocumentQAResponse
+from src.domain.schemas.qa import DocumentQAResponse
 from src.services.document_service import DocumentService
 
 router = APIRouter(prefix="/documents", tags=["Document"])

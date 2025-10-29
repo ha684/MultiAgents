@@ -1,15 +1,17 @@
-# src/models/auth.py
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
-from typing import Optional, List, Dict, Any, Union
+# src/domain/schemas/auth.py
 from datetime import datetime
 from enum import Enum
+import re
+from typing import Any, Dict, List, Optional, Union
 from zoneinfo import ZoneInfo
-from src.exceptions.auth_exceptions import (
+
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+
+from src.core.exceptions.auth_exceptions import (
+    FullNameValidationException,
     PasswordValidationException,
     UsernameValidationException,
-    FullNameValidationException,
 )
-import re
 
 
 # Enums

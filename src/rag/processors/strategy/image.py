@@ -1,10 +1,12 @@
+# src/rag/processors/strategy/image.py
 from pathlib import Path
-from langchain_core.documents import Document
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
-from src.rag.processor.strategy.base import BaseStrategy
-from src.rag.processor.loader.images_loader import ImageLoader
-from src.db.models.document import Document as DBDocument
+from langchain_core.documents import Document as LangchainDocument
+
+from src.database.models.document import Document as DBDocument
+from src.rag.processors.loader.images_loader import ImageLoader
+from src.rag.processors.strategy.base import BaseStrategy
 from src.utils.logger_conf import logger
 
 
@@ -37,15 +39,17 @@ class ImageStrategy(BaseStrategy):
 
         return ImageLoader(image_path=file_path)
 
-    async def chunk(self, file_path: str, document: DBDocument) -> List[Document]:
+    async def chunk(
+        self, file_path: str, document: DBDocument
+    ) -> List[LangchainDocument]:
         """
-        Process a file using Langchain's document loaders.
+        Process a file using Langchain's LangchainDocument loaders.
 
         Args:
             file_path: The path to the file to process
 
         Returns:
-            A list of Langchain Document objects
+            A list of Langchain LangchainDocument objects
         """
         logger.info(f"Processing file {file_path} with naive strategy")
 

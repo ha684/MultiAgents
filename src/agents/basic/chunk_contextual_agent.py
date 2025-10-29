@@ -1,7 +1,10 @@
+# src/agents/basic/chunk_contextual_agent.py
 from typing import List
-from src.llm.factory import get_llm
-from langchain_core.messages import SystemMessage, HumanMessage
+
 from langchain_core.documents import Document
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
 
 CHUNK_CONTEXTUAL_PROMPT = """You are an expert at understanding document structure and meaning. Your task is to provide contextual information that will help this specific chunk be found when someone searches for its content.

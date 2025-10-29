@@ -1,7 +1,10 @@
+# src/rag/processors/strategy/base.py
 from abc import ABC, abstractmethod
+from typing import Any, Dict, List
+
 from langchain_core.documents import Document
-from typing import Dict, Any, List
-from src.db.models.document import Document as DBDocument
+
+from src.database.models.document import Document as DBDocument
 
 
 class BaseStrategy(ABC):

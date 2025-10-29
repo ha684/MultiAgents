@@ -1,22 +1,24 @@
-# src/db/models/user.py
+# src/database/models/user.py
+from datetime import datetime
+import enum
+from zoneinfo import ZoneInfo
+
 from sqlalchemy import (
-    Column,
-    String,
-    DateTime,
     Boolean,
-    Text,
+    Column,
+    DateTime,
     Enum,
-    Integer,
     ForeignKey,
     Index,
+    Integer,
+    String,
+    Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
-from src.connector.database_conn import Base
-from datetime import datetime
 from uuid_extensions import uuid7
-import enum
-from zoneinfo import ZoneInfo
+
+from src.infrastructure.database.connection import Base
 
 
 class UserRole(enum.Enum):

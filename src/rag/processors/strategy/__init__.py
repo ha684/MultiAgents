@@ -1,15 +1,17 @@
+# src/rag/processors/strategy/__init__.py
 """
 Strategy module for document processing.
 This module contains different document processing strategies.
 """
 
-from typing import Dict, Any
-from src.rag.processor.strategy.naive import NaiveStrategy
-from src.db.models.document import Document as DBDocument
-from src.rag.processor.strategy.base import BaseStrategy
 from pathlib import Path
-from src.rag.processor.strategy.image import ImageStrategy
-from src.rag.processor.strategy.spreadsheet import SpreadsheetStrategy
+from typing import Any, Dict
+
+from src.database.models.document import Document as DBDocument
+from src.rag.processors.strategy.base import BaseStrategy
+from src.rag.processors.strategy.image import ImageStrategy
+from src.rag.processors.strategy.naive import NaiveStrategy
+from src.rag.processors.strategy.spreadsheet import SpreadsheetStrategy
 
 
 def get_strategy(document: DBDocument, config: Dict[str, Any]) -> BaseStrategy:

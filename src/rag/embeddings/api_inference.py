@@ -1,11 +1,12 @@
+# src/rag/embeddings/api_inference.py
+import asyncio
 from typing import List
+
+import httpx
 from langchain_core.embeddings import Embeddings
 from pydantic import BaseModel, ConfigDict
-import httpx
-import asyncio
-import logging
 
-logger = logging.getLogger(__name__)
+from src.utils.logger_conf import logger
 
 
 class InferenceAPIEmbeddings(BaseModel, Embeddings):

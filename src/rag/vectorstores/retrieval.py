@@ -1,10 +1,12 @@
+# src/rag/vectorstores/retrieval.py
+from copy import deepcopy
 from typing import Dict, List, Optional, cast
+
 from langchain_core.documents import Document
 from qdrant_client import models
 
-from src.rag.vector.storage import VectorStorage
-from src.rag.reranking import get_reranker
-from copy import deepcopy
+from src.rag.rerankers import get_reranker
+from src.rag.vectorstores.storage import VectorStorage
 from src.utils.logger_conf import logger
 
 

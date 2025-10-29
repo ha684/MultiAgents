@@ -1,12 +1,15 @@
+# src/rag/vectorstores/storage.py
 from typing import List, Optional
+
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from langchain_qdrant import FastEmbedSparse, RetrievalMode
 from qdrant_client import AsyncQdrantClient, models
-from src.rag.embeding import embedding
-from src.config.settings import settings
+
+from src.core.config.settings import settings
+from src.rag.embeddings import embedding
+from src.rag.vectorstores.custom_qdrantvectorstore import CustomQdrantVectorStore
 from src.utils.decorators import singleton
-from .custom_qdrantvectorstore import CustomQdrantVectorStore
 from src.utils.logger_conf import logger
 
 

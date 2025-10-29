@@ -1,7 +1,7 @@
-# src/db/models/document.py
-import uuid
+# src/database/models/document.py
 from datetime import datetime
 from typing import List, Optional
+import uuid
 
 from sqlalchemy import (
     Boolean,
@@ -17,7 +17,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from uuid_extensions import uuid7
-from src.connector.database_conn import Base
+
+from src.infrastructure.database.connection import Base
 
 
 class KnowledgeBase(Base):

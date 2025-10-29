@@ -1,19 +1,22 @@
-from pathlib import Path
-from langchain_core.documents import Document
-from langchain_community.document_loaders import DirectoryLoader, UnstructuredFileLoader
-from langchain_community.document_loaders.base import BaseLoader
-from langchain.text_splitter import MarkdownTextSplitter
+# src/rag/processors/strategy/naive.py
 import os
-from typing import List, Dict, Any, Optional, Tuple
-from src.rag.processor.strategy.base import BaseStrategy
-from src.db.models.document import Document as DBDocument
-from langchain_pymupdf4llm import PyMuPDF4LLMLoader
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from langchain.text_splitter import MarkdownTextSplitter
+from langchain_community.document_loaders import DirectoryLoader, UnstructuredFileLoader
 from langchain_community.document_loaders import UnstructuredWordDocumentLoader
 from langchain_community.document_loaders import UnstructuredMarkdownLoader
 from langchain_community.document_loaders import UnstructuredPowerPointLoader
 from langchain_community.document_loaders import UnstructuredXMLLoader
 from langchain_community.document_loaders import UnstructuredRSTLoader
+from langchain_community.document_loaders.base import BaseLoader
 from langchain_community.document_loaders.csv_loader import CSVLoader
+from langchain_core.documents import Document as LangchainDocument
+from langchain_pymupdf4llm import PyMuPDF4LLMLoader
+
+from src.database.models.document import Document as DBDocument
+from src.rag.processors.strategy.base import BaseStrategy
 from src.utils.logger_conf import logger
 
 
@@ -94,8 +97,8 @@ class NaiveStrategy(BaseStrategy):
         )
 
     def _add_citation_metadata(
-        self, documents: List[Document], full_text: str
-    ) -> List[Document]:
+        self, documents: List[LangchainDocument], full_text: str
+    ) -> List[LangchainDocument]:
         """
         Add start and end character indices to document metadata for deep citation.
 
@@ -128,7 +131,9 @@ class NaiveStrategy(BaseStrategy):
 
         return documents
 
-    def chunk(self, file_path: str, document: DBDocument) -> Tuple[List[Document], str]:
+    def chunk(
+        self, file_path: str, document: DBDocument
+    ) -> Tuple[List[LangchainDocument], str]:
         """
         Process a file using Langchain's document loaders with deep citation support.
 
@@ -137,7 +142,7 @@ class NaiveStrategy(BaseStrategy):
             document: The database document object
 
         Returns:
-            A list of Langchain Document objects with citation metadata
+            A list of Langchain LangchainDocument objects with citation metadata
         """
         logger.info(f"Processing file {file_path} with naive strategy")
 
@@ -162,8 +167,8 @@ class NaiveStrategy(BaseStrategy):
                 chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
             )
 
-            document_spliter: List[Document] = []
-            unsplit_documents: List[Document] = []
+            document_spliter: List[LangchainDocument] = []
+            unsplit_documents: List[LangchainDocument] = []
 
             for doc in docs:
                 splitter_value = doc.metadata.get("splitter", None)

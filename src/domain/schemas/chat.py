@@ -175,3 +175,11 @@ class Reference(BaseModel):
         ...,
         description="The index of the source in the list of sources received from the LLM.",
     )
+
+
+class Conversation(BaseModel):
+    conversation_id: str
+    is_active: bool
+    name: str
+    summary: str | None = None
+    summarized_up_to_message_order: int | None = None

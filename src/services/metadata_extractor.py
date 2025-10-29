@@ -1,14 +1,16 @@
 # src/utils/metadata_extractor.py
-import langextract as lx
-import textwrap
-import re
-from typing import Dict, Any, List, Optional
-from langchain_core.documents import Document
-from langextract.factory import ModelConfig
-from src.config import settings
-from qdrant_client import models
 from collections import defaultdict
-from rapidfuzz import process, fuzz
+import re
+import textwrap
+from typing import Any, Dict, List, Optional
+
+from langchain_core.documents import Document
+import langextract as lx
+from langextract.factory import ModelConfig
+from qdrant_client import models
+from rapidfuzz import fuzz, process
+
+from src.core.config.settings import settings
 
 METADATA_PROMPT = textwrap.dedent("""\
     Extract key metadata from the document chunk or text. Focus on identifying:

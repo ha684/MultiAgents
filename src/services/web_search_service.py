@@ -1,10 +1,13 @@
-from typing import List, Optional, Any, Dict, Union
+# src/services/web_search_service.py
+from typing import Any, Dict, List, Optional, Union
+
 from langchain_core.documents import Document
+
+from src.core.config.settings import settings
+from src.domain.schemas.chat import SearchProvider
 from src.services.web_search.base import BaseSearchService
-from src.services.web_search.tavily import TavilyService
 from src.services.web_search.firecrawl import FireCrawlService
-from src.models.chat import SearchProvider
-from src.config.settings import settings
+from src.services.web_search.tavily import TavilyService
 from src.utils.logger_conf import logger
 
 Provider = Union[str, SearchProvider]

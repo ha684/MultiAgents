@@ -1,18 +1,21 @@
-import uuid
+# src/database/repositories/knowledge_base_repository.py
 from typing import List, Optional
+import uuid
+
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
-from src.db.models.document import Document, KnowledgeBase
-from src.db.repository.database_session import DatabaseSession
-from src.models.knowledge_base import (
+
+from src.database.models.document import Document, KnowledgeBase
+from src.dependencies.database_session import DatabaseSession
+from src.domain.schemas.knowledge_base import (
     KnowledgeBaseCreateRequest,
     KnowledgeBaseListRequest,
     KnowledgeBaseListResponse,
     KnowledgeBaseResponse,
     KnowledgeBaseUpdateRequest,
 )
-from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
+from src.utils.logger_conf import logger
 
 
 @singleton

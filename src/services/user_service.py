@@ -1,18 +1,23 @@
 # src/services/user_service.py
 
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List
 import asyncio
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
 import uuid
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import and_, update, delete, func
+from sqlalchemy import and_, delete, func, update
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
-from src.config.auth_settings import auth_settings, ROLE_PERMISSIONS
-from src.connector import redis_client
-from src.db.models.user import (
+from src.core.config.settings import ROLE_PERMISSIONS, settings
+from src.core.exceptions.auth_exceptions import (
+    DatabaseException,
+    UserAlreadyExistsException,
+    UserNotFoundException,
+)
+from src.core.security import PasswordManager, TokenManager
+from src.database.models.user import (
     LoginAttempt,
     Permission,
     RefreshToken,
@@ -21,14 +26,9 @@ from src.db.models.user import (
     UserRole,
     UserStatus,
 )
-from src.db.repository.database_session import DatabaseSession
-from src.exceptions.auth_exceptions import (
-    DatabaseException,
-    UserAlreadyExistsException,
-    UserNotFoundException,
-)
-from src.models.auth import UserRegistrationRequest
-from src.services.security_services import security_manager, token_manager
+from src.dependencies.database_session import DatabaseSession
+from src.domain.schemas.auth import UserRegistrationRequest
+from src.infrastructure.cache import redis_client
 from src.services.utils import send_verification_email
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
@@ -45,9 +45,9 @@ class UserRepository:
     async def create_user(self, user_data: UserRegistrationRequest) -> User:
         """Create a new user"""
         try:
-            hashed_password = security_manager.hash_password(user_data.password)
+            hashed_password = PasswordManager.hash_password(user_data.password)
             verification_token, verification_expires = (
-                token_manager.create_verification_token()
+                TokenManager.create_verification_token()
             )
 
             new_user = User(
@@ -275,10 +275,10 @@ class UserRepository:
 
             user.failed_login_attempts += 1
 
-            if user.failed_login_attempts >= auth_settings.max_login_attempts:
+            if user.failed_login_attempts >= settings.max_login_attempts:
                 user.account_locked_until = datetime.now(
                     ZoneInfo("Asia/Ho_Chi_Minh")
-                ) + timedelta(minutes=auth_settings.account_lockout_duration_minutes)
+                ) + timedelta(minutes=settings.account_lockout_duration_minutes)
 
             user.updated_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
             async with DatabaseSession() as session:

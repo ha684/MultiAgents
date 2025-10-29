@@ -1,4 +1,4 @@
-# src/agents/graph/prompts.py
+# src/agents/shared/prompts.py
 
 import textwrap
 

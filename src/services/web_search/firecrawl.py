@@ -1,8 +1,12 @@
-from src.services.web_search.base import BaseSearchService
-from typing import Optional, List, Any
-from langchain_core.documents import Document
-from src.config.settings import settings
+# src/services/web_search/firecrawl.py
+
+from typing import Any, List, Optional
+
 import httpx
+from langchain_core.documents import Document
+
+from src.core.config.settings import settings
+from src.services.web_search.base import BaseSearchService
 from src.utils.logger_conf import logger
 
 

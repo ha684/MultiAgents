@@ -1,6 +1,6 @@
 # src/rag/embeding/__init__.py
-from src.config import settings
-from src.rag.embeding.api_inference import InferenceAPIEmbeddings
+from src.core.config.settings import settings
+from src.rag.embeddings.api_inference import InferenceAPIEmbeddings
 
 embedding = InferenceAPIEmbeddings(
     api_url=settings.text_embedding_url,

@@ -1,5 +1,6 @@
-from typing import List, Sequence
+# src/rag/rerankers/base.py
 from abc import ABC, abstractmethod
+from typing import List, Sequence
 
 from pydantic import BaseModel
 

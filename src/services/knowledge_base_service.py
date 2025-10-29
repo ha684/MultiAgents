@@ -1,21 +1,24 @@
+# src/services/knowledge_base_service.py
 from typing import List, Sequence
 from uuid import UUID
+
 from fastapi import HTTPException
 from langchain_core.documents import Document
-from src.models.knowledge_base import (
+
+from src.database import document_repository, knowledge_base_repository, qa_repository
+from src.domain.schemas.knowledge_base import (
     KnowledgeBaseCreateRequest,
+    KnowledgeBaseDeleteRequest,
     KnowledgeBaseListRequest,
     KnowledgeBaseListResponse,
     KnowledgeBaseResponse,
     KnowledgeBaseUpdateRequest,
-    KnowledgeBaseDeleteRequest,
 )
-from src.db import knowledge_base_repository, document_repository, qa_repository
-from src.models.qa import DocumentQAResponse
-from src.rag.vector import vector_storage, vector_retrieval
-from src.utils.reference import normalize_ref
-from src.utils.logger_conf import logger
+from src.domain.schemas.qa import DocumentQAResponse
+from src.rag.vectorstores import vector_retrieval, vector_storage
 from src.utils.decorators import singleton
+from src.utils.logger_conf import logger
+from src.utils.reference import normalize_ref
 
 
 @singleton

@@ -1,7 +1,10 @@
+# src/dependencies/database_session.py
 from typing import Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy.exc import SQLAlchemyError
-from src.connector import database_connector
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.infrastructure.database import database_connector
 from src.utils.logger_conf import logger
 
 

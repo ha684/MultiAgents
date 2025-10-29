@@ -1,13 +1,13 @@
-# src/rag/processor/strategy/spreadsheet.py
+# src/rag/processors/strategy/spreadsheet.py
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders.base import BaseLoader
 from langchain_core.documents import Document
 
-from src.db.models.document import Document as DBDocument
-from src.rag.processor.loader.excel_loader import ExcelLoader
-from src.rag.processor.strategy.base import BaseStrategy
+from src.database.models.document import Document as DBDocument
+from src.rag.processors.loader.excel_loader import ExcelLoader
+from src.rag.processors.strategy.base import BaseStrategy
 from src.utils.logger_conf import logger
 
 

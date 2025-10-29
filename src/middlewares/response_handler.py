@@ -1,12 +1,14 @@
-# src/middleware/response_handler.py
+# src/middlewares/response_handler.py
+from datetime import datetime
+import json
 from typing import Any, Dict
+from zoneinfo import ZoneInfo
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
-import json
-from datetime import datetime
-from zoneinfo import ZoneInfo
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
+
 from src.utils.logger_conf import logger
 
 

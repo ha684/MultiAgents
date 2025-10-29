@@ -1,41 +1,43 @@
 # src/services/document_service.py
-import uuid
-from pathlib import Path
-from typing import List, Optional, Sequence, Tuple, Dict, Any
-from fastapi import UploadFile
-from src.db import document_repository, knowledge_base_repository, qa_repository
-from src.models.document import (
-    DocumentStatusEnum,
-    DocumentProcessingStatusResponse,
-    DocumentListResponse,
-)
-from src.models.common import PaginationParams, SearchParams
-from src.models.qa import DocumentQAResponse
-from src.rag.processor.file import FileProcessor
-from src.connector import minio_client
-from src.config.settings import settings
-from src.rag.vector import vector_storage
-from src.utils.logger_conf import logger
-from src.db.models.document import Document
-from src.utils.decorators import singleton
+from datetime import datetime
 import io
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+import uuid
+from zoneinfo import ZoneInfo
+
+from fastapi import UploadFile
 from qdrant_client import models
-from src.rag.vector import vector_retrieval
-from src.services.metadata_extractor import (
-    build_metadata_filters,
-    combine_filters,
-    build_search_query_from_metadata,
-    aggregate_related_documents_with_reasons,
-)
-from src.exceptions.chat_exceptions import ValidationError
-from src.exceptions.document_exceptions import (
-    DocumentProcessingError,
+
+from src.core.config.settings import settings
+from src.core.exceptions.chat_exceptions import ValidationError
+from src.core.exceptions.document_exceptions import (
     DocumentNotFoundError,
+    DocumentProcessingError,
     DuplicateDocumentError,
 )
+from src.database import document_repository, knowledge_base_repository, qa_repository
+from src.database.models.document import Document
+from src.domain.schemas.document import (
+    DocumentListResponse,
+    DocumentProcessingStatusResponse,
+    DocumentStatusEnum,
+    PaginationParams,
+    SearchParams,
+)
+from src.domain.schemas.qa import DocumentQAResponse
+from src.infrastructure.storage import minio_client
+from src.rag.processors.file import FileProcessor
+from src.rag.vectorstores import vector_retrieval, vector_storage
+from src.services.metadata_extractor import (
+    aggregate_related_documents_with_reasons,
+    build_metadata_filters,
+    build_search_query_from_metadata,
+    combine_filters,
+)
+from src.utils.decorators import singleton
 from src.utils.hash_calculator import calculate_hash_from_stream
-from datetime import datetime
-from zoneinfo import ZoneInfo
+from src.utils.logger_conf import logger
 
 
 @singleton

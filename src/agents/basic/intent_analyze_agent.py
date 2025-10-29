@@ -1,11 +1,11 @@
-from typing import Dict, Any
+# src/agents/basic/intent_analyze_agent.py
+from typing import Any, Dict
 
 from langchain_core.messages import SystemMessage
 
-from src.agents.graph.state import OrchestratorState
-from src.agents.com.registry import registry
-from src.utils import parse_response
 from src.agents.basic.base import BaseAgent
+from src.agents.graph.state import OrchestratorState
+from src.utils import parse_response
 
 INTENT_ANALYZE_PROMPT_TEMPLATE = """
 """
@@ -54,10 +54,3 @@ Output a JSON plan:
             else "executing",
             "agent_thoughts": [plan["reasoning"]],
         }
-
-    def _format_available_subgraphs(self) -> str:
-        """Format subgraph registry for LLM"""
-        tools = registry.get_definitions()
-        return "\n\n".join(
-            f"**{tool['name']}**\n{tool['description']}" for tool in tools
-        )

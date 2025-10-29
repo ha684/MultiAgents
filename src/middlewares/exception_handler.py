@@ -1,13 +1,15 @@
-# src/middleware/exception_handler.py
-from fastapi import Request, HTTPException
-from fastapi.responses import JSONResponse, StreamingResponse
-from src.exceptions.base import BaseException
+# src/middlewares/exception_handler.py
+from datetime import datetime
 import json
 import os
-from datetime import datetime
+from typing import Any, Dict
 from zoneinfo import ZoneInfo
+
+from fastapi import HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+
+from src.core.exceptions.base import BaseException
 from src.utils.logger_conf import logger
-from typing import Dict, Any
 
 ENABLE_EXCEPTION_LOGGING = (
     os.getenv("ENABLE_EXCEPTION_LOGGING", "false").lower() == "true"

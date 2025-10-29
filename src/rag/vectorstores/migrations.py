@@ -1,6 +1,7 @@
-# src/rag/vector/migrations.py
+# src/rag/vectorstores/migrations.py
 from qdrant_client import AsyncQdrantClient, models
-from src.config.settings import settings
+
+from src.core.config.settings import settings
 from src.utils.logger_conf import logger
 
 

@@ -159,3 +159,13 @@ class BatchProcessingResponse(BaseModel):
     successful: int
     failed: int
     results: List[BatchOperationResult]
+
+
+class PaginationParams(BaseModel):
+    skip: int = 0
+    limit: int = 10
+
+
+class SearchParams(BaseModel):
+    query: Optional[str] = None
+    created_by: Optional[str] = None

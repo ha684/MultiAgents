@@ -1,10 +1,13 @@
+# src/services/chunks_service.py
 from typing import List
+
 from langchain_core.documents import Document
-from src.rag.vector import vector_retrieval
-from src.rag.vector import vector_storage
-from src.utils.reference import normalize_ref
+
+from src.core.exceptions.chunk_exceptions import ChunkNotFoundError
+from src.rag.vectorstores import vector_retrieval
+from src.rag.vectorstores import vector_storage
 from src.utils.decorators import singleton
-from src.exceptions.chunk_exceptions import ChunkNotFoundError
+from src.utils.reference import normalize_ref
 
 
 @singleton

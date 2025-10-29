@@ -1,7 +1,10 @@
+# src/agents/basic/qac_agent.py
 from typing import List, Tuple
+
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
-from src.config.llm_config import SupportedLLMProviders
+
+from src.core.config.llm_config import SupportedLLMProviders
 from src.llm.factory import get_llm
 from src.prompts.get_prompt_template import load_prompt_template
 

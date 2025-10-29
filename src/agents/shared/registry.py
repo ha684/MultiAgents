@@ -1,7 +1,8 @@
-# src/agents/com/registry.py
+# src/agents/shared/registry.py
 from typing import Dict, List, Optional
-from src.agents.graph.state import SimpleSearchState, ResearchState, SqlState
-from src.agents.com.types import SubgraphConfig
+
+from src.agents.graph.state import ResearchState, SimpleSearchState, SqlState
+from src.domain.entities.graph import SubgraphConfig
 
 
 class SubgraphRegistry:

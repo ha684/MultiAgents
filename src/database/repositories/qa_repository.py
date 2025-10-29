@@ -1,11 +1,13 @@
-# src/db/repository/qa.py
+# src/database/repositories/qa_repository.py
 from uuid import UUID
-from src.db.models.document import Document, DocumentQA
-from src.db.repository.database_session import DatabaseSession
+
 from sqlalchemy import func, select
-from src.utils.logger_conf import logger
 from sqlalchemy.exc import SQLAlchemyError
+
+from src.database.models.document import Document, DocumentQA
+from src.dependencies.database_session import DatabaseSession
 from src.utils.decorators import singleton
+from src.utils.logger_conf import logger
 
 
 @singleton

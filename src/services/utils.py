@@ -1,36 +1,6 @@
-from src.common.types import Message
 from src.utils.logger_conf import logger
-from src.db.models.user import User
-from src.common.gmail_api import GmailAPI
-from src.config.settings import settings
-
-gmail_api = GmailAPI(
-    client_id=settings.google_client_id,
-    client_secret=settings.google_client_secret,
-    refresh_token=settings.google_refresh_token,
-)
-
-
-def get_message_id(m: Message | None) -> str | None:
-    """Get message ID with error handling"""
-    try:
-        if not m or not m.metadata or "message_id" not in m.metadata:
-            return None
-        return m.metadata["message_id"]
-    except Exception as e:
-        logger.error(f"Error getting message ID: {e}")
-        return None
-
-
-def get_last_message_id(m: Message | None) -> str | None:
-    """Get last message ID with error handling"""
-    try:
-        if not m or not m.metadata or "last_message_id" not in m.metadata:
-            return None
-        return m.metadata["last_message_id"]
-    except Exception as e:
-        logger.error(f"Error getting last message ID: {e}")
-        return None
+from src.database.models.user import User
+from src.infrastructure.email import gmail_api
 
 
 async def send_verification_email(user: User) -> None:

@@ -1,17 +1,19 @@
 # src/api/knowledge_base.py
 from typing import List, Sequence
 from uuid import UUID
+
 from fastapi import APIRouter
 from langchain_core.documents import Document
-from src.models.knowledge_base import (
+
+from src.domain.schemas.knowledge_base import (
     KnowledgeBaseCreateRequest,
+    KnowledgeBaseDeleteRequest,
     KnowledgeBaseListRequest,
     KnowledgeBaseListResponse,
     KnowledgeBaseResponse,
     KnowledgeBaseUpdateRequest,
-    KnowledgeBaseDeleteRequest,
 )
-from src.models.qa import DocumentQAResponse
+from src.domain.schemas.qa import DocumentQAResponse
 from src.services.knowledge_base_service import KnowledgeBaseService
 
 router = APIRouter(prefix="/kb", tags=["Knowledge Base"])

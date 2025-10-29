@@ -1,11 +1,12 @@
 # src/services/chat_service.py
-import uuid
 from typing import Any, AsyncGenerator, Dict, Generator, List, Union, cast
+import uuid
 
-import tiktoken
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from qdrant_client.models import Filter, models
+import tiktoken
 
+from src.agents import Agent
 from src.agents.basic import (
     citation_agent,
     filename_agent,
@@ -13,20 +14,19 @@ from src.agents.basic import (
     response_agent,
     summary_agent,
 )
-from src.agents import Agent
-from src.agents.com.stream_handler import AgenticStreamHandler
-from src.common.streaming import StreamEventBuilder, StreamPhase
-from src.common.types import Message, RetrievalContext, TextPart
-from src.config.settings import settings
-from src.exceptions.chat_exceptions import ValidationError
-from src.models.chat import ChatRequest, SearchProvider, WebSearchConfig
-from src.rag.vector import vector_retrieval
+from src.core.config.settings import settings
+from src.core.exceptions.chat_exceptions import ValidationError
+from src.core.monitoring.observability import tracer
+from src.domain.schemas.chat import Message, RetrievalContext, TextPart
+from src.domain.schemas.chat import ChatRequest, SearchProvider, WebSearchConfig
+from src.domain.schemas.chat import Conversation
+from src.domain.schemas.stream import StreamPhase
+from src.rag.vectorstores import vector_retrieval
 from src.services.conversation_service import ConversationService
 from src.services.web_search_service import web_search_service
-from src.tracking.observability import tracer
 from src.utils.decorators import singleton
+from src.utils.formatters import AgenticStreamHandler, StreamEventBuilder
 from src.utils.logger_conf import logger
-from src.services.types import Conversation
 
 
 @singleton

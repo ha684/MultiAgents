@@ -1,7 +1,9 @@
+# src/rag/graph/graphity_client.py
 from graphiti_core import Graphiti
-from graphiti_core.llm_client import LLMConfig, OpenAIClient
 from graphiti_core.embedder.openai import OpenAIEmbedder, OpenAIEmbedderConfig
-from src.config.settings import settings
+from graphiti_core.llm_client import LLMConfig, OpenAIClient
+
+from src.core.config.settings import settings
 from src.rag.graph.custom_reranker import CustomRerankerClient
 
 llm_config = LLMConfig(

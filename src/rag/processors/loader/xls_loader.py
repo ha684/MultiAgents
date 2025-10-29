@@ -1,14 +1,15 @@
-import pandas as pd
-from openpyxl import load_workbook
-from openpyxl.worksheet.worksheet import Worksheet
-from langchain_core.documents import Document
-from langchain_core.document_loaders.base import BaseLoader
-import logging
+# src/rag/processors/loader/xls_loader.py
 import os
-import regex
 from typing import List
 
-logger = logging.getLogger(__name__)
+from langchain_core.document_loaders.base import BaseLoader
+from langchain_core.documents import Document
+from openpyxl import load_workbook
+from openpyxl.worksheet.worksheet import Worksheet
+import pandas as pd
+import regex
+
+from src.utils.logger_conf import logger
 
 
 class XlsLoader(BaseLoader):

@@ -1,13 +1,16 @@
+# src/rag/processors/loader/xlsx_loader.py
+import html
 import os
 from pathlib import Path
-from typing import Union, List, Tuple
-from langchain_core.documents import Document
-from langchain_core.document_loaders.base import BaseLoader
-from unstructured.partition.xlsx import partition_xlsx
-from html_to_markdown import convert_to_markdown
-from unstructured.documents.elements import Element
 import re
-import html
+from typing import List, Tuple, Union
+
+from html_to_markdown import convert_to_markdown
+from langchain_core.document_loaders.base import BaseLoader
+from langchain_core.documents import Document
+from unstructured.documents.elements import Element
+from unstructured.partition.xlsx import partition_xlsx
+
 from src.utils.logger_conf import logger
 
 

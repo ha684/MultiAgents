@@ -1,4 +1,4 @@
-# src/agents/graph/sql_validator.py
+# src/agents/shared/sql_validator.py
 """
 SQL Validator - Ensures only safe SELECT queries are executed
 """

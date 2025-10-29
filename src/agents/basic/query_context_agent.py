@@ -1,10 +1,13 @@
+# src/agents/basic/query_context_agent.py
 from typing import List
-from src.llm.factory import get_llm
-from src.utils.logger_conf import logger
-from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, AIMessage
-from src.utils.decorators import singleton
-from src.agents.tools.server.mcp_retrieve_tools import think
+
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+
 from src.agents.basic.base import BaseAgent
+from src.agents.tools.server.mcp_retrieve_tools import think
+from src.llm.factory import get_llm
+from src.utils.decorators import singleton
+from src.utils.logger_conf import logger
 
 EXTRACT_CONTEXTUALIZED_QUERY_PROMPT = """
 <instructions>

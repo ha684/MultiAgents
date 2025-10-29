@@ -1,22 +1,24 @@
-# src/db/models/conversation.py
-from src.connector.database_conn import Base
+# src/database/models/conversation.py
+from datetime import datetime
+import enum
+from zoneinfo import ZoneInfo
+
 from sqlalchemy import (
-    Column,
-    String,
-    Integer,
     Boolean,
+    Column,
     DateTime,
-    Index,
     ForeignKey,
+    Index,
+    Integer,
+    String,
     Text,
 )
-from datetime import datetime
-from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import JSONB, UUID
-from uuid_extensions import uuid7
-from zoneinfo import ZoneInfo
-import enum
 from sqlalchemy import Enum
+from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.orm import relationship
+from uuid_extensions import uuid7
+
+from src.infrastructure.database.connection import Base
 
 
 class MessageStatus(enum.Enum):

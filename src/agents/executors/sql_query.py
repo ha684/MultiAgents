@@ -1,8 +1,9 @@
 # src/agents/executors/sql_query.py
 from typing import Any, Dict, List
-from src.agents.graph.state import OrchestratorState, SqlState
-from src.agents.com.types import SubgraphOutput
+
 from src.agents.graph import sql_graph
+from src.agents.graph.state import OrchestratorState, SqlState
+from src.domain.entities.graph import SubgraphOutput
 
 
 def _stringify_cell(v: Any, max_len: int = 160) -> str:

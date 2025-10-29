@@ -1,7 +1,13 @@
+# src/llm/factory.py
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
-from src.config.llm_config import LLM_MODELS, LLM_MODELS_CONFIG, SupportedLLMProviders
+
+from src.core.config.llm_config import (
+    LLM_MODELS,
+    LLM_MODELS_CONFIG,
+    SupportedLLMProviders,
+)
 from src.utils.logger_conf import logger
 
 

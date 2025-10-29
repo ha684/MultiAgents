@@ -1,31 +1,30 @@
-# src/db/repository/conversation.py
+# src/database/repositories/conversation_repository.py
 """
 Database service layer for handling all database operations
 """
 
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-from sqlalchemy.exc import SQLAlchemyError
+from typing import Any, Dict, List, Optional
+import uuid
+
 from sqlalchemy import desc, select
-from src.db.models.conversation import (
-    ConversationModel,
-    MessageModel,
-)
-from src.common.types import (
+from sqlalchemy.exc import SQLAlchemyError
+
+from src.database.models.conversation import ConversationModel, MessageModel
+from src.database.models.conversation import MessageStatus
+from src.dependencies.database_session import DatabaseSession
+from src.domain.schemas.chat import (
+    DataPart,
+    FileContent,
+    FilePart,
     Message,
     Part,
-    TextPart,
-    DataPart,
-    FilePart,
-    FileContent,
     RetrievalContext,
+    TextPart,
+    Conversation,
 )
-from src.services.types import Conversation
-from src.utils.logger_conf import logger
-from src.db.repository.database_session import DatabaseSession
 from src.utils.decorators import singleton
-import uuid
-from src.db.models.conversation import MessageStatus
+from src.utils.logger_conf import logger
 
 
 @singleton

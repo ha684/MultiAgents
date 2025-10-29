@@ -1,13 +1,13 @@
-# src/middleware/rate_limiting.py
-from typing import Optional, Callable
+# src/middlewares/rate_limit.py
+from typing import Callable, Optional
 
 from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from src.config.auth_settings import RATE_LIMIT_CONFIG
-from src.services.security_services import jwt_manager
-from src.connector import redis_client
+from src.core.config.settings import RATE_LIMIT_CONFIG
+from src.core.security import jwt_manager
+from src.infrastructure.cache import redis_client
 from src.utils.logger_conf import logger
 
 

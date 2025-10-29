@@ -1,27 +1,28 @@
 # src/agents/main_graph.py
-from typing import Any, AsyncGenerator, Dict, List, Optional
-import textwrap
 from dataclasses import asdict
+import textwrap
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import get_buffer_string
 from langchain_core.runnables.schema import StreamEvent
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langchain_core.messages import get_buffer_string
 
 from src.agents.basic import query_context_agent, response_agent
-from src.agents.graph.base import GraphAgentBase, RunConfig
-from src.agents.com.manager import execution_manager
-from src.agents.com.registry import SubgraphRegistry
-from src.agents.com.prompts import PromptTemplates
+from src.agents.executors import EXECUTORS
+from src.agents.graph.base import GraphAgentBase
+from src.domain.entities.graph import RunConfig
 from src.agents.graph.schemas import RouteDecision
-from src.agents.com.types import ResponseMode
 from src.agents.graph.state import OrchestratorState
+from src.agents.shared.manager import execution_manager
+from src.agents.shared.prompts import PromptTemplates
+from src.agents.shared.registry import SubgraphRegistry
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.common.types import Message, RetrievalContext, TextPart
+from src.domain.entities.graph import ResponseMode
+from src.domain.schemas.chat import Message, RetrievalContext, TextPart
 from src.llm.factory import get_llm
 from src.services.conversation_service import ConversationService
-from src.agents.executors import EXECUTORS
 from src.utils import parse_response
 from src.utils.logger_conf import logger
 

@@ -1,3 +1,4 @@
+# src/database/sql_database.py
 """Async SQLAlchemy wrapper around a PostgreSQL database."""
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from sqlalchemy.sql.expression import Executable
 from sqlalchemy.types import NullType
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 
-from src.db.repository.database_session import DatabaseSession
+from src.dependencies.database_session import DatabaseSession
 from src.utils.logger_conf import logger
 
 

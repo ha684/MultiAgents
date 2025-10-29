@@ -1,21 +1,24 @@
-# src/db/repository/document.py
-import json
-import uuid
+# src/database/repositories/document_repository.py
 from datetime import datetime
+import json
 from typing import Any, Dict, List, Optional
+import uuid
+
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy import select, func
-from src.db.models.document import Document
-from src.db.repository.database_session import DatabaseSession
-from src.models.common import PaginationParams, SearchParams
-from src.models.document import (
+
+from src.database.models.document import Document
+from src.dependencies.database_session import DatabaseSession
+from src.domain.schemas.document import (
     DocumentListResponse,
     DocumentProcessingStatusResponse,
     DocumentResponse,
+    PaginationParams,
+    SearchParams,
     DocumentStatusEnum,
 )
-from src.utils.logger_conf import logger
 from src.utils.decorators import singleton
+from src.utils.logger_conf import logger
 
 
 @singleton

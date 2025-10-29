@@ -1,6 +1,7 @@
-from src.config import settings
-from src.rag.reranking.api_inference import InferenceAPIReranker
-from src.rag.reranking.api_rerank_2 import InferenceAPIReranker2
+# src/rag/rerankers/__init__.py
+from src.core.config.settings import settings
+from src.rag.rerankers.api_inference import InferenceAPIReranker
+from src.rag.rerankers.api_rerank_2 import InferenceAPIReranker2
 
 
 def get_reranker():

@@ -1,19 +1,20 @@
-from langchain_qdrant import QdrantVectorStore, RetrievalMode
+# src/rag/vectorstores/custom_qdrantvectorstore.py
+from itertools import islice
 from typing import (
-    Optional,
-    Tuple,
     Any,
-    override,
+    AsyncGenerator,
     Iterable,
     List,
+    Optional,
     Sequence,
-    AsyncGenerator,
+    Tuple,
+    override,
 )
-from langchain_core.documents import Document
-from qdrant_client import models
 import uuid
-from itertools import islice
-from qdrant_client import AsyncQdrantClient
+
+from langchain_core.documents import Document
+from langchain_qdrant import QdrantVectorStore, RetrievalMode
+from qdrant_client import AsyncQdrantClient, models
 
 
 class CustomQdrantVectorStore(QdrantVectorStore):

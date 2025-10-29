@@ -1,9 +1,12 @@
+# src/rag/processors/loader/images_loader.py
+import textwrap
 from typing import List
+
 from langchain_core.document_loaders.base import BaseLoader
 from langchain_core.documents import Document
+
 from src.agents.basic.image_agent import ImageExtractionAgent
 from src.utils.logger_conf import logger
-import textwrap
 
 
 class ImageLoader(BaseLoader):

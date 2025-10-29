@@ -1,10 +1,11 @@
 # src/tasks/qac.py
-from uuid import UUID
-from src.db.models.document import DocumentQA
-from src.agents.basic import qac_agent
-from src.db import knowledge_base_repository, document_repository, qa_repository
-from src.utils.logger_conf import logger
 from typing import List
+from uuid import UUID
+
+from src.agents.basic import qac_agent
+from src.database import document_repository, knowledge_base_repository, qa_repository
+from src.database.models.document import DocumentQA
+from src.utils.logger_conf import logger
 
 
 async def generate_qa_pairs_async(

@@ -1,0 +1,6 @@
+# src/core/config/celery_app.py
+from celery import Celery
+
+celery_app = Celery("kms-service")
+celery_app.config_from_object("src.core.config.celery_config")
+celery_app.autodiscover_tasks(["src.tasks"])

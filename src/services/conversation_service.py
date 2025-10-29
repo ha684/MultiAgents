@@ -1,12 +1,13 @@
+# src/services/conversation_service.py
 from typing import List, Optional
-from src.common.types import Message
-from src.services.types import Conversation
-from src.db.repository.conversation import ConversationRepository
-from src.utils.decorators import singleton
-from src.exceptions.chat_exceptions import ConversationNotFoundError
-from src.utils.logger_conf import logger
 import uuid
-from src.db.models.conversation import MessageStatus
+
+from src.domain.schemas.chat import Message, Conversation
+from src.database.models.conversation import MessageStatus
+from src.database.repositories.conversation_repository import ConversationRepository
+from src.core.exceptions.chat_exceptions import ConversationNotFoundError
+from src.utils.decorators import singleton
+from src.utils.logger_conf import logger
 
 
 @singleton
