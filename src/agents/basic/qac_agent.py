@@ -6,7 +6,7 @@ from langchain_core.prompts import PromptTemplate
 
 from src.core.config.llm_config import SupportedLLMProviders
 from src.llm.factory import get_llm
-from src.prompts.get_prompt_template import load_prompt_template
+from src.agents.prompts.get_prompt_template import load_prompt_template
 
 
 class QACAgent:
