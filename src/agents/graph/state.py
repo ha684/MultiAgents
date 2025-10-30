@@ -49,6 +49,27 @@ class ExecutionRecord(TypedDict):
     result_summary: Optional[str]
 
 
+class ReflectionResult(TypedDict):
+    """Result from reflection/evaluation step"""
+
+    is_sufficient: bool
+    missing_aspects: List[str]
+    reasoning: str
+    suggested_next_action: Literal["search_more", "switch_strategy", "respond"]
+    refined_query: Optional[str]
+
+
+class SearchIteration(TypedDict):
+    """Record of a single search iteration"""
+
+    iteration: int
+    subgraph: str
+    query: str
+    result_summary: str
+    documents_count: int
+    timestamp: str
+
+
 class OrchestratorState(TypedDict):
     """Enhanced state for agentic orchestrator"""
 
@@ -72,6 +93,14 @@ class OrchestratorState(TypedDict):
 
     final_answer: Optional[str]
     response_metadata: Optional[Dict[str, Any]]
+
+    # New fields for iterative reasoning
+    search_iterations: List[SearchIteration]
+    current_iteration: int
+    max_iterations: int
+    accumulated_context: str
+    reflection_result: Optional[ReflectionResult]
+    needs_confirmation: Optional[bool]
 
 
 class SimpleSearchState(TypedDict):

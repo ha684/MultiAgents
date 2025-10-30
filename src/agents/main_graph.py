@@ -1,5 +1,6 @@
 # src/agents/main_graph.py
 from dataclasses import asdict
+from datetime import datetime
 import textwrap
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
@@ -14,7 +15,7 @@ from src.agents.executors import EXECUTORS
 from src.agents.graph.base import GraphAgentBase
 from src.domain.entities.graph import RunConfig
 from src.agents.graph.schemas import RouteDecision
-from src.agents.graph.state import OrchestratorState
+from src.agents.graph.state import OrchestratorState, ReflectionResult, SearchIteration
 from src.agents.shared.manager import execution_manager
 from src.agents.shared.prompts import PromptTemplates
 from src.agents.shared.registry import SubgraphRegistry, seed_base_subgraphs, enable_sql
@@ -32,10 +33,12 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
     Agentic Orchestrator - Acts as Planner/Dispatcher with:
     - Dynamic subgraph discovery via registry
     - Multi-step coordination & fallback
+    - Iterative reflection and query refinement
     - Simplified output via response_agent with modes
     """
 
     MAX_RETRY_ATTEMPTS = 3
+    MAX_SEARCH_ITERATIONS = 4
 
     def __init__(self):
         self.llm = get_llm(provider="nxchat")
@@ -210,8 +213,23 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
     async def dispatch_subgraph_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """
         Dispatcher that executes the selected subgraph and handles errors with retry logic
+        Enhanced with iteration tracking and query refinement support
         """
         route = state["route_decision"]
+        current_iteration = state.get("current_iteration", 1)
+
+        reflection = state.get("reflection_result")
+        query_to_use = state.get("contextualized_query", "")
+
+        if reflection and reflection.get("refined_query") and current_iteration > 1:
+            query_to_use = reflection["refined_query"]
+            logger.info(
+                f"Using refined query (iter {current_iteration}): '{query_to_use}'"
+            )
+        else:
+            logger.info(
+                f"Using original query (iter {current_iteration}): '{query_to_use}'"
+            )
 
         if state.get("needs_confirmation", False):
             response_mode = self._determine_response_mode_from_result(state, route, {})
@@ -266,8 +284,44 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "route_decision": "direct_response",
             }
 
-        result = await executor(state)
+        execution_state = dict(state)
+        execution_state["contextualized_query"] = query_to_use
+
+        result = await executor(execution_state)
         result = asdict(result)
+
+        search_iterations = state.get("search_iterations", [])
+        docs_retrieved = len(result.get("cited_documents", []))
+
+        search_iteration: SearchIteration = {
+            "iteration": current_iteration,
+            "subgraph": route,
+            "query": query_to_use,
+            "result_summary": result.get("main_context", "")[:200]
+            if result.get("main_context")
+            else "No results",
+            "documents_count": docs_retrieved,
+            "timestamp": datetime.now().isoformat(),
+        }
+        search_iterations.append(search_iteration)
+
+        accumulated_context = state.get("accumulated_context", "")
+        if result.get("main_context"):
+            if accumulated_context:
+                accumulated_context += (
+                    f"\n\n--- Search {current_iteration} ({route}) ---\n"
+                )
+            accumulated_context += result["main_context"]
+
+        all_cited_docs = state.get("cited_documents", []) or []
+        new_docs = result.get("cited_documents", []) or []
+
+        existing_content = {doc.page_content for doc in all_cited_docs}
+        for doc in new_docs:
+            if doc.page_content not in existing_content:
+                all_cited_docs.append(doc)
+                existing_content.add(doc.page_content)
+
         failure_result_condition = (
             result["subgraph_error"]
             and not result["main_context"]
@@ -308,8 +362,11 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                         "route_decision": next_fallback,
                         "fallback_source": route,
                         "main_context": None,
-                        "cited_documents": [],
+                        "cited_documents": all_cited_docs,
                         "subgraph_error": None,
+                        "search_iterations": search_iterations,
+                        "accumulated_context": accumulated_context,
+                        "current_iteration": current_iteration + 1,
                     }
 
             else:
@@ -318,6 +375,10 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                     "subgraph_result": "retry_router",
                     "execution_history": execution_history,
                     "response_mode": ResponseMode.STANDARD,
+                    "search_iterations": search_iterations,
+                    "accumulated_context": accumulated_context,
+                    "cited_documents": all_cited_docs,
+                    "current_iteration": current_iteration + 1,
                 }
 
         response_mode = self._determine_response_mode_from_result(state, route, result)
@@ -327,7 +388,153 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             "subgraph_result": "success",
             "response_mode": response_mode,
             "execution_history": execution_history,
+            "search_iterations": search_iterations,
+            "accumulated_context": accumulated_context,
+            "cited_documents": all_cited_docs,
+            "current_iteration": current_iteration + 1,
         }
+
+    async def reflection_node(self, state: OrchestratorState) -> Dict[str, Any]:
+        """
+        Reflection node: Evaluates search results and decides next action
+        This is the key to iterative, agentic behavior
+        """
+        current_iteration = state.get("current_iteration", 1)
+        max_iterations = state.get("max_iterations", self.MAX_SEARCH_ITERATIONS)
+        route = state.get("route_decision")
+
+        if route in ["direct_response", "sql_query"] or state.get("needs_confirmation"):
+            logger.info(f"Skipping reflection for {route}")
+            return {
+                "reflection_result": {
+                    "is_sufficient": True,
+                    "confidence_score": 1.0,
+                    "missing_aspects": [],
+                    "reasoning": f"No reflection needed for {route}",
+                    "suggested_next_action": "respond",
+                    "refined_query": None,
+                }
+            }
+
+        search_iterations = state.get("search_iterations", [])
+        search_history_text = (
+            "\n".join(
+                [
+                    f"Iteration {it['iteration']}: {it['subgraph']} - Query: '{it['query']}' - {it['result_summary']}"
+                    for it in search_iterations
+                ]
+            )
+            if search_iterations
+            else "No previous searches"
+        )
+
+        latest_iteration = search_iterations[-1] if search_iterations else None
+        latest_subgraph = latest_iteration["subgraph"] if latest_iteration else route
+        latest_query = (
+            latest_iteration["query"]
+            if latest_iteration
+            else state.get("contextualized_query", "")
+        )
+        docs_count = (
+            latest_iteration["documents_count"]
+            if latest_iteration
+            else len(state.get("cited_documents", []))
+        )
+        result_summary = (
+            latest_iteration["result_summary"] if latest_iteration else "Just completed"
+        )
+
+        accumulated_context = state.get("accumulated_context", "")
+        if not accumulated_context and state.get("main_context"):
+            accumulated_context = state.get("main_context", "")
+
+        system_prompt = SystemMessage(
+            content=PromptTemplates.ORCHESTRATOR_REFLECTION_PROMPT
+        )
+        human_prompt = HumanMessage(
+            content=PromptTemplates.ORCHESTRATOR_REFLECTION_HUMAN_PROMPT.format(
+                user_query=state["conversation"][-1].content,
+                current_iteration=current_iteration,
+                max_iterations=max_iterations,
+                search_history=search_history_text,
+                accumulated_context=accumulated_context
+                if accumulated_context
+                else "No information gathered yet",
+                latest_subgraph=latest_subgraph,
+                latest_query=latest_query,
+                docs_count=docs_count,
+                result_summary=result_summary,
+            )
+        )
+
+        messages: List[BaseMessage] = [system_prompt, human_prompt]
+
+        # Call LLM with thinking
+        reflection_result = await self.iterative_llm_call_structured(
+            messages=messages,
+            llm_with_tools=self.thinking_llm,
+            available_tools={"think": think},
+            max_iterations=3,
+            parse_fn=parse_reflection_result,
+            retry_prompt="Please provide the reflection result in correct JSON format with all required fields.",
+        )
+
+        if not reflection_result:
+            logger.warning("No reflection result provided, defaulting to respond")
+            reflection_result = {
+                "is_sufficient": True,
+                "confidence_score": 0.5,
+                "missing_aspects": [],
+                "reasoning": "Failed to get reflection, proceeding to respond",
+                "suggested_next_action": "respond",
+                "refined_query": None,
+            }
+
+        logger.info(
+            f"Reflection (iter {current_iteration}/{max_iterations}): "
+            f"sufficient={reflection_result['is_sufficient']}, "
+            f"action={reflection_result['suggested_next_action']}, "
+            f"confidence={reflection_result['confidence_score']:.2f}"
+        )
+
+        if reflection_result["missing_aspects"]:
+            logger.info(
+                f"Missing aspects: {', '.join(reflection_result['missing_aspects'])}"
+            )
+
+        return {"reflection_result": reflection_result}
+
+    def route_after_reflection(self, state: OrchestratorState) -> str:
+        """
+        Route based on reflection result
+        """
+        reflection = state.get("reflection_result")
+        if not reflection:
+            return "final_response"
+
+        action = reflection.get("suggested_next_action", "respond")
+        current_iteration = state.get("current_iteration", 1)
+        max_iterations = state.get("max_iterations", self.MAX_SEARCH_ITERATIONS)
+
+        # Force respond if max iterations reached
+        if current_iteration >= max_iterations:
+            logger.info(f"Max iterations ({max_iterations}) reached, forcing response")
+            return "final_response"
+
+        if action == "respond" or reflection.get("is_sufficient"):
+            logger.info("Reflection suggests responding")
+            return "final_response"
+
+        elif action == "search_more":
+            logger.info("Reflection suggests searching more with refined query")
+            return "dispatch_subgraph"
+
+        elif action == "switch_strategy":
+            logger.info("Reflection suggests switching strategy, re-routing")
+            return "router"
+
+        else:
+            return "final_response"
 
     def route_after_dispatch(self, state: OrchestratorState) -> str:
         """
@@ -345,29 +552,42 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
 
         elif result == "needs_confirmation":
             logger.info("Asking user for confirmation")
-            return "final_response"
+            return "reflection"  # Changed: go through reflection even for confirmation
 
         else:
-            return "final_response"
+            # Success - go to reflection to evaluate if we need more info
+            return "reflection"
 
     async def final_response_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """
         Universal response handler - delegates to response_agent with appropriate mode
         All output formatting logic is handled by response_agent
+        Enhanced to use accumulated context from multiple iterations
         """
         route = state.get("route_decision")
         response_mode = state.get("response_mode", ResponseMode.STANDARD)
+        search_iterations = state.get("search_iterations", [])
+        num_iterations = len(search_iterations)
 
-        logger.info(f"Final response with mode: {response_mode}, route: {route}")
+        logger.info(
+            f"Final response with mode: {response_mode}, route: {route}, "
+            f"iterations: {num_iterations}"
+        )
+
+        # Use accumulated context if we did multiple searches, otherwise fall back to main_context
+        knowledge_context = state.get("accumulated_context", "")
+        if not knowledge_context:
+            knowledge_context = state.get("main_context", "")
 
         pending_route = (
             route if response_mode == ResponseMode.CONFIRMATION_REQUIRED else None
         )
+
         response = await response_agent.ainvoke(
             contexts=state.get("cited_documents", []),
             history=state["conversation"],
             mode=response_mode,
-            accumulated_knowledge=state.get("main_context", ""),
+            accumulated_knowledge=knowledge_context,
             execution_history=state.get("execution_history", []),
             error_message=state.get("subgraph_error"),
             pending_route=pending_route,
@@ -379,6 +599,8 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "route": route,
                 "response_mode": response_mode,
                 "execution_history": state.get("execution_history", []),
+                "search_iterations": num_iterations,
+                "reflection_used": state.get("reflection_result") is not None,
             }
         )
 
@@ -388,12 +610,13 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         }
 
     def _build_graph(self) -> CompiledStateGraph:
-        """Build agentic orchestrator graph"""
+        """Build agentic orchestrator graph with iterative reflection"""
         workflow = StateGraph(OrchestratorState)
 
         workflow.add_node("contextualize_query", self.contextualize_query_node)
         workflow.add_node("router", self.router_node)
         workflow.add_node("dispatch_subgraph", self.dispatch_subgraph_node)
+        workflow.add_node("reflection", self.reflection_node)
         workflow.add_node("final_response", self.final_response_node)
 
         workflow.set_entry_point("contextualize_query")
@@ -406,8 +629,18 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             self.route_after_dispatch,
             {
                 "router": "router",
-                "final_response": "final_response",
+                "reflection": "reflection",
                 "dispatch_subgraph": "dispatch_subgraph",
+            },
+        )
+
+        workflow.add_conditional_edges(
+            "reflection",
+            self.route_after_reflection,
+            {
+                "router": "router",
+                "dispatch_subgraph": "dispatch_subgraph",
+                "final_response": "final_response",
             },
         )
 
@@ -439,6 +672,11 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         initial_state = OrchestratorState(
             conversation=conversation,
             subgraph_policy=subgraph_policy,
+            search_iterations=[],
+            current_iteration=1,
+            max_iterations=self.MAX_SEARCH_ITERATIONS,
+            accumulated_context="",
+            reflection_result=None,
         )
         conversation_id = conversation[-1].additional_kwargs.get("conversation_id")
         execution_manager.start_execution(conversation_id)
@@ -453,7 +691,14 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
     ) -> Optional[Dict[str, Any]]:
         """Non-streaming execution (backward compatible)"""
         try:
-            initial_state = OrchestratorState(conversation=conversation)
+            initial_state = OrchestratorState(
+                conversation=conversation,
+                search_iterations=[],
+                current_iteration=1,
+                max_iterations=self.MAX_SEARCH_ITERATIONS,
+                accumulated_context="",
+                reflection_result=None,
+            )
             final_result = await super().ainvoke(initial_state)
             message = Message(
                 parts=[
@@ -480,6 +725,31 @@ def parse_route_decision(content: str) -> Optional[RouteDecision]:
         return parsed
     except Exception as e:
         logger.error(f"Error parsing route decision: {e}")
+        return None
+
+
+def parse_reflection_result(content: str) -> Optional[ReflectionResult]:
+    """Parse reflection result from content"""
+    try:
+        parsed = parse_response(content)
+        if parsed is None:
+            return None
+
+        required_fields = [
+            "is_sufficient",
+            "missing_aspects",
+            "reasoning",
+            "suggested_next_action",
+            "refined_query",
+        ]
+        for field in required_fields:
+            if field not in parsed:
+                logger.warning(f"Missing required field in reflection result: {field}")
+                return None
+
+        return parsed
+    except Exception as e:
+        logger.error(f"Error parsing reflection result: {e}")
         return None
 
 

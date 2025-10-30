@@ -1,4 +1,4 @@
-# src/agents/subgraphs/sql_factory.py
+# src/agents/graph/factory.py
 from src.database.sql_database import AsyncSQLDatabase
 from src.domain.entities.graph import SubgraphConfig
 from src.agents.executors.sql_query import SqlQueryExecutor

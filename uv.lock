@@ -717,6 +717,17 @@ wheels = [
 ]
 
 [[package]]
+name = "dotenv"
+version = "0.9.9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dotenv" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b2/b7/545d2c10c1fc15e48653c91efde329a790f2eecfbbf2bd16003b5db2bab0/dotenv-0.9.9-py2.py3-none-any.whl", hash = "sha256:29cf74a087b31dafdb5a446b6d7e11cbce8ed2741540e2339c69fbef92c94ce9", size = 1892, upload-time = "2025-02-19T22:15:01.647Z" },
+]
+
+[[package]]
 name = "email-validator"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1787,6 +1798,7 @@ dependencies = [
     { name = "bcrypt" },
     { name = "celery", extra = ["redis"] },
     { name = "demjson3" },
+    { name = "dotenv" },
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "fastembed" },
@@ -1857,6 +1869,7 @@ requires-dist = [
     { name = "bcrypt", specifier = ">=4.3.0" },
     { name = "celery", extras = ["redis"], specifier = ">=5.5.3" },
     { name = "demjson3", specifier = ">=3.0.6" },
+    { name = "dotenv", specifier = ">=0.9.9" },
     { name = "email-validator", specifier = ">=2.2.0" },
     { name = "fastapi", specifier = ">=0.115.12" },
     { name = "fastembed", specifier = ">=0.7.0" },
