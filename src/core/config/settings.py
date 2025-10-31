@@ -95,7 +95,10 @@ class Settings(BaseSettings):
     login_rate_limit_window_minutes: int = 15
 
     # CORS Configuration
-    cors_allow_origins: List[str] = ["https://www.quanlytrithuc.com"]
+    cors_allow_origins: List[str] = [
+        "https://www.quanlytrithuc.com",
+        "http://localhost:8080",
+    ]
     cors_allow_credentials: bool = True
     cors_allow_methods: List[str] = ["*"]
     cors_allow_headers: List[str] = ["*"]

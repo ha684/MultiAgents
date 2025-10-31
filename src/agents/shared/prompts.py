@@ -20,13 +20,18 @@ class PromptTemplates:
         Select the single best subgraph to handle this query.
         </task>
 
-        <thinking>
-        Use the 'think' tool for:
-        - Ambiguous cases where multiple subgraphs could work
-        - Complex queries requiring reasoning about optimal approach
-        - Unclear conversation context
-        - Adapting strategy based on execution history
-        </thinking>
+        <thinking_requirement>
+        You MUST use the 'think' tool before providing your final routing decision. Use it to:
+        - Analyze the core intent and information need of the query
+        - List all potentially matching subgraphs with initial assessment
+        - Compare each candidate against query characteristics (keywords, examples, domain)
+        - Apply elimination rules (check "not suitable for" criteria)
+        - Reason through ambiguous cases or ties between multiple options
+        - Consider execution history (have previous routes failed?)
+        - Justify your final selection with clear reasoning
+        
+        CRITICAL: Your routing decision must be preceded by explicit thinking. Do not skip this step.
+        </thinking_requirement>
 
         <routing_principles>
 
@@ -67,7 +72,7 @@ class PromptTemplates:
         **Step 6: Select Best Route**
         - Choose the subgraph with strongest semantic match
         - Prefer specific matches over generic ones
-        - When uncertain, use think tool to reason through options
+        - Document your reasoning in the think step
 
         </routing_principles>
 
@@ -101,78 +106,90 @@ class PromptTemplates:
 
         </matching_strategy>
 
+        <decision_process>
+
+        ## Step-by-Step Decision Flow (USE IN THINKING)
+
+        1. **Read the query carefully**
+        - What is being asked?
+        - What type of information is needed?
+        - Document this in your thinking
+
+        2. **Scan all subgraph descriptions**
+        - Which ones mention this type of query in their description?
+        - Which examples are most similar?
+        - List ALL potential candidates in thinking
+
+        3. **Check query indicators**
+        - Do query keywords match any subgraph's indicators?
+        - Multiple matches? List all in thinking with match score
+
+        4. **Apply elimination rules**
+        - Remove subgraphs where query falls under "not suitable for"
+        - Document eliminated options and reasons in thinking
+
+        5. **Compare remaining candidates**
+        - If 1 remains: Validate and select
+        - If multiple: Compare side-by-side in thinking
+        - If none: Look for catch-all/direct-response option
+        - Document comparison logic
+
+        6. **Validate selection**
+        - Does this make logical sense?
+        - Have we tried this before and it failed?
+        - Is there a better option in the fallback chain?
+        - Document validation reasoning
+
+        7. **Return decision with confidence**
+        - State final choice clearly in thinking
+        - Then output the JSON
+
+        </decision_process>
+
         <handling_edge_cases>
 
-        ## Common Scenarios
+        ## Common Scenarios (Address in Thinking)
 
         ### Multiple Subgraphs Could Work
-        - Use think tool to compare options
-        - Consider efficiency: which is fastest/simplest?
+        - Use think tool to compare options systematically
+        - Create comparison table: efficiency, specificity, example similarity
         - Check examples: which has more similar examples?
         - Look at specificity: prefer targeted over general
+        - Document tie-breaking logic
 
         ### Query Doesn't Match Any Subgraph Well
         - Re-read all "when to use" descriptions
         - Check if this is actually a conversational query (no retrieval needed)
         - Look for fallback/catch-all subgraph in registry
-        - Use think tool if genuinely unclear
+        - Document why no good match exists
+        - Select best fallback option with justification
 
         ### Execution History Shows Failures
-        - Check which subgraphs already tried and failed
+        - List which subgraphs already tried and failed
         - Look at subgraph's "fallback_chain" if available
         - Don't repeat same approach
         - Consider if query is actually unanswerable
+        - Document strategy adjustment based on history
 
         ### Conversational vs Information Queries
         - Conversational: Greetings, thanks, chitchat, meta-questions
         - Information: Specific questions seeking specific information
         - Most subgraphs are for information queries
         - Look for conversational/direct-response subgraph for non-information cases
+        - Clearly identify query type in thinking
 
         ### Ambiguous or Vague Queries
-        - If truly unclear what user wants: Look for direct-response subgraph
-        - If can infer intent from context: Route to appropriate subgraph
-        - When in doubt: Use think tool to reason
+        - If truly unclear what user wants: Document ambiguity
+        - List possible interpretations in thinking
+        - Choose most likely interpretation or fallback route
+        - If can infer intent from context: Document inference logic
+        - When in doubt: Use think tool extensively
 
         </handling_edge_cases>
 
-        <decision_process>
-
-        ## Step-by-Step Decision Flow
-
-        1. **Read the query carefully**
-        - What is being asked?
-        - What type of information is needed?
-
-        2. **Scan all subgraph descriptions**
-        - Which ones mention this type of query in their description?
-        - Which examples are most similar?
-
-        3. **Check query indicators**
-        - Do query keywords match any subgraph's indicators?
-        - Multiple matches? Keep all candidates
-
-        4. **Apply elimination rules**
-        - Remove subgraphs where query falls under "not suitable for"
-        - Narrow down candidates
-
-        5. **Compare remaining candidates**
-        - If 1 remains: Select it
-        - If multiple: Use think tool or choose most specific
-        - If none: Look for catch-all/direct-response option
-
-        6. **Validate selection**
-        - Does this make logical sense?
-        - Have we tried this before and it failed?
-        - Is there a better option in the fallback chain?
-
-        7. **Return decision**
-
-        </decision_process>
-
         <quality_checks>
 
-        Before finalizing your route selection, verify:
+        Before finalizing your route selection in thinking, verify:
 
         ✓ Query intent matches subgraph capability
         ✓ Query doesn't fall under "not suitable for" list
@@ -181,38 +198,47 @@ class PromptTemplates:
         ✓ This is the most specific/appropriate option available
         ✓ Not routing information queries to conversational subgraphs
         ✓ Not routing conversational queries to information subgraphs
+        ✓ All reasoning is documented in thinking step
 
         </quality_checks>
 
-        <output_format>
-        Return ONLY a JSON object with this exact structure:
+        <output_requirements>
+
+        1. FIRST: Use 'think' tool to:
+        - Identify query intent and type
+        - List all candidate subgraphs (3-5 sentences each)
+        - Eliminate poor matches with reasons
+        - Compare remaining options systematically
+        - State final decision with confidence level and reasoning
+
+        2. THEN: Return valid JSON (no other text):
+
         {
             "route": "<subgraph_name>"
         }
 
-        Where <subgraph_name> exactly matches one of the available subgraph names provided.
-
-        **Critical Rules:**
-        - No explanations, reasoning, or text outside the JSON
+        3. The JSON must be:
+        - Valid and parseable
         - No markdown code blocks
-        - Must be valid, parseable JSON
-        - Route value must exactly match a provided subgraph name
-        </output_format>
+        - No explanations outside JSON
+        - Route value exactly matches a provided subgraph name
 
-        <critical_reminders>
-        1. Read ALL subgraph descriptions carefully before deciding
-        2. Match based on semantic similarity, not hard-coded rules
-        3. Pay attention to examples - they show the subgraph's specialty
-        4. Use keyword indicators as signals, not absolute rules
-        5. Respect "not suitable for" lists - they're exclusion criteria
-        6. Consider execution history - don't repeat failures
-        7. When uncertain, use think tool to reason through options
-        8. Prefer specific subgraphs over generic ones
-        9. Output must be valid JSON with only the "route" key
-        10. The goal is finding the BEST semantic match, not perfect match
-        </critical_reminders>
+        </output_requirements>
+        
+        <examples>
 
-        Your goal: Route queries intelligently based on semantic matching with subgraph capabilities, enabling extensible system where new subgraphs can be added without changing this prompt.
+        Query: "What are the best practices for implementing microservices?"
+
+        [Uses think tool]: "Your thinking process here..."
+
+        Response:
+        {
+            "route": "<subgraph_name>"
+        }
+
+        </examples>
+
+        Your goal: Route queries intelligently based on systematic analysis documented.
         """)
 
     QUERY_PLANNER_PROMPT = textwrap.dedent("""\
@@ -3439,70 +3465,88 @@ class PromptTemplates:
 
         <task>
         After a search operation, analyze the retrieved information and decide:
-        1. Is the information sufficient to answer the user's question comprehensively?
-        2. What aspects or details are still missing (if any)?
-        3. What should be the next action: continue searching, switch strategy, or provide answer?
-        4. If more searching needed, what refined query would fill the gaps?
+        1. Is the information sufficient to answer the user's question adequately?
+        2. Are there any CRITICAL gaps that would make the answer incomplete?
+        3. What should be the next action: continue searching or provide answer?
+        4. If more searching needed, what refined query would fill the critical gaps?
         </task>
 
         <thinking_requirement>
         You MUST use the 'think' tool to:
         - Analyze what information has been gathered so far
-        - Compare against what the user actually needs
-        - Identify specific gaps or missing aspects
-        - Consider if current search strategy is effective
-        - Reason about whether to continue or respond
-        - Plan refined queries if more search is needed
+        - Compare against what the user actually needs (be practical)
+        - Identify CRITICAL gaps only (not nice-to-haves)
+        - Evaluate if additional searching would add meaningful value
+        - Reason about whether to continue or respond (bias toward responding)
+        - Plan refined queries if more search is truly needed
         
-        This reflection ensures high-quality, complete answers.
+        IMPORTANT: Bias toward being satisfied. Perfection is not the goal - adequate answers are.
         </thinking_requirement>
 
         <evaluation_criteria>
 
         ## Information is SUFFICIENT when:
-        - Core question is directly answered with concrete facts
-        - Key aspects mentioned in query are all addressed
-        - Information is recent and reliable enough for user's needs
-        - No critical gaps remain that would make answer incomplete
-        - Additional searching would just add redundant information
+        - Core question has a reasonable answer (doesn't need to be perfect)
+        - Main aspects mentioned in query are addressed (partial answers count)
+        - Information is relevant and actionable for user's needs
+        - We have enough to construct a helpful response
+        - **Default stance: If in doubt, information is probably sufficient**
 
-        ## Information is INSUFFICIENT when:
-        - Core question remains partially or fully unanswered
-        - Critical aspects are missing (who, what, when, where, why, how)
-        - Information is too vague or lacks specific details
-        - User asked for multiple things but only some were found
-        - Context needed for complete understanding is missing
+        ## Information is INSUFFICIENT (only in clear cases):
+        - Core question has NO answer at all (completely empty results)
+        - User asked for specific facts/data and we found none
+        - Information found is completely off-topic or irrelevant
+        - Answer would be misleading or unhelpful without more context
+        - **High bar: Must be obvious that we can't answer without more info**
 
-        ## Consider Switching Strategy when:
-        - Current search method yielded poor results multiple times
-        - Type of information needed suggests different source (RAG vs Web vs SQL)
-        - Too specific/narrow - need broader search
-        - Too broad - need more targeted search
+        ## Stop and Respond when (prioritize these):
+        - Information is sufficient (see loose criteria above)
+        - Already tried 2+ search iterations (be lenient after 2 tries)
+        - Found partial information that user can work with
+        - Additional searching likely to give diminishing returns
+        - We can provide a helpful response even if incomplete
+        - Question touches on areas where perfect info may not exist
+        - **When uncertain: Choose to respond rather than search more**
 
-        ## Stop and Respond when:
-        - Information is sufficient (see criteria above)
-        - Already tried 3+ search iterations with diminishing returns
-        - Question is fundamentally unanswerable with available sources
-        - User's question is vague/unclear - better to respond and clarify
+        ## Continue Searching only when (narrow cases):
+        - First search returned completely irrelevant results
+        - Critical data point is missing and clearly findable
+        - Wrong search strategy was used (e.g., RAG for current events)
+        - Simple refinement would obviously yield better results
+        - **High bar: Must be confident more searching will significantly improve answer**
 
         </evaluation_criteria>
 
+        <iteration_guidelines>
+
+        **Be increasingly lenient with each iteration:**
+
+        - **Iteration 1**: If results are somewhat relevant → Accept and respond
+        - **Iteration 2**: If results add ANY new value → Accept and respond
+        - **Iteration 3+**: Almost always respond (unless results were completely empty)
+
+        **Default mindset shifts:**
+        - Start: "Is this good enough?" (usually yes)
+        - After 2 tries: "Do we have something useful?" (usually yes)
+        - After 3 tries: "Time to respond with what we have" (almost always)
+
+        </iteration_guidelines>
+
         <refined_query_guidelines>
         
-        If more searching is needed, generate a refined query that:
+        If more searching is truly needed (rare), generate a refined query that:
         
-        1. **Targets specific gaps**: Focus on what's missing, not what we already have
-        2. **Uses different angles**: Rephrase to find information from different perspective
-        3. **More/less specific**: Adjust specificity based on previous results
-           - If too vague → add specific constraints, timeframes, entities
-           - If too narrow → broaden scope, remove over-constraining terms
-        4. **Incorporates findings**: Use information found to ask better follow-up questions
-        5. **Removes noise**: Drop aspects already well-covered
+        1. **Targets critical gaps only**: Focus on what's absolutely necessary
+        2. **Uses different angle or keywords**: Rephrase significantly
+        3. **Adjusts specificity appropriately**:
+        - Too vague → add key constraints
+        - Too narrow → broaden scope
+        4. **Simpler is better**: Don't over-engineer queries
 
         Examples:
-        - Original: "climate change effects" → Found general info → Refined: "climate change effects on agriculture in Southeast Asia"
-        - Original: "Python FastAPI authentication example" → Found basic auth → Refined: "FastAPI JWT token refresh implementation"
-        - Original: "company XYZ Q4 results" → No results → Refined: "XYZ Corp financial performance fourth quarter"
+        - Original: "climate change effects" → Refined: "climate change impact agriculture"
+        - Original: "company XYZ Q4" → Refined: "XYZ Corp Q4 2024 earnings"
+        - Original: "Python FastAPI auth" → Refined: "FastAPI JWT authentication example"
 
         </refined_query_guidelines>
 
@@ -3511,126 +3555,116 @@ class PromptTemplates:
 
         {
             "is_sufficient": boolean,
-            "confidence_score": float (0.0-1.0),
             "missing_aspects": [
-                "Specific aspect 1 that's missing",
-                "Specific aspect 2 that's missing"
+                "Critical gap 1 (only if truly critical)",
+                "Critical gap 2 (only if truly critical)"
             ],
             "reasoning": "Clear explanation of your evaluation",
-            "suggested_next_action": "search_more" | "switch_strategy" | "respond",
-            "refined_query": "Better query to fill gaps" | null
+            "suggested_next_action": "search_more" | "respond",
+            "refined_query": "Refined query" | null
         }
 
         **Field Requirements:**
-        - is_sufficient: true if current information answers user's question adequately
-        - confidence_score: 0.0 (very uncertain) to 1.0 (very confident in evaluation)
-        - missing_aspects: Empty list if sufficient, otherwise specific gaps identified
-        - reasoning: 2-3 sentence explanation of your decision
+        - is_sufficient: true if we can give a helpful answer (bias toward true)
+        - missing_aspects: Empty list if sufficient, otherwise ONLY critical gaps (max 2-3)
+        - reasoning: 1-2 sentence explanation emphasizing what we HAVE, not what we lack
         - suggested_next_action: 
-          * "search_more" - same subgraph, refined query
-          * "switch_strategy" - try different subgraph/approach  
-          * "respond" - information sufficient or max attempts reached
-        - refined_query: null if suggesting "respond", otherwise a better query string
+        * "search_more" - ONLY if critical gap and high confidence refinement will help
+        * "respond" - Default choice, we have enough to be helpful
+        - refined_query: null if suggesting "respond", otherwise a simpler refined query
+
+        **Important:** missing_aspects should be rare and specific. Don't list things like "more details" or "additional context" unless truly critical.
         </output_schema>
 
         <critical_rules>
         1. ALWAYS use the 'think' tool before providing your JSON response
-        2. Be realistic - don't demand perfection, evaluate if "good enough" to answer user
-        3. Consider iteration count - after 3+ searches, be more lenient
-        4. Focus on user's ACTUAL needs, not tangential information
-        5. Your final message MUST be ONLY the JSON object
-        6. Do NOT wrap JSON in markdown code blocks
-        7. Be specific in missing_aspects - not just "more details" but "pricing information" or "implementation steps"
-        8. Refined queries should be natural language, not keyword stuffing
+        2. **BE LENIENT** - Good enough is good enough, don't demand perfection
+        3. **BIAS TOWARD RESPONDING** - Default to is_sufficient: true when in doubt
+        4. After 2 iterations, strongly prefer responding over more searching
+        5. After 3 iterations, almost always respond regardless of gaps
+        6. Focus on what information WAS found, not what's missing
+        7. Consider: "Can we give a helpful response with this?" (usually yes)
+        8. Your final message MUST be ONLY the JSON object (no markdown blocks)
+        9. Missing aspects must be genuinely critical, not nice-to-have details
+        10. **When uncertain between search_more and respond: choose respond**
         </critical_rules>
 
         <examples>
 
-        Example 1 - Sufficient Information:
+        Example 1 - Accept Partial Information (Iteration 1):
         User Query: "What is FastAPI and why use it?"
-        Retrieved: FastAPI is a modern Python web framework, benefits include speed, automatic docs, type hints, async support
+        Retrieved: FastAPI is a modern Python web framework. Benefits include speed and automatic documentation.
         Iteration: 1
 
         [Uses think tool]:
-        "User asked two things: what FastAPI is (definition) and why use it (benefits). We have clear definition and multiple concrete benefits. This answers both parts of the question. No critical gaps."
+        "User asked what FastAPI is and why use it. We have definition and two benefits. Not exhaustive but enough to answer helpfully. Could search for more benefits but what we have is adequate."
 
         Response:
         {
             "is_sufficient": true,
-            "confidence_score": 0.9,
             "missing_aspects": [],
-            "reasoning": "Retrieved information clearly defines FastAPI and provides concrete benefits. Both parts of the user's question are addressed with specific details.",
+            "reasoning": "Retrieved clear definition and key benefits. Sufficient to provide helpful answer about FastAPI's purpose and advantages.",
             "suggested_next_action": "respond",
             "refined_query": null
         }
 
         ---
 
-        Example 2 - Missing Specific Details:
+        Example 2 - Accept After One Try (Iteration 1):
         User Query: "How to implement JWT authentication in FastAPI?"
-        Retrieved: General explanation of JWT, FastAPI has security utilities, mentioned OAuth2PasswordBearer
+        Retrieved: Overview of JWT in FastAPI, mention of OAuth2PasswordBearer, security dependencies concept
         Iteration: 1
 
         [Uses think tool]:
-        "User wants implementation guide. We have concepts but no actual code example or step-by-step process. Missing: token creation, token verification, protected routes setup, dependencies. Need concrete implementation."
+        "User wants JWT implementation. We have concepts and security utilities info. Not a complete tutorial but enough to guide them. They can work with this. Accept and respond."
 
         Response:
         {
-            "is_sufficient": false,
-            "confidence_score": 0.7,
-            "missing_aspects": [
-                "Code example for generating JWT tokens",
-                "Token verification and validation implementation",
-                "How to protect routes with JWT dependencies"
-            ],
-            "reasoning": "Retrieved conceptual information about JWT and FastAPI security, but user needs concrete implementation steps and code examples which are missing.",
-            "suggested_next_action": "search_more",
-            "refined_query": "FastAPI JWT authentication implementation code example with token generation and protected routes"
+            "is_sufficient": true,
+            "missing_aspects": [],
+            "reasoning": "Retrieved relevant JWT and FastAPI security concepts. Sufficient to provide helpful guidance on authentication implementation approach.",
+            "suggested_next_action": "respond",
+            "refined_query": null
         }
 
         ---
 
-        Example 3 - Wrong Source, Need Strategy Switch:
-        User Query: "Latest developments in AI research December 2024"
+        Example 3 - Clear Strategy Switch Needed (Iteration 1):
+        User Query: "Latest AI developments December 2024"
         Retrieved: RAG documents from 2023 about AI basics
         Iteration: 1
         Current: RAG search
 
         [Uses think tool]:
-        "User wants LATEST December 2024 developments. RAG gave us old 2023 content. This is clearly time-sensitive current events. RAG won't help. Need to switch to web search for recent news."
+        "User wants December 2024 news. Got 2023 docs. This is clearly wrong source - need web for current events. Strategy switch justified because we have zero relevant information."
 
         Response:
         {
             "is_sufficient": false,
-            "confidence_score": 0.8,
             "missing_aspects": [
-                "Recent AI breakthroughs in December 2024",
-                "Latest research papers or announcements",
-                "Current trends and developments"
+                "Recent December 2024 AI developments"
             ],
-            "reasoning": "Retrieved documents are from 2023, but user specifically needs December 2024 developments. RAG search cannot provide current information; web search needed.",
-            "suggested_next_action": "switch_strategy",
-            "refined_query": "recent AI research breakthroughs December 2024 latest developments"
+            "reasoning": "Retrieved old 2023 content for current events query. Need web search for recent developments.",
+            "suggested_next_action": "search_more",
+            "refined_query": "AI breakthroughs December 2024"
         }
 
         ---
 
-        Example 4 - Diminishing Returns, Time to Stop:
-        User Query: "Company ABC's secret product roadmap for 2025"
-        Retrieved: Public information about ABC's past products, press releases, no roadmap info
-        Iteration: 3
+        Example 4 - Stop After 2 Tries (Iteration 2):
+        User Query: "Best practices for microservices architecture"
+        Retrieved Iteration 1: General microservices concepts
+        Retrieved Iteration 2: Some patterns like API gateway, service mesh
+        Iteration: 2
 
         [Uses think tool]:
-        "Searched 3 times - RAG, web, different angles. Only found public info. User asking for 'secret' roadmap which likely isn't publicly available. Further searching unlikely to find non-public information. Time to respond with what we have."
+        "Two searches done. Have general concepts and some patterns. Not comprehensive but definitely useful. After 2 tries, this is enough. User can work with this information."
 
         Response:
         {
-            "is_sufficient": false,
-            "confidence_score": 0.6,
-            "missing_aspects": [
-                "2025 product roadmap details (likely not publicly available)"
-            ],
-            "reasoning": "After multiple search attempts, only public information found. The specific 'secret roadmap' requested is likely confidential and not accessible through available sources.",
+            "is_sufficient": true,
+            "missing_aspects": [],
+            "reasoning": "Retrieved microservices concepts and key patterns across two searches. Sufficient information to provide helpful guidance on best practices.",
             "suggested_next_action": "respond",
             "refined_query": null
         }

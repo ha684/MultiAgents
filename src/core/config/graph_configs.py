@@ -1,7 +1,7 @@
 # src/core/config/graph_configs.py
+from src.agents.graph.state import ResearchState, SimpleSearchState
 from src.domain.entities.graph import GraphMetadata, NodeMetadata, SubgraphConfig
 from src.domain.schemas.stream import StreamPhase
-from src.agents.graph.state import SimpleSearchState, ResearchState
 
 GRAPH_CONFIGS = {
     "MainOrchestrator": GraphMetadata(

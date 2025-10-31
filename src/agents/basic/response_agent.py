@@ -2,16 +2,16 @@
 from typing import Any, AsyncGenerator, Dict, List, Union
 
 from langchain_core.documents import Document
-from langchain_core.messages import BaseMessage
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.agents.basic.base import BaseAgent
 from src.agents.shared.prompts import PromptTemplates
-from src.domain.entities.graph import ResponseMode
 from src.core.config.llm_config import SupportedLLMProviders
+from src.domain.entities.graph import ResponseMode
 from src.llm.factory import get_llm
 from src.utils.decorators import singleton
+from src.utils import format_context_for_response
 from src.utils.logger_conf import logger
 
 HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research assistant with access to a collection of documents. Your task is to provide accurate, well-cited answers based strictly on the information in the provided documents.
@@ -34,7 +34,13 @@ HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research as
    - If information is missing or insufficient, clearly state: "I don't have enough information in the provided documents to answer [specific aspect]"
    - Saying "I don't know" is preferred over guessing or hallucinating
 
-4. **Inline citation format**:
+4. **CRITICAL: NO CALCULATIONS OR DERIVATIONS**:
+   - **NEVER perform arithmetic operations** (addition, subtraction, multiplication, division, percentages)
+   - **NEVER derive new numbers** from existing data (e.g., calculating totals, averages, growth rates, differences)
+   - **NEVER infer numbers** that aren't explicitly written in the documents
+   - **ONLY report numbers exactly as they appear** in the source documents
+
+5. **Inline citation format**:
    - Use format: `([descriptive text][number])` immediately after each factual claim
    - The number MUST be the document index (1, 2, 3, etc.) from the <documents> section
    - The descriptive text should briefly describe the source content
@@ -48,7 +54,7 @@ HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research as
    - Multiple sources: "Sales grew across regions ([Q1 Report][1], [Market Analysis][3])"
    - CRITICAL: Numbers [1], [2], [3] must exactly match document indexes
 
-5. **Clear structure**:
+6. **Clear structure**:
    - Use markdown formatting for readability (## headers, lists, **bold**)
    - Break complex information into sections with ## headers when helpful
    - Use bullet points (*) or numbered lists for multiple items
@@ -611,22 +617,6 @@ class ResponseAgent(BaseAgent):
         logger.info("Response Agent initialized successfully.")
         self.llm = get_llm(provider)
 
-    def _format_context_for_response(self, documents: List[Document]) -> str:
-        """Formats documents for the response prompt."""
-        if not documents:
-            return ""
-
-        xml_output = "<documents>\n"
-        for i, doc in enumerate(documents):
-            xml_output += f'  <document index="{i + 1}">\n'
-            content = getattr(doc, "page_content", "")
-            xml_output += "    <document_content>\n"
-            xml_output += f"{content}\n"
-            xml_output += "    </document_content>\n"
-            xml_output += "  </document>\n"
-        xml_output += "</documents>"
-        return xml_output
-
     def _format_execution_history(self, execution_history: List[Dict]) -> str:
         """Format execution history for prompts."""
         if not execution_history:
@@ -693,7 +683,7 @@ class ResponseAgent(BaseAgent):
 
         elif mode == ResponseMode.FOLLOWUP:
             if contexts:
-                formatted_context = self._format_context_for_response(contexts)
+                formatted_context = format_context_for_response(contexts)
                 system_message = SystemMessage(
                     content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
                 )
@@ -732,12 +722,12 @@ class ResponseAgent(BaseAgent):
 
         else:  # ResponseMode.STANDARD
             if contexts:
-                formatted_context = self._format_context_for_response(contexts)
+                formatted_context = format_context_for_response(contexts)
                 system_message = SystemMessage(
                     content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
                 )
                 new_query = HumanMessage(
-                    content=f"{formatted_context}\n---\n{current_query}"
+                    content=f"CONTEXT: {formatted_context}\n---\n QUERY: {current_query}"
                 )
                 return [system_message] + history[:-1] + [new_query]
             else:
@@ -786,7 +776,7 @@ class ResponseAgent(BaseAgent):
             logger.info(
                 f'Response Agent: Preparing response for query: "{current_query}" with {len(contexts)} contexts.'
             )
-            formatted_context = self._format_context_for_response(contexts)
+            formatted_context = format_context_for_response(contexts)
             system_message = SystemMessage(
                 content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
             )

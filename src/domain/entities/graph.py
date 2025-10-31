@@ -72,7 +72,7 @@ class SubgraphOutput:
     """Result of an execution"""
 
     main_context: Optional[str] = None
-    cited_documents: Optional[List[Document]] = None
+    cited_documents: Optional[List[Document]] = field(default_factory=list)
     response_metadata: Optional[Dict[str, Any]] = None
     subgraph_error: Optional[str] = None
 

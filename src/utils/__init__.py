@@ -2,8 +2,10 @@
 from datetime import datetime
 import json
 import re
+from typing import List
 from zoneinfo import ZoneInfo
 
+from langchain_core.documents import Document
 from src.domain.schemas.chat import Message
 from src.utils.logger_conf import logger
 
@@ -72,3 +74,20 @@ def get_last_message_id(m: Message | None) -> str | None:
     except Exception as e:
         logger.error(f"Error getting last message ID: {e}")
         return None
+
+
+def format_context_for_response(documents: List[Document]) -> str:
+    """Formats documents for the response prompt."""
+    if not documents:
+        return ""
+
+    xml_output = "<documents>\n"
+    for i, doc in enumerate(documents):
+        xml_output += f'  <document index="{i + 1}">\n'
+        content = getattr(doc, "page_content", "")
+        xml_output += "    <document_content>\n"
+        xml_output += f"{content}\n"
+        xml_output += "    </document_content>\n"
+        xml_output += "  </document>\n"
+    xml_output += "</documents>"
+    return xml_output
