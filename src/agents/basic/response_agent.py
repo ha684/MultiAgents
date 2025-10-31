@@ -12,7 +12,6 @@ from src.domain.entities.graph import ResponseMode
 from src.utils.decorators import singleton
 from src.utils import format_context_for_response
 from src.utils.logger_conf import logger
-from src.agents.graph.state import OrchestratorState
 
 HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research assistant with access to a collection of documents. Your task is to provide accurate, well-cited answers based strictly on the information in the provided documents.
 
@@ -739,7 +738,7 @@ class ResponseAgent(BaseAgent):
                 )
                 return [system_message] + history[:-1] + [new_query]
 
-    async def ainvoke(self, state: OrchestratorState) -> AIMessage:
+    async def ainvoke(self, state: Dict) -> AIMessage:
         """Generates response based on mode and context."""
         mode = state.get("response_mode", ResponseMode.STANDARD)
         contexts = state.get("cited_documents", [])

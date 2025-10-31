@@ -2,7 +2,7 @@
 from typing import Any, Dict
 
 from src.agents.graph import simple_search_graph
-from src.agents.graph.state import OrchestratorState, SimpleSearchState
+from src.domain.entities.state import OrchestratorState, SimpleSearchState
 from src.domain.entities.graph import SubgraphOutput
 
 

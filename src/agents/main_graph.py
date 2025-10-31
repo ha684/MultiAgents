@@ -15,7 +15,7 @@ from src.agents.basic import (
 )
 from src.agents.executors import EXECUTORS
 from src.agents.graph.base import GraphAgentBase
-from src.agents.graph.state import OrchestratorState, SearchIteration
+from src.domain.entities.state import OrchestratorState, SearchIteration
 from src.agents.shared.manager import execution_manager
 from src.agents.shared.registry import SubgraphRegistry, enable_sql, seed_base_subgraphs
 from src.agents.tools.server.mcp_retrieve_tools import think

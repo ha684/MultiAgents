@@ -2,7 +2,7 @@
 from typing import Any, Dict, List
 
 from src.agents.graph.sql_graph import SqlGraph
-from src.agents.graph.state import OrchestratorState, SqlState
+from src.domain.entities.state import OrchestratorState, SqlState
 from src.domain.entities.graph import SubgraphOutput
 from src.database.sql_database import AsyncSQLDatabase
 

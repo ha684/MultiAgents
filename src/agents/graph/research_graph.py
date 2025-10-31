@@ -9,16 +9,16 @@ from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.basic import citation_agent, compress_agent
 from src.agents.graph.base import GraphAgentBase
-from src.agents.graph.schemas import (
+from src.agents.shared.prompts import PromptTemplates
+from src.agents.tools.server.mcp_retrieve_tools import rag_search, think, web_search
+from src.domain.entities.graph import RunConfig
+from src.domain.entities.state import ResearchState, SearchQuery, SearchResult
+from src.domain.schemas.graph import (
     DynamicQueriesSchema,
     ReflectionSchema,
     SearchPlanSchema,
     VerificationSchema,
 )
-from src.agents.graph.state import ResearchState, SearchQuery, SearchResult
-from src.agents.shared.prompts import PromptTemplates
-from src.agents.tools.server.mcp_retrieve_tools import rag_search, think, web_search
-from src.domain.entities.graph import RunConfig
 from src.llm.factory import get_llm
 from src.utils import parse_response
 from src.utils.logger_conf import logger

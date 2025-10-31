@@ -9,9 +9,9 @@ import tiktoken
 
 from src.agents.basic import citation_agent, file_name_agent
 from src.agents.graph.base import GraphAgentBase
-from src.domain.entities.graph import RunConfig
-from src.agents.graph.state import SimpleSearchState
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search
+from src.domain.entities.graph import RunConfig
+from src.domain.entities.state import SimpleSearchState
 from src.utils.logger_conf import logger
 
 

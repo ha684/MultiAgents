@@ -13,18 +13,18 @@ from langgraph.graph.state import CompiledStateGraph
 import pandas as pd
 
 from src.agents.graph.base import GraphAgentBase
+from src.agents.shared.prompts import PromptTemplates
+from src.agents.shared.sql_validator import SqlValidator
+from src.agents.tools.server.mcp_retrieve_tools import think
+from src.database.sql_database import AsyncSQLDatabase
 from src.domain.entities.graph import RunConfig
-from src.agents.graph.schemas import (
+from src.domain.entities.state import SqlState
+from src.domain.schemas.graph import (
     ChartGenerationSchema,
     RelevanceValidationSchema,
     SqlAnalysisSchema,
     SqlGenerationSchema,
 )
-from src.agents.graph.state import SqlState
-from src.agents.shared.prompts import PromptTemplates
-from src.agents.shared.sql_validator import SqlValidator
-from src.agents.tools.server.mcp_retrieve_tools import think
-from src.database.sql_database import AsyncSQLDatabase
 from src.llm.factory import get_llm
 from src.utils import parse_response
 from src.utils.logger_conf import logger
