@@ -6,7 +6,6 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.basic.base import BaseAgent
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.llm.factory import get_llm
 from src.domain.schemas.chat import CitationIndexes
 from src.utils import parse_response
 from src.utils.decorators import singleton
@@ -188,9 +187,7 @@ class CitationAgent(BaseAgent):
     """Agent responsible for extracting citations from retrieved documents."""
 
     def __init__(self):
-        self.llm = get_llm("nxchat")
-        self.llm_with_tools = self.llm.bind_tools([think])
-        self.max_iterations = 10
+        super().__init__()
         logger.info("Citation Agent initialized successfully.")
 
     def _format_context_for_response(self, documents: List[Document]) -> str:
@@ -225,9 +222,9 @@ class CitationAgent(BaseAgent):
 
             response = await self.iterative_llm_call_structured(
                 messages=messages,
-                llm_with_tools=self.llm_with_tools,
+                llm_with_tools=self.thinking_llm,
                 available_tools={"think": think},
-                max_iterations=self.max_iterations,
+                max_iterations=10,
                 parse_fn=parse_citation_response,
                 retry_prompt='Please provide your final answer as a JSON object with the exact format: {"indexes": [1, 2, 3]}',
             )

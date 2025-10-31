@@ -1,27 +1,33 @@
 # src/agents/basic/base.py
 from __future__ import annotations
+from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import Tool
-
+from src.agents.tools.server.mcp_retrieve_tools import think
+from src.core.config.llm_config import SupportedLLMProviders
+from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
 
 
-class BaseAgent:
+class BaseAgent(ABC):
     """LLM utilities common to all agents (with or without graph)."""
+
+    def __init__(self, provider: SupportedLLMProviders = "nxchat"):
+        self.llm = get_llm(provider)
+        self.thinking_llm = self.llm.bind_tools([think])
 
     async def simple_llm_call(
         self,
         messages: Iterable[BaseMessage],
-        llm: BaseChatModel,
         error_context: str = "Agent",
     ) -> AIMessage:
         try:
             prompt = ChatPromptTemplate.from_messages(list(messages))
-            return await (prompt | llm).ainvoke({})
+            return await (prompt | self.llm.with_retry()).ainvoke({})
         except Exception as e:
             logger.error(f"{error_context}: Error in LLM call: {e}", exc_info=True)
             return AIMessage(content="")
@@ -120,3 +126,6 @@ class BaseAgent:
             f"{error_context}: Structured call failed after {iteration} iterations."
         )
         return None
+
+    @abstractmethod
+    async def ainvoke(self, *args, **kwargs) -> Any: ...

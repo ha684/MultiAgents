@@ -4,18 +4,17 @@ import mimetypes
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
 
-from src.llm.factory import get_llm
+from src.agents.basic.base import BaseAgent
 from src.agents.prompts.get_prompt_template import load_prompt_template
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
 
 @singleton
-class ImageExtractionAgent:
+class ImageExtractionAgent(BaseAgent):
     def __init__(self):
-        self.llm = get_llm("nxchat-vision")
+        super().__init__("nxchat-vision")
 
     def _prepare_image_path(self, image_path: str) -> str:
         """
@@ -56,9 +55,7 @@ class ImageExtractionAgent:
 
             messages = [system_message, human_message]
 
-            prompt = ChatPromptTemplate.from_messages(messages)
-            chain = prompt | self.llm.with_retry()
-            response = await chain.ainvoke({})
+            response = await self.simple_llm_call(messages)
 
             if not response.content:
                 raise ValueError("No content returned from LLM response")

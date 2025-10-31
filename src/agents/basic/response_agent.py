@@ -9,10 +9,10 @@ from src.agents.basic.base import BaseAgent
 from src.agents.shared.prompts import PromptTemplates
 from src.core.config.llm_config import SupportedLLMProviders
 from src.domain.entities.graph import ResponseMode
-from src.llm.factory import get_llm
 from src.utils.decorators import singleton
 from src.utils import format_context_for_response
 from src.utils.logger_conf import logger
+from src.agents.graph.state import OrchestratorState
 
 HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research assistant with access to a collection of documents. Your task is to provide accurate, well-cited answers based strictly on the information in the provided documents.
 
@@ -614,8 +614,8 @@ class ResponseAgent(BaseAgent):
     """Agent responsible for generating the final response based on mode and context."""
 
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):
+        super().__init__(provider)
         logger.info("Response Agent initialized successfully.")
-        self.llm = get_llm(provider)
 
     def _format_execution_history(self, execution_history: List[Dict]) -> str:
         """Format execution history for prompts."""
@@ -739,17 +739,16 @@ class ResponseAgent(BaseAgent):
                 )
                 return [system_message] + history[:-1] + [new_query]
 
-    async def ainvoke(
-        self,
-        contexts: List[Document],
-        history: List[BaseMessage],
-        mode: str = ResponseMode.STANDARD,
-        accumulated_knowledge: str = "",
-        execution_history: List[Dict] = None,
-        error_message: str = None,
-        pending_route: str = None,
-    ) -> AIMessage:
+    async def ainvoke(self, state: OrchestratorState) -> AIMessage:
         """Generates response based on mode and context."""
+        mode = state.get("response_mode", ResponseMode.STANDARD)
+        contexts = state.get("cited_documents", [])
+        history = state["conversation"]
+        accumulated_knowledge = state.get("accumulated_context", "")
+        execution_history = state.get("execution_history", [])
+        error_message = state.get("subgraph_error", "")
+        pending_route = state.get("pending_route", None)
+
         messages = self._prepare_messages_by_mode(
             mode=mode,
             contexts=contexts,
@@ -760,7 +759,7 @@ class ResponseAgent(BaseAgent):
             pending_route=pending_route,
         )
 
-        response = await self.simple_llm_call(messages, self.llm)
+        response = await self.simple_llm_call(messages)
         return response
 
     def _prepare_messages(

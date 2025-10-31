@@ -6,7 +6,7 @@ def load_prompt_template(
     task_name: str = "text_generation",
     language_code: str = "en",
     variables: Optional[dict] = None,
-):
+) -> str:
     """
     Load a specific prompt template from a YAML file based on the given task name,
     and optionally format it with provided variables.

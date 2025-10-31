@@ -6,7 +6,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.basic.base import BaseAgent
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.llm.factory import get_llm
+from src.core.config.llm_config import SupportedLLMProviders
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
@@ -18,10 +18,8 @@ VERIFICATION_PROMPT_TEMPLATE = """
 class VerificationAgent(BaseAgent):
     """Agent responsible for verifying information from relevant documents."""
 
-    def __init__(self):
-        self.llm = get_llm("nxchat")
-        self.llm_with_tools = self.llm.bind_tools([think])
-        self.max_iterations = 10
+    def __init__(self, provider: SupportedLLMProviders = "nxchat"):
+        super().__init__(provider)
         logger.info("Verification Agent initialized successfully.")
 
     async def ainvoke(self, query: str, reference: List[Document]) -> str:
@@ -43,9 +41,9 @@ class VerificationAgent(BaseAgent):
 
             response = await self.iterative_llm_call_text(
                 messages=messages,
-                llm_with_tools=self.llm_with_tools,
+                llm_with_tools=self.thinking_llm,
                 available_tools={"think": think},
-                max_iterations=self.max_iterations,
+                max_iterations=10,
                 retry_prompt="Please provide your output again.",
                 fallback_value=fallback,
             )

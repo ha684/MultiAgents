@@ -86,15 +86,12 @@ class OrchestratorState(TypedDict):
     main_context: Optional[str]
     cited_documents: Optional[List[Document]]
 
-    subgraph_policy: Dict[
-        str, Any
-    ]  # {allow: [..] | None, block: [..], extras: Dict[name, SubgraphConfig]}
+    subgraph_policy: Dict[str, Any]
     active_subgraphs: List[str]
 
     final_answer: Optional[str]
     response_metadata: Optional[Dict[str, Any]]
 
-    # New fields for iterative reasoning
     search_iterations: List[SearchIteration]
     current_iteration: int
     max_iterations: int

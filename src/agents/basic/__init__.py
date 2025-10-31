@@ -11,7 +11,8 @@ from src.agents.basic.query_context_agent import QueryContextAgent
 from src.agents.basic.response_agent import ResponseAgent
 from src.agents.basic.summary_agent import SummaryAgent
 from src.agents.basic.verification_agent import VerificationAgent
-
+from src.agents.basic.router_agent import RouterAgent
+from src.agents.basic.reflection_agent import ReflectionAgent
 
 citation_agent = CitationAgent()
 summary_agent = SummaryAgent()
@@ -23,3 +24,5 @@ qac_agent = QACAgent()
 file_name_agent = FileNameAgent()
 chunk_contextual_agent = ChunkContextualAgent()
 compress_agent = CompressAgent()
+router_agent = RouterAgent()
+reflection_agent = ReflectionAgent()

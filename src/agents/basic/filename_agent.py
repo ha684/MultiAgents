@@ -4,7 +4,6 @@ import json
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.basic.base import BaseAgent
-from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
 
 EXTRACT_FILENAME_PROMPT = """
@@ -58,7 +57,7 @@ Example:
 
 class FileNameAgent(BaseAgent):
     def __init__(self):
-        self.llm = get_llm("nxchat")
+        super().__init__()
 
     async def ainvoke(self, query: str) -> str | None:
         """
@@ -74,9 +73,8 @@ class FileNameAgent(BaseAgent):
         try:
             system_prompt = SystemMessage(content=EXTRACT_FILENAME_PROMPT)
             user_prompt = HumanMessage(content=query)
-            response = await self.simple_llm_call(
-                [system_prompt, user_prompt], self.llm
-            )
+            messages = [system_prompt, user_prompt]
+            response = await self.simple_llm_call(messages)
             filename = json.loads(response.content)["filename"]
             return filename
         except Exception as e:

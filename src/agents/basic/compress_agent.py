@@ -7,7 +7,6 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.basic.base import BaseAgent
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.llm.factory import get_llm
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
@@ -571,9 +570,7 @@ class CompressAgent(BaseAgent):
     """Agent responsible for compressing and organizing information from filtered documents."""
 
     def __init__(self):
-        self.llm = get_llm("nxchat")
-        self.llm_with_tools = self.llm.bind_tools([think])
-        self.max_iterations = 10
+        super().__init__()
         logger.info("Compress Agent initialized successfully.")
 
     def _format_context_for_response(self, documents: List[Document]) -> str:
@@ -616,9 +613,9 @@ class CompressAgent(BaseAgent):
 
             response = await self.iterative_llm_call_text(
                 messages=messages,
-                llm_with_tools=self.llm_with_tools,
+                llm_with_tools=self.thinking_llm,
                 available_tools={"think": think},
-                max_iterations=self.max_iterations,
+                max_iterations=10,
                 retry_prompt="Please provide your output again.",
                 fallback_value=fallback,
             )
@@ -679,9 +676,9 @@ class CompressAgent(BaseAgent):
 
             response = await self.iterative_llm_call_text(
                 messages=messages,
-                llm_with_tools=self.llm_with_tools,
+                llm_with_tools=self.thinking_llm,
                 available_tools={"think": think},
-                max_iterations=self.max_iterations,
+                max_iterations=10,
                 retry_prompt="Please provide the consolidated knowledge base again.",
                 fallback_value="",
             )
