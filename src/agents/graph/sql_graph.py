@@ -25,7 +25,6 @@ from src.domain.schemas.graph import (
     SqlAnalysisSchema,
     SqlGenerationSchema,
 )
-from src.llm.factory import get_llm
 from src.utils import parse_response
 from src.utils.logger_conf import logger
 
@@ -42,10 +41,8 @@ class SqlGraph(GraphAgentBase[SqlState]):
     """
 
     def __init__(self, sql_database: AsyncSQLDatabase):
-        self.llm = get_llm("nxchat")
-        self.thinking_llm = self.llm.bind_tools([think])
+        super().__init__()
         self.validator = SqlValidator()
-
         self.sql_database = sql_database
         self.graph_name = "SqlGraph"
         self.compiled_graph = self._build_graph()

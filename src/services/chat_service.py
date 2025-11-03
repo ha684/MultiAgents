@@ -125,21 +125,17 @@ class ChatService:
                     "message_order"
                 ]
 
-                conversation_obj = Conversation(
+                await self.conv_service.update_conversation_summary(
                     conversation_id=conversation_details.conversation_id,
-                    is_active=True,
-                    name=conversation_details.name,
                     summary=summary_text,
-                    summarized_up_to_message_order=new_checkpoint_order,
-                )
-                await self.conv_service.update_conversation(
-                    conversation=conversation_obj,
+                    summarized_up_to=new_checkpoint_order,
                     user_id=user_id,
                 )
 
                 return [
                     SystemMessage(content=f"Conversation Summary:\n{summary_text}")
                 ] + recent_messages
+
             except Exception as e:
                 logger.warning(f"Failed to summarize conversation: {e}")
                 return recent_messages

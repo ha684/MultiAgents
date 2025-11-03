@@ -19,7 +19,6 @@ from src.domain.schemas.graph import (
     SearchPlanSchema,
     VerificationSchema,
 )
-from src.llm.factory import get_llm
 from src.utils import parse_response
 from src.utils.logger_conf import logger
 
@@ -28,8 +27,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
     """Research Subgraph - Deep research with iterative search loop"""
 
     def __init__(self):
-        self.llm = get_llm("nxchat")
-        self.thinking_llm = self.llm.bind_tools([think])
+        super().__init__()
         self.graph_name = "ResearchGraph"
         self.compiled_graph = self._build_graph()
         self.max_searches = 20

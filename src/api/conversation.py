@@ -6,10 +6,11 @@ from fastapi import APIRouter, Depends
 
 from src.agents.shared.manager import execution_manager
 from src.core.exceptions.chat_exceptions import ResearchNotFoundError
-from src.domain.schemas.chat import Conversation, Message
-from src.services.conversation_service import ConversationService
 from src.database.models.user import User
 from src.dependencies.auth import get_current_user
+from src.domain.schemas.chat import Conversation, Message
+from src.domain.schemas.conversation import ConversationUpdate
+from src.services.conversation_service import ConversationService
 
 router = APIRouter(tags=["Conversation"], dependencies=[Depends(get_current_user)])
 conversation_service = ConversationService()
@@ -54,14 +55,12 @@ async def delete_conversation(
 
 @router.patch("/conversation/update")
 async def update_conversation(
-    conversation_id: uuid.UUID,
-    active: bool,
-    name: str,
+    conversation_update: ConversationUpdate,
     current_user: User = Depends(get_current_user),
 ) -> Conversation:
     """Update a conversation"""
-    result = await conversation_service.update_conversation(
-        conversation_id, current_user.id, active, name
+    result = await conversation_service.update_conversation_metadata(
+        conversation_update, current_user.id
     )
     return result
 
