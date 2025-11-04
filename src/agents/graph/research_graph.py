@@ -187,7 +187,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
         verification_result = {
             "is_sufficient": False,
             "missing_aspects": [state["contextualized_query"]],
-            "confidence": "low",
         }
         return {
             "verification_result": verification_result,
@@ -563,7 +562,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                 "verification_result": {
                     "is_sufficient": False,
                     "missing_aspects": [state["contextualized_query"]],
-                    "confidence": "low",
                 },
                 "cited_documents": state.get("cited_documents", []),
                 "accumulated_knowledge": state.get("accumulated_knowledge", ""),
@@ -596,11 +594,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                 "[Verification] Failed to get a valid verification. Defaulting to insufficient."
             )
             return {
-                "verification_result": {
-                    "is_sufficient": False,
-                    "missing_aspects": [],
-                    "confidence": "low",
-                },
+                "verification_result": {"is_sufficient": False, "missing_aspects": []},
                 "cited_documents": state.get("cited_documents", []),
                 "accumulated_knowledge": state.get("accumulated_knowledge", ""),
             }
@@ -630,10 +624,9 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             accumulated_knowledge=state["accumulated_knowledge"],
             missing_aspects=json.dumps(
                 state["verification_result"]["missing_aspects"],
-                indent=2,
                 ensure_ascii=False,
             ),
-            search_history=json.dumps(search_history, indent=2, ensure_ascii=False),
+            search_history=json.dumps(search_history, ensure_ascii=False),
         )
 
         messages: List[BaseMessage] = [
@@ -695,7 +688,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             )
 
         search_history_str = (
-            json.dumps(search_history, indent=2)
+            json.dumps(search_history, ensure_ascii=False)
             if search_history
             else "No previous searches"
         )
@@ -708,7 +701,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
         prompt_input = PromptTemplates.DYNAMIC_QUERY_GENERATOR_HUMAN_PROMPT.format(
             original_query=state["contextualized_query"],
             accumulated_knowledge=state["accumulated_knowledge"],
-            missing_aspects=json.dumps(missing_aspects, indent=2),
+            missing_aspects=json.dumps(missing_aspects, ensure_ascii=False),
             search_history=search_history_str,
             reflection=reflection_str,
         )
@@ -790,9 +783,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             return "__end__"
 
         if verification.get("is_sufficient"):
-            logger.info(
-                f"[Router] Knowledge is sufficient (confidence: {verification.get('confidence')}). Ending."
-            )
+            logger.info("[Router] Knowledge is sufficient. Ending.")
             return "__end__"
 
         if state.get("pending_queries"):
