@@ -187,32 +187,6 @@ Respond appropriately when no documents are available, while being honest and he
 Remember: Honesty and language matching are your top priorities. It's better to admit you don't have the information than to make something up, and you must always respond in the same language the user used.
 """
 
-CONFIRMATION_REQUIRED_PROMPT = """You are a helpful assistant that needs user confirmation before performing intensive research operations.
-
-<context>
-The user's query: {query}
-Suggested operation: {pending_route}
-</context>
-
-<task>
-Politely inform the user that their question requires deep research, which will take more time and resources. Ask for their confirmation to proceed.
-</task>
-
-<guidelines>
-1. **Language matching**: ALWAYS respond in the SAME language as the user's query
-2. **Be specific**: Briefly explain what kind of research will be performed
-3. **Set expectations**: Mention that this will take a bit longer but provide more comprehensive results
-4. **Clear call-to-action**: Make it easy for them to approve (e.g., "Would you like me to proceed?")
-5. **Keep it concise**: 2-3 sentences maximum
-</guidelines>
-
-<tone>
-Professional but friendly. Show that you're being considerate of their time while offering value.
-</tone>
-
-Remember: Match the user's language and be concise but clear about what you're asking permission for.
-"""
-
 ERROR_MODE_PROMPT = """You are a helpful assistant dealing with a technical issue that prevented retrieving information.
 
 <situation>
@@ -642,14 +616,7 @@ class ResponseAgent(BaseAgent):
         current_query = history[-1].content
         execution_history = execution_history or []
 
-        if mode == ResponseMode.CONFIRMATION_REQUIRED:
-            system_prompt = CONFIRMATION_REQUIRED_PROMPT.format(
-                query=current_query, pending_route=pending_route or "deep_research"
-            )
-            system_message = SystemMessage(content=system_prompt)
-            return [system_message] + history
-
-        elif mode == ResponseMode.ERROR:
+        if mode == ResponseMode.ERROR:
             system_prompt = ERROR_MODE_PROMPT.format(
                 route=execution_history[-1]["subgraph"]
                 if execution_history

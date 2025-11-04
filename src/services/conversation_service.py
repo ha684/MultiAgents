@@ -7,6 +7,7 @@ from src.database.models.conversation import MessageStatus
 from src.database.repositories.conversation_repository import ConversationRepository
 from src.core.exceptions.chat_exceptions import ConversationNotFoundError
 from src.utils.decorators import singleton
+from src.domain.schemas.conversation import ConversationUpdate
 from src.utils.logger_conf import logger
 
 
@@ -60,13 +61,33 @@ class ConversationService:
         """Add multiple messages to the conversation"""
         return await self.conv_repository.add_messages(messages, conversation_id)
 
-    async def update_conversation(
+    async def update_conversation_metadata(
         self,
-        conversation: Conversation,
+        conversation_update: ConversationUpdate,
         user_id: str,
     ) -> Conversation:
-        """Update a conversation"""
-        return await self.conv_repository.update_conversation(conversation, user_id)
+        """Update user-controllable conversation fields"""
+        return await self.conv_repository.update_conversation_metadata(
+            conversation_id=conversation_update.conversation_id,
+            name=conversation_update.name,
+            is_active=conversation_update.is_active,
+            user_id=user_id,
+        )
+
+    async def update_conversation_summary(
+        self,
+        conversation_id: uuid.UUID,
+        summary: str,
+        summarized_up_to: int,
+        user_id: str,
+    ) -> Conversation:
+        """Update internal conversation summary"""
+        return await self.conv_repository.update_conversation_summary(
+            conversation_id=conversation_id,
+            summary=summary,
+            summarized_up_to=summarized_up_to,
+            user_id=user_id,
+        )
 
     async def update_message_status(
         self,

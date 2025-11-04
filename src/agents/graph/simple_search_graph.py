@@ -7,7 +7,7 @@ from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 import tiktoken
 
-from src.agents.basic import citation_agent, file_name_agent
+from src.agents.basic import citation_agent
 from src.agents.graph.base import GraphAgentBase
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search
 from src.domain.entities.graph import RunConfig
@@ -36,18 +36,6 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
         return RunConfig(
             graph_name=self.graph_name, recursion_limit=10, timeout_seconds=180
         )
-
-    async def extract_filename_node(self, state: SimpleSearchState) -> Dict[str, Any]:
-        """Extract filename from query if mentioned"""
-        logger.info(f"Extracting filename from query: {state['contextualized_query']}")
-        requested_filename = await file_name_agent.ainvoke(
-            query=state["contextualized_query"]
-        )
-        logger.info(f"Requested filename: {requested_filename}")
-        if requested_filename:
-            logger.info(f"Detected filename: {requested_filename}")
-
-        return {"response_metadata": {"requested_filename": requested_filename}}
 
     async def retrieve_documents_node(self, state: SimpleSearchState) -> Dict[str, Any]:
         """
@@ -170,11 +158,10 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
         """Construct the simple search graph"""
         workflow = StateGraph(SimpleSearchState)
 
-        workflow.add_node("extract_filename", self.extract_filename_node)
         workflow.add_node("retrieve_documents", self.retrieve_documents_node)
         workflow.add_node("filter_citations", self.filter_citations_node)
 
-        workflow.set_entry_point("extract_filename")
+        workflow.set_entry_point("retrieve_documents")
 
         workflow.add_edge("extract_filename", "retrieve_documents")
         workflow.add_edge("retrieve_documents", "filter_citations")

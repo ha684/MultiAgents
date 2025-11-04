@@ -50,13 +50,16 @@ class ExecutionRecord(TypedDict):
 
 
 class ReflectionResult(TypedDict):
-    """Result from reflection/evaluation step"""
+    """Simplified reflection result with only 2 actions."""
 
     is_sufficient: bool
     missing_aspects: List[str]
     reasoning: str
-    suggested_next_action: Literal["search_more", "switch_strategy", "respond"]
+    suggested_next_action: str
     refined_query: Optional[str]
+    successful_subgraphs: Optional[List[str]]  # Subgraphs that returned results
+    failed_subgraphs: Optional[List[str]]  # Subgraphs that failed or returned nothing
+    missing_subgraphs: Optional[List[str]]  # Subgraphs needed for missing aspects
 
 
 class SearchIteration(TypedDict):
@@ -68,6 +71,8 @@ class SearchIteration(TypedDict):
     result_summary: str
     documents_count: int
     timestamp: str
+    success: bool  # Whether this subgraph returned useful results
+    error: Optional[str]  # Error message if subgraph failed
 
 
 class OrchestratorState(TypedDict):
@@ -76,7 +81,8 @@ class OrchestratorState(TypedDict):
     conversation: List[BaseMessage]
     contextualized_query: Optional[str]
 
-    route_decision: Optional[str]
+    route_decisions: Optional[List[str]]
+    pending_routes: Optional[List[str]]
     response_mode: Optional[str]
     execution_history: List[ExecutionRecord]
 
@@ -98,6 +104,8 @@ class OrchestratorState(TypedDict):
     accumulated_context: str
     reflection_result: Optional[ReflectionResult]
     needs_confirmation: Optional[bool]
+    successful_subgraphs: Optional[List[str]]
+    failed_subgraphs: Optional[List[str]]
 
 
 class SimpleSearchState(TypedDict):

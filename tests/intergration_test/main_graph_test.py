@@ -72,15 +72,6 @@ class OrchestratorStreamer:
                     self._print_box(f"✅ Graph: {name} COMPLETED", color="green")
                     continue
 
-                if output and name not in [
-                    "RunnableSequence",
-                    "RunnableLambda",
-                    "route_after_router",
-                ]:
-                    self._print_box(
-                        f"✅ NODE: {name}", content=str(output), color="green"
-                    )
-
             elif kind == "on_chat_model_stream":
                 chunk = event["data"]["chunk"]
                 if chunk.content:
@@ -130,7 +121,7 @@ async def main():
     orchestrator = OrchestratorGraph()
 
     human_message = HumanMessage(
-        content="gần đây việt nam có thông tin gì mới không?",
+        content="what is the current growth rate of gold? and how it is in comparison with our profit increase rate in the last year",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]

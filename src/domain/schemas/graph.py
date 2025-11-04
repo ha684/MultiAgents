@@ -5,9 +5,9 @@ from pydantic import BaseModel, Field
 
 
 class RouteDecision(BaseModel):
-    """Router output schema"""
+    """Multi-route decision output"""
 
-    route: str = Field(description="The route to take based on query complexity")
+    routes: List[str] = Field(description="List of subgraph names to execute, in order")
 
 
 class SearchPlanSchema(BaseModel):

@@ -47,7 +47,6 @@ class SubgraphConfig:
     entry_state_type: Type
     executor: Union[str, SubgraphExecutor]
     fallback_chain: Optional[List[Union[str, SubgraphExecutor]]]
-    requires_confirmation: bool = False
 
     query_indicators: Optional[List[str]] = None
     not_suitable_for: Optional[List[str]] = None
@@ -90,7 +89,6 @@ class ResponseMode(str, Enum):
     FOLLOWUP = "followup"
     NO_VIABLE_OPTION = "no_viable_option"
     ERROR = "error"
-    CONFIRMATION_REQUIRED = "confirmation_required"
     SQL_RESPONSE = "sql_response"
 
 
