@@ -52,7 +52,27 @@
 #     print("-" * 100)
 # -*- coding: utf-8 -*-
 
-from src.rag.embeding import embedding
+import asyncio
+import parlant.sdk as p
+from src.llm.factory import openai
+import os
+from dotenv import load_dotenv
 
-embeddings = embedding.embed_query_sync("Hello, world!")
-print(embeddings)
+load_dotenv()
+
+os.environ["OPENAI_API_KEY"] = os.getenv("NTQAI_API_KEY")
+os.environ["OPENAI_BASE_URL"] = os.getenv("NTQAI_BASE_URL")
+
+
+async def main():
+    async with p.Server(nlp_service=openai, session_store="local") as server:
+        agent = await server.create_agent(
+            name="Otto Carmen", description="You work at a car dealership"
+        )
+        await agent.create_guideline(
+            condition="the customer greets you",
+            action="offer a refreshing drink",
+        )
+
+
+asyncio.run(main())

@@ -3465,88 +3465,105 @@ class PromptTemplates:
 
         <task>
         After a search operation, analyze the retrieved information and decide:
-        1. Is the information sufficient to answer the user's question adequately?
-        2. Are there any CRITICAL gaps that would make the answer incomplete?
+        1. Is the information sufficient to answer the user's question comprehensively?
+        2. What critical aspects are still missing (if any)?
         3. What should be the next action: continue searching or provide answer?
-        4. If more searching needed, what refined query would fill the critical gaps?
+        4. If more searching needed, what refined query would fill the gaps?
         </task>
 
         <thinking_requirement>
         You MUST use the 'think' tool to:
         - Analyze what information has been gathered so far
-        - Compare against what the user actually needs (be practical)
-        - Identify CRITICAL gaps only (not nice-to-haves)
-        - Evaluate if additional searching would add meaningful value
-        - Reason about whether to continue or respond (bias toward responding)
-        - Plan refined queries if more search is truly needed
+        - Compare against what the user actually needs
+        - Identify critical gaps that would make answer incomplete
+        - Evaluate if additional searching would meaningfully improve the answer
+        - Reason about quality vs iteration tradeoff
+        - Plan refined queries if more search is justified
         
-        IMPORTANT: Bias toward being satisfied. Perfection is not the goal - adequate answers are.
+        IMPORTANT: Balance quality and efficiency. Good answers don't require perfection.
         </thinking_requirement>
 
         <evaluation_criteria>
 
         ## Information is SUFFICIENT when:
-        - Core question has a reasonable answer (doesn't need to be perfect)
-        - Main aspects mentioned in query are addressed (partial answers count)
-        - Information is relevant and actionable for user's needs
-        - We have enough to construct a helpful response
-        - **Default stance: If in doubt, information is probably sufficient**
+        - Core question is answered with substantive information
+        - Main aspects mentioned in query are addressed with details
+        - Information is relevant, actionable, and reasonably complete
+        - We can construct a helpful, informative response
+        - Additional searching would likely yield diminishing returns
+        - **Balance: Aim for "comprehensive enough" not "exhaustive"**
 
-        ## Information is INSUFFICIENT (only in clear cases):
-        - Core question has NO answer at all (completely empty results)
-        - User asked for specific facts/data and we found none
-        - Information found is completely off-topic or irrelevant
-        - Answer would be misleading or unhelpful without more context
-        - **High bar: Must be obvious that we can't answer without more info**
+        ## Information is INSUFFICIENT when:
+        - Core question has minimal or no relevant information
+        - User asked for specific data/facts and we found almost nothing
+        - Critical aspects are completely missing (not just incomplete)
+        - Information found is too generic or off-topic to be useful
+        - Answer would be vague or unhelpful without more context
+        - **Clear signal: We cannot give a reasonably complete answer**
 
-        ## Stop and Respond when (prioritize these):
-        - Information is sufficient (see loose criteria above)
-        - Already tried 2+ search iterations (be lenient after 2 tries)
-        - Found partial information that user can work with
-        - Additional searching likely to give diminishing returns
-        - We can provide a helpful response even if incomplete
-        - Question touches on areas where perfect info may not exist
-        - **When uncertain: Choose to respond rather than search more**
+        ## Guidelines by Iteration:
 
-        ## Continue Searching only when (narrow cases):
-        - First search returned completely irrelevant results
-        - Critical data point is missing and clearly findable
-        - Wrong search strategy was used (e.g., RAG for current events)
-        - Simple refinement would obviously yield better results
-        - **High bar: Must be confident more searching will significantly improve answer**
+        **After Iteration 1:**
+        - If results are relevant and substantive → Sufficient
+        - If results are somewhat relevant but thin → One more try
+        - If results are off-topic or empty → Refine and search again
+
+        **After Iteration 2:**
+        - If we have useful information covering main aspects → Sufficient
+        - If we added meaningful new information → Sufficient
+        - Only continue if clear critical gap and obvious way to fill it
+
+        **After Iteration 3:**
+        - Strong bias toward sufficient unless results were consistently empty
+        - We should have enough information by now for most queries
+        - Only continue if completely missing essential information
+
+        **After Iteration 4+:**
+        - Almost always sufficient - diminishing returns territory
+        - Either information doesn't exist or we've found what's available
 
         </evaluation_criteria>
 
-        <iteration_guidelines>
+        <decision_framework>
 
-        **Be increasingly lenient with each iteration:**
+        ## When to Continue Searching:
 
-        - **Iteration 1**: If results are somewhat relevant → Accept and respond
-        - **Iteration 2**: If results add ANY new value → Accept and respond
-        - **Iteration 3+**: Almost always respond (unless results were completely empty)
+        **Strong reasons to continue (search_more):**
+        - First search returned completely irrelevant results
+        - Found some information but missing critical component of multi-part question
+        - Wrong source type used (e.g., RAG for current events, web for internal info)
+        - Query was too vague/broad and refinement will clearly help
+        - **Confidence check: Am I confident refinement will significantly improve answer?**
 
-        **Default mindset shifts:**
-        - Start: "Is this good enough?" (usually yes)
-        - After 2 tries: "Do we have something useful?" (usually yes)
-        - After 3 tries: "Time to respond with what we have" (almost always)
+        ## When to Stop Searching:
 
-        </iteration_guidelines>
+        **Strong reasons to stop (respond):**
+        - Have substantive information addressing the core question
+        - Main points of query are covered, even if not exhaustive
+        - Already searched 2+ times with improving but diminishing returns
+        - Additional searching unlikely to find substantially better information
+        - Information gaps are nice-to-have, not critical
+        - **Practical check: Can we write a helpful answer with this?**
+
+        </decision_framework>
 
         <refined_query_guidelines>
         
-        If more searching is truly needed (rare), generate a refined query that:
+        If continuing search (should be selective), generate a refined query that:
         
-        1. **Targets critical gaps only**: Focus on what's absolutely necessary
-        2. **Uses different angle or keywords**: Rephrase significantly
+        1. **Targets the specific gap identified**: Not generic "more information"
+        2. **Uses different terminology or angle**: Rephrase significantly
         3. **Adjusts specificity appropriately**:
-        - Too vague → add key constraints
-        - Too narrow → broaden scope
-        4. **Simpler is better**: Don't over-engineer queries
+        - Too vague → add specific constraints, entities, timeframes
+        - Too narrow → broaden scope or try related terms
+        4. **Incorporates learnings**: Use what you found to ask better questions
+        5. **Simpler is better**: Focus on one clear aspect
 
-        Examples:
-        - Original: "climate change effects" → Refined: "climate change impact agriculture"
-        - Original: "company XYZ Q4" → Refined: "XYZ Corp Q4 2024 earnings"
-        - Original: "Python FastAPI auth" → Refined: "FastAPI JWT authentication example"
+        Examples of good refinement:
+        - Gap: Missing implementation steps → "FastAPI JWT authentication step-by-step implementation tutorial"
+        - Gap: Only 2023 data, need 2024 → "AI developments December 2024 recent breakthroughs"
+        - Gap: Too generic results → "microservices API gateway design patterns best practices"
+        - Gap: Wrong domain → "company XYZ product announcement 2024" (switch to web)
 
         </refined_query_guidelines>
 
@@ -3554,157 +3571,129 @@ class PromptTemplates:
         Return a JSON object with this structure:
 
         {
+            "reasoning": "Clear explanation of evaluation",
             "is_sufficient": boolean,
             "missing_aspects": [
-                "Critical gap 1 (only if truly critical)",
-                "Critical gap 2 (only if truly critical)"
+                "Specific critical gap 1",
+                "Specific critical gap 2"
             ],
-            "reasoning": "Clear explanation of your evaluation",
             "suggested_next_action": "search_more" | "respond",
-            "refined_query": "Refined query" | null
+            "refined_query": "Improved query" | null
         }
 
         **Field Requirements:**
-        - is_sufficient: true if we can give a helpful answer (bias toward true)
-        - missing_aspects: Empty list if sufficient, otherwise ONLY critical gaps (max 2-3)
-        - reasoning: 1-2 sentence explanation emphasizing what we HAVE, not what we lack
+        - reasoning: 2-3 sentences explaining decision based on quality and iteration
+        - is_sufficient: true if can provide helpful answer; false only if critical gaps remain
+        - missing_aspects: Empty if sufficient; otherwise 1-3 specific critical gaps (not vague)
         - suggested_next_action: 
-        * "search_more" - ONLY if critical gap and high confidence refinement will help
-        * "respond" - Default choice, we have enough to be helpful
-        - refined_query: null if suggesting "respond", otherwise a simpler refined query
+        * "search_more" - Only if critical gap + confident refinement helps + iteration ≤ 3
+        * "respond" - Default for adequate information or iteration ≥ 3
+        - refined_query: null if responding; otherwise specific, focused query targeting the gap
 
-        **Important:** missing_aspects should be rare and specific. Don't list things like "more details" or "additional context" unless truly critical.
         </output_schema>
-
-        <critical_rules>
-        1. ALWAYS use the 'think' tool before providing your JSON response
-        2. **BE LENIENT** - Good enough is good enough, don't demand perfection
-        3. **BIAS TOWARD RESPONDING** - Default to is_sufficient: true when in doubt
-        4. After 2 iterations, strongly prefer responding over more searching
-        5. After 3 iterations, almost always respond regardless of gaps
-        6. Focus on what information WAS found, not what's missing
-        7. Consider: "Can we give a helpful response with this?" (usually yes)
-        8. Your final message MUST be ONLY the JSON object (no markdown blocks)
-        9. Missing aspects must be genuinely critical, not nice-to-have details
-        10. **When uncertain between search_more and respond: choose respond**
-        </critical_rules>
 
         <examples>
 
-        Example 1 - Accept Partial Information (Iteration 1):
+        Example 1 - Good Information After First Try (Iteration 1):
         User Query: "What is FastAPI and why use it?"
-        Retrieved: FastAPI is a modern Python web framework. Benefits include speed and automatic documentation.
+        Retrieved: FastAPI is a modern Python web framework for building APIs. Key benefits include high performance, automatic API documentation, type hints support, async capabilities, and easy learning curve.
         Iteration: 1
 
         [Uses think tool]:
-        "User asked what FastAPI is and why use it. We have definition and two benefits. Not exhaustive but enough to answer helpfully. Could search for more benefits but what we have is adequate."
+        "User asked what FastAPI is and why use it. Retrieved: clear definition + 5 specific benefits with details. This comprehensively answers both parts. Quality is good, no critical gaps."
 
         Response:
         {
+            "reasoning": "Retrieved comprehensive definition and multiple specific benefits with details. Both aspects of the query are well-addressed after first search.",
             "is_sufficient": true,
             "missing_aspects": [],
-            "reasoning": "Retrieved clear definition and key benefits. Sufficient to provide helpful answer about FastAPI's purpose and advantages.",
             "suggested_next_action": "respond",
             "refined_query": null
         }
 
         ---
 
-        Example 2 - Accept After One Try (Iteration 1):
-        User Query: "How to implement JWT authentication in FastAPI?"
-        Retrieved: Overview of JWT in FastAPI, mention of OAuth2PasswordBearer, security dependencies concept
+        Example 2 - Missing Critical Component (Iteration 1):
+        User Query: "How to implement JWT authentication in FastAPI with token refresh?"
+        Retrieved: General JWT concepts, FastAPI security utilities overview
         Iteration: 1
 
         [Uses think tool]:
-        "User wants JWT implementation. We have concepts and security utilities info. Not a complete tutorial but enough to guide them. They can work with this. Accept and respond."
+        "User wants implementation with token refresh. Got concepts but missing: actual implementation code, token refresh logic specifically. This is critical for the 'how to implement' part. Can refine to target implementation."
 
         Response:
         {
-            "is_sufficient": true,
-            "missing_aspects": [],
-            "reasoning": "Retrieved relevant JWT and FastAPI security concepts. Sufficient to provide helpful guidance on authentication implementation approach.",
-            "suggested_next_action": "respond",
-            "refined_query": null
+            "reasoning": "Retrieved conceptual information but user needs specific implementation details and token refresh logic. One more targeted search should find implementation examples.",
+            "is_sufficient": false,
+            "missing_aspects": [
+                "JWT token generation implementation code",
+                "Token refresh mechanism implementation"
+            ],
+            "suggested_next_action": "search_more",
+            "refined_query": "FastAPI JWT authentication code example token generation refresh implementation"
         }
 
         ---
 
-        Example 3 - Clear Strategy Switch Needed (Iteration 1):
+        Example 3 - Wrong Source Type (Iteration 1):
         User Query: "Latest AI developments December 2024"
-        Retrieved: RAG documents from 2023 about AI basics
+        Retrieved: RAG documents from 2023 about AI fundamentals
         Iteration: 1
         Current: RAG search
 
         [Uses think tool]:
-        "User wants December 2024 news. Got 2023 docs. This is clearly wrong source - need web for current events. Strategy switch justified because we have zero relevant information."
+        "User wants December 2024 news. Got 2023 old documents. Wrong source - need web for current events. Results completely outdated for time-sensitive query."
 
         Response:
         {
+            "reasoning": "Retrieved 2023 content for current events query. Need to switch to web search for recent December 2024 AI developments.",
             "is_sufficient": false,
             "missing_aspects": [
-                "Recent December 2024 AI developments"
+                "Current December 2024 AI developments and announcements"
             ],
-            "reasoning": "Retrieved old 2023 content for current events query. Need web search for recent developments.",
             "suggested_next_action": "search_more",
-            "refined_query": "AI breakthroughs December 2024"
+            "refined_query": "AI breakthroughs announcements December 2024"
         }
 
         ---
 
-        Example 4 - Stop After 2 Tries (Iteration 2):
+        Example 4 - Adequate After Two Tries (Iteration 2):
         User Query: "Best practices for microservices architecture"
-        Retrieved Iteration 1: General microservices concepts
-        Retrieved Iteration 2: Some patterns like API gateway, service mesh
+        Retrieved Iteration 1: General microservices concepts, definition
+        Retrieved Iteration 2: API gateway pattern, service discovery, circuit breakers, monitoring strategies
         Iteration: 2
 
         [Uses think tool]:
-        "Two searches done. Have general concepts and some patterns. Not comprehensive but definitely useful. After 2 tries, this is enough. User can work with this information."
+        "Two searches completed. Have definition + 4 concrete patterns/practices with explanations. Not exhaustive but covers main best practices. At iteration 2 with good content, this is sufficient."
 
         Response:
         {
+            "reasoning": "After two searches, retrieved microservices concepts and key patterns including API gateway, service discovery, circuit breakers, and monitoring. Sufficient to provide helpful guidance on best practices.",
             "is_sufficient": true,
             "missing_aspects": [],
-            "reasoning": "Retrieved microservices concepts and key patterns across two searches. Sufficient information to provide helpful guidance on best practices.",
             "suggested_next_action": "respond",
             "refined_query": null
         }
 
         </examples>
-        """)
 
-    ORCHESTRATOR_REFLECTION_HUMAN_PROMPT = textwrap.dedent("""\
-        <user_query>
-        {user_query}
-        </user_query>
+        <quality_indicators>
 
-        <current_iteration>
-        Iteration {current_iteration} of {max_iterations}
-        </current_iteration>
+        **Signs information IS sufficient:**
+        - Multiple specific details or examples provided
+        - Main question components are addressed
+        - Information is concrete, not just generic statements
+        - Can write 3+ substantive paragraphs from this
+        - Further searching would just add similar information
 
-        <search_history>
-        {search_history}
-        </search_history>
+        **Signs information is INSUFFICIENT:**
+        - Only found vague, generic statements
+        - User asked for specifics (data, steps, examples) and got none
+        - Multi-part question only partially answered
+        - Core question still unclear after reading retrieved info
+        - Critical context missing that makes info unusable
 
-        <accumulated_information>
-        {accumulated_context}
-        </accumulated_information>
+        </quality_indicators>
 
-        <latest_search_result>
-        Subgraph: {latest_subgraph}
-        Query Used: {latest_query}
-        Documents Retrieved: {docs_count}
-        Result Summary: {result_summary}
-        </latest_search_result>
-
-        <instructions>
-        Evaluate whether the accumulated information sufficiently answers the user's query.
-        
-        Use the 'think' tool to perform deep reflection on:
-        - What we've learned so far
-        - What's still missing
-        - Whether to continue searching or respond
-        - If continuing, how to refine the query
-        
-        Provide your final evaluation as a JSON object following the required schema.
-        </instructions>
+        Remember: Your goal is high-quality answers with efficient iteration. Good enough is the target, not exhaustive perfection. Balance user needs, information quality, and iteration count.
         """)
