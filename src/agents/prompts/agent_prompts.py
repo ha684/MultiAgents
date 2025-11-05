@@ -3440,6 +3440,36 @@ class PromptTemplates:
         4. If more searching needed, WHICH subgraphs should retry and with what refined query?
         </task>
 
+        <critical_domain_understanding>
+        
+        **Data Source Recognition:**
+        Before deciding next action, identify what type of data the user is asking for:
+        
+        - **PUBLIC DATA** (available on internet):
+        * Market prices, stock prices, commodity rates
+        * News, public company reports, weather
+        * General knowledge, tutorials, public documentation
+        * ✓ Can be found via: internet_search, public_api
+        
+        - **INTERNAL DATA** (company/organization specific):
+        * "our profit", "my company's revenue", "our internal metrics"
+        * "our customers", "our database", "our performance"
+        * Company-specific documents, policies, reports
+        * ✓ Can be found via: document_store, internal_database, company_api
+        * ✗ CANNOT be found via: internet_search (will never have this data!)
+        
+        - **MIXED QUERIES** (both public and internal):
+        * "Bitcoin price vs our company profit" 
+        * "Market trends and our competitive position"
+        * → Need DIFFERENT sources for each part
+        * → If one source fails, check if it was the RIGHT source
+        
+        **CRITICAL RULE:**
+        If a subgraph fails to find INTERNAL data using PUBLIC sources (or vice versa),
+        this is a STRATEGY ERROR, not a query refinement issue!
+        
+        </critical_domain_understanding>
+
         <multi_subgraph_principles>
         
         **Understanding Subgraph Status:**
@@ -3451,119 +3481,213 @@ class PromptTemplates:
         1. **NEVER include ERROR subgraphs in subgraphs_to_retry** - errors are permanent failures
         2. **Evaluate each successful subgraph independently** - does THIS subgraph need more info?
         3. **Consider COMBINED results** - maybe one successful subgraph is enough even if others failed
-        4. **Only retry subgraphs that CAN improve** - if successful but incomplete, can retry
-        5. **Empty subgraphs CAN be retried** - they worked, just need better query
-        
-        **Retry Decision Logic:**
-        - subgraph_A: SUCCESS with good info → Don't retry (sufficient)
-        - subgraph_B: SUCCESS but sparse info → CAN retry if critical gap exists
-        - subgraph_C: ERROR → NEVER retry (will fail again)
-        - subgraph_D: EMPTY → CAN retry with refined query
+        4. **Check data source alignment** - is the failed subgraph using the RIGHT source for its data type?
+        5. **Only retry subgraphs that CAN improve** - if successful but incomplete, can retry
+        6. **Empty subgraphs CAN be retried** - they worked, just need better query
+        7. **Analyze the USER'S QUESTION** - does it require information from MULTIPLE sources, or can ONE source answer it?
         
         </multi_subgraph_principles>
 
         <thinking_requirement>
         You MUST use the 'think' tool to:
+        - **FIRST**: Break down the user's question into components
+        * What is PUBLIC data? (market info, news, etc.)
+        * What is INTERNAL data? (our company, my data, etc.)
+        - **SECOND**: For each subgraph, check SOURCE ALIGNMENT
+        * Did internet_search try to find internal company data? (WRONG SOURCE)
+        * Did document_store try to find current market prices? (WRONG SOURCE)
         - Analyze results from EACH subgraph individually
-        - Evaluate if ERROR subgraphs' failures matter (maybe other subgraphs compensated)
-        - Check if SUCCESSFUL subgraphs together provide enough information
+        - Evaluate if ERROR subgraphs' failures matter
+        - **CRITICAL**: If user asks "A (public) AND B (internal)", and:
+        * A succeeded with public source ✓
+        * B failed because it used wrong source ✗
+        * → This is STRATEGY ERROR, not insufficient data!
         - Identify which SPECIFIC successful/empty subgraphs need more information
-        - Consider if additional searching of specific subgraphs would add value
-        - Plan refined queries for ONLY the subgraphs that need more info
+        - Determine if switch_strategy is needed for failed/empty subgraphs
         </thinking_requirement>
 
         <evaluation_criteria>
 
         ## Information is SUFFICIENT when:
         - At least ONE subgraph succeeded with relevant information
+        - Failed subgraphs used WRONG data source (strategy error, not data gap)
+        - **Example**: User asks "stock price AND our revenue"
+        * internet_search: ✓ SUCCESS (stock price)
+        * internet_search: ✗ ERROR (our revenue) ← WRONG SOURCE
+        * → SUFFICIENT for stock price, acknowledge revenue needs internal access
         - Core question has a reasonable answer from combined successful results
-        - Failed subgraphs' missing info is not critical (other subgraphs covered it)
         - We have enough from successful subgraphs to construct a helpful response
-        - **Default stance: If any subgraph succeeded well, probably sufficient**
+        - **Default stance: If any subgraph succeeded with appropriate source, probably sufficient**
 
         ## Information is INSUFFICIENT (only in clear cases):
         - ALL subgraphs either failed or returned empty results
         - Successful subgraphs have information but it's clearly incomplete
         - User asked for specific facts and NO subgraph found them
         - Information from successful subgraphs is off-topic
+        - **User question requires MULTIPLE pieces from SAME source type, but we only have partial**
 
         ## Stop and Respond when:
         - At least one subgraph succeeded with good information
-        - Failed subgraphs don't matter (successful ones covered the need)
+        - Failed subgraphs used wrong data source (can't fix with retry)
+        - **Partial answer is acceptable**: User asked for A AND B
+        * We have A from appropriate source
+        * B failed because wrong source was used
+        * → Respond with A and explain B limitation
         - Multiple iterations done and we have partial useful information
-        - Additional searching unlikely to improve answer quality significantly
+        - Additional searching unlikely to improve answer quality
         - **When uncertain: Choose to respond if ANY subgraph succeeded**
 
-        ## Switch Strategy when (RARE):
-        - ALL executed subgraphs have wrong strategy (not just one)
-        - Example: ALL used RAG for "latest news" → need web search
-        - Example: ALL used web for internal docs → need RAG
-        - **Only if fundamental strategy problem across the board**
+        ## Switch Strategy when:
+        - **Wrong source for data type**: Failed subgraph tried to get internal data from public source
+        - **Only switch if**: We can identify a BETTER source that wasn't tried
         - **Note: Can only switch_strategy on iteration 1**
+        - **Examples of valid switches**:
+        * Tried public_api for "our company metrics" → switch to internal_database
+        * Tried document_store for "current weather" → switch to live_api
+        * Tried internet_search for "our policy" → switch to document_store
+        - **NOT valid switches**:
+        * Tried internet_search for "our revenue" but no internal source available → RESPOND (not switch)
 
         ## Continue Searching (search_more) only when:
         - SPECIFIC successful/empty subgraphs need more detailed information
-        - Critical gap exists that SPECIFIC subgraphs can fill with better query
+        - Critical gap exists that SAME subgraph can fill with better query
         - At least one successful subgraph but it's clearly incomplete
         - **Must specify WHICH subgraphs to retry (not the failed ones)**
+        - **Same strategy, same source type, just need refined query**
 
         </evaluation_criteria>
 
         <subgraph_retry_examples>
         
-        **Scenario 1: Mixed Results**
+        **Example 1: Mixed Query - Partial Success Acceptable**
+        User Query: "Compare Tesla stock performance with Amazon's quarterly earnings"
         ```
-        web_search: ✓ SUCCESS (15 docs about topic X)
-        sql_query: ✗ ERROR (database connection failed)
-        vector_store: ✓ SUCCESS (5 docs about topic Y)
+        market_api: ✓ SUCCESS (Tesla stock data complete)
+        market_api: ○ EMPTY (Amazon earnings not in this API)
         ```
+        [Think]: User wants two public pieces: Tesla stock + Amazon earnings. 
+        First succeeded, second empty. Both public data, same source type valid.
+        Can retry market_api with refined query for Amazon.
+        
+        Decision: SEARCH_MORE
+        - market_api succeeded for Tesla, empty for Amazon
+        - Both are public data, same source is appropriate
+        - subgraphs_to_retry: ["market_api"]
+        - refined_query: "Amazon quarterly earnings financial results"
+        
+        **Example 2: Source Mismatch - Cannot Fix**
+        User Query: "What's the weather in Tokyo and how many vacation days do I have left?"
+        ```
+        weather_service: ✓ SUCCESS (Tokyo weather complete)
+        weather_service: ✗ ERROR (vacation days not found)
+        ```
+        [Think]: User wants weather (public) + vacation days (personal/internal).
+        Weather succeeded correctly. Vacation days failed because weather_service
+        cannot access personal HR data - this is SOURCE MISMATCH, not query issue.
+        
         Decision: RESPOND
-        - Two subgraphs succeeded with good info
-        - SQL error doesn't matter, web + vector covered the need
+        - weather_service succeeded for appropriate data (weather)
+        - Vacation days requires different source (hr_system/personal_data)
+        - Cannot answer vacation part without internal access
+        - subgraphs_to_retry: []
+        - Reasoning: "Provide weather info, explain vacation data requires internal system access"
+        
+        **Example 3: Wrong Tool Recognition - Switch Strategy**
+        User Query: "Show me real-time CPU usage on server cluster"
+        ```
+        log_analyzer: ○ EMPTY (no CPU data in historical logs)
+        report_generator: ✗ ERROR (not a reporting task)
+        ```
+        [Think]: User needs real-time metrics. Tried historical logs (wrong - not real-time)
+        and reports (wrong - not a report). Need monitoring_api for live metrics.
+        
+        Decision: SWITCH_STRATEGY (iteration 1 only)
+        - Both subgraphs wrong approach (historical/reports vs real-time)
+        - Need live monitoring tool
+        - refined_query: "switch to monitoring_api for real-time metrics"
         - subgraphs_to_retry: []
         
-        **Scenario 2: Incomplete Success**
+        **Example 4: Incomplete from Right Source - Refinement Needed**
+        User Query: "Find all research papers about neural architecture search published in 2023"
         ```
-        web_search: ✓ SUCCESS (3 docs, but very basic overview)
-        vector_store: ✗ ERROR (index not found)
+        academic_search: ✓ SUCCESS (found 5 papers, but seem incomplete)
+        patent_search: ✗ ERROR (patents not papers)
         ```
+        [Think]: User wants academic papers. Academic_search succeeded but only 5 results,
+        seems incomplete. Patent_search error is fine (wrong source type anyway).
+        Can improve academic_search with more specific query.
+        
         Decision: SEARCH_MORE
-        - web_search succeeded but information is sparse
-        - Can improve with refined query
-        - subgraphs_to_retry: ["web_search"]
-        - refined_query: "more specific query focusing on details"
+        - academic_search correct source, but incomplete results
+        - Can refine query for more comprehensive results
+        - subgraphs_to_retry: ["academic_search"]
+        - refined_query: "neural architecture search NAS papers 2023 comprehensive"
         
-        **Scenario 3: All Failed or Empty**
+        **Example 5: Both Succeeded Well**
+        User Query: "Latest developments in renewable energy and battery technology"
         ```
-        web_search: ✗ ERROR (rate limit exceeded)
-        sql_query: ✗ ERROR (invalid query)
-        vector_store: ○ EMPTY (no matching documents)
+        news_aggregator: ✓ SUCCESS (15 renewable energy articles)
+        tech_journal: ✓ SUCCESS (12 battery technology papers)
         ```
-        Decision: SEARCH_MORE (if iteration 1) or RESPOND (if later)
-        - vector_store didn't error, just found nothing
-        - Can try refined query on vector_store
-        - subgraphs_to_retry: ["vector_store"]
-        - Don't retry web_search or sql_query (errors)
+        [Think]: Both subgraphs succeeded with good coverage. News has renewable energy,
+        journals have battery tech. Together comprehensive. No gaps.
         
-        **Scenario 4: Perfect Success**
-        ```
-        web_search: ✓ SUCCESS (25 docs, comprehensive coverage)
-        vector_store: ✓ SUCCESS (10 docs, detailed info)
-        ```
         Decision: RESPOND
-        - Both succeeded with good results
+        - Both subgraphs successful with appropriate sources
+        - Combined results comprehensive
         - subgraphs_to_retry: []
         
-        **Scenario 5: One Good, One Needs More**
+        **Example 6: Late Iteration - Accept What We Have**
+        User Query: "Analyze competitor pricing and our production costs"
+        Iteration 3/4:
         ```
-        web_search: ✓ SUCCESS (good general info)
-        deep_research: ✓ SUCCESS (started research, needs more depth)
+        market_research: ✓ SUCCESS (competitor pricing data)
+        market_research: ✗ ERROR (production costs not public)
         ```
-        Decision: SEARCH_MORE
-        - web_search is good, don't retry
-        - deep_research needs continuation
-        - subgraphs_to_retry: ["deep_research"]
+        [Think]: Iteration 3. Market research got competitor pricing (public data, correct).
+        Failed on production costs - these are INTERNAL data, market_research is wrong source.
+        After 3 iterations, accept we can't get internal cost data from public source.
         
+        Decision: RESPOND
+        - market_research succeeded for public data (competitor pricing)
+        - Production costs need internal source, not available
+        - Late iteration, accept partial answer
+        - subgraphs_to_retry: []
+
+        **Example 7: All Empty But Can Refine**
+        User Query: "Find documentation about GraphQL API endpoints"
+        ```
+        code_search: ○ EMPTY (searched but found nothing)
+        wiki_search: ○ EMPTY (searched but found nothing)
+        ```
+        [Think]: Both executed successfully but found nothing. This might be query issue,
+        not source issue. Both sources appropriate for documentation. Try more specific query.
+        
+        Decision: SEARCH_MORE
+        - Both subgraphs correct source type (code + docs)
+        - Empty results suggest query too vague
+        - Can retry with more specific terms
+        - subgraphs_to_retry: ["code_search", "wiki_search"]
+        - refined_query: "GraphQL API endpoint documentation schema queries"
+
+        **Example 8: Clear Source-Data Mismatch**
+        User Query: "What's the current Bitcoin price and what's my account balance?"
+        ```
+        crypto_api: ✓ SUCCESS (Bitcoin price USD 45,230)
+        crypto_api: ✗ ERROR (account balance not found)
+        ```
+        [Think]: User wants Bitcoin price (public market data) + account balance (personal).
+        Crypto API correctly got Bitcoin price. Account balance failed because crypto_api
+        cannot access personal account data - needs authentication to user's account.
+        This is SOURCE MISMATCH - public API cannot access private account.
+        
+        Decision: RESPOND
+        - crypto_api succeeded for public data (Bitcoin price)
+        - Account balance requires authenticated personal account access
+        - Cannot obtain without user credentials/internal system
+        - subgraphs_to_retry: []
+        - Reasoning: "Provide Bitcoin price, explain account balance requires authenticated access"
+
         </subgraph_retry_examples>
 
         <output_schema>
@@ -3575,135 +3699,38 @@ class PromptTemplates:
                 "Critical gap 1 (only if truly critical)",
                 "Critical gap 2 (only if truly critical)"
             ],
-            "reasoning": "Clear explanation evaluating EACH subgraph and the combined results",
+            "reasoning": "Clear explanation evaluating EACH subgraph and whether combined results are adequate. MUST explain source-data alignment.",
             "suggested_next_action": "search_more" | "switch_strategy" | "respond",
-            "refined_query": "Refined query for the subgraphs being retried" | null,
+            "refined_query": "Refined query for retry OR switch strategy instruction" | null,
             "subgraphs_to_retry": ["subgraph1", "subgraph2"] | []
         }
 
         **Field Requirements:**
         - is_sufficient: true if combined successful results are enough (bias toward true)
-        - missing_aspects: Empty if sufficient, otherwise ONLY critical gaps from specific subgraphs
-        - reasoning: Mention each subgraph status and whether combined results are adequate
+        * TRUE if: successful subgraph got data from appropriate source
+        * TRUE if: failed subgraph used wrong source (source mismatch, not data gap)
+        * FALSE if: all failed or successful subgraphs clearly incomplete
+        - missing_aspects: Empty if sufficient, otherwise ONLY critical gaps
+        * DON'T list gaps from source mismatches (e.g., "our internal data" when only public search available)
+        * DO list gaps from incomplete results on appropriate sources
+        - reasoning: 
+        * Mention each subgraph status
+        * Explain source-data alignment (public vs internal, real-time vs historical)
+        * State if failed subgraphs used wrong source
+        * Conclude if combined results adequate
         - suggested_next_action: 
-        * "respond" - Default choice if any subgraph succeeded reasonably well
-        * "search_more" - ONLY if specific successful/empty subgraphs need refinement
-        * "switch_strategy" - RARE, only if ALL subgraphs have fundamental strategy mismatch (iteration 1 only)
+        * "respond" - DEFAULT if any subgraph succeeded with appropriate source
+        * "respond" - If failed subgraphs have source mismatch (can't be fixed)
+        * "search_more" - ONLY if same subgraph can improve with refined query
+        * "switch_strategy" - If better source available and iteration 1
         - refined_query: 
-        * null if suggesting "respond" or "switch_strategy"
-        * Refined query string if "search_more" (will be used for ALL subgraphs in retry list)
+        * null if suggesting "respond"
+        * Refined query if "search_more"
+        * Strategy switch instruction if "switch_strategy"
         - subgraphs_to_retry: 
-        * Empty list [] if suggesting "respond" or "switch_strategy"
-        * List of ONLY successful or empty subgraphs that need more info (NEVER error subgraphs)
-        * Examples: ["web_search"], ["vector_store", "web_search"], []
+        * Empty [] if "respond" or "switch_strategy"
+        * List of successful/empty subgraphs that need more info (NEVER error subgraphs)
         </output_schema>
-
-        <examples>
-
-        Example 1: Mixed success, good enough
-        Subgraphs:
-        - web_search: ✓ SUCCESS (12 docs about FastAPI)
-        - sql_query: ✗ ERROR (no database configured)
-        
-        [Uses think tool]:
-        "web_search succeeded with good FastAPI info. sql_query errored but that's fine - web results are sufficient. Don't need sql for this query anyway. Combined results adequate."
-
-        Response:
-        {
-            "is_sufficient": true,
-            "missing_aspects": [],
-            "reasoning": "web_search provided comprehensive FastAPI information. sql_query error is not critical as web results sufficient for this question.",
-            "suggested_next_action": "respond",
-            "refined_query": null,
-            "subgraphs_to_retry": []
-        }
-
-        ---
-
-        Example 2: One success needs more detail
-        Subgraphs:
-        - vector_store: ✓ SUCCESS (3 docs, high-level overview only)
-        - web_search: ✗ ERROR (network timeout)
-        
-        [Uses think tool]:
-        "vector_store succeeded but only got high-level info. User needs implementation details. web_search errored so can't retry it. Should retry vector_store with more specific query to get detailed docs."
-
-        Response:
-        {
-            "is_sufficient": false,
-            "missing_aspects": [
-                "Detailed implementation examples and code snippets"
-            ],
-            "reasoning": "vector_store succeeded but returned only overview docs. Need more specific search for implementation details. web_search error cannot be retried.",
-            "suggested_next_action": "search_more",
-            "refined_query": "detailed implementation examples and code for the specific functionality",
-            "subgraphs_to_retry": ["vector_store"]
-        }
-
-        ---
-
-        Example 3: All empty/failed, but can retry one
-        Subgraphs:
-        - web_search: ✗ ERROR (API key invalid)
-        - vector_store: ○ EMPTY (no documents matched)
-        - sql_query: ✗ ERROR (table not found)
-        
-        [Uses think tool]:
-        "Two errors, one empty. web_search and sql_query can't be retried (errors). vector_store ran successfully but found nothing - can retry with broader query. Worth one retry."
-
-        Response:
-        {
-            "is_sufficient": false,
-            "missing_aspects": [
-                "Any relevant information about the topic"
-            ],
-            "reasoning": "web_search and sql_query errored (cannot retry). vector_store executed but found nothing - can retry with broader search terms.",
-            "suggested_next_action": "search_more",
-            "refined_query": "broader search terms for the topic",
-            "subgraphs_to_retry": ["vector_store"]
-        }
-
-        ---
-
-        Example 4: Multiple successes, both good
-        Subgraphs:
-        - web_search: ✓ SUCCESS (18 docs)
-        - vector_store: ✓ SUCCESS (12 docs)
-        
-        [Uses think tool]:
-        "Both succeeded. web_search got recent info, vector_store got internal docs. Together they provide comprehensive coverage. No need for more searching."
-
-        Response:
-        {
-            "is_sufficient": true,
-            "missing_aspects": [],
-            "reasoning": "Both web_search and vector_store succeeded with good results. Combined information provides comprehensive answer coverage.",
-            "suggested_next_action": "respond",
-            "refined_query": null,
-            "subgraphs_to_retry": []
-        }
-
-        ---
-
-        Example 5: Iteration 3, accept what we have
-        Subgraphs (iteration 3):
-        - web_search: ✓ SUCCESS (some relevant docs)
-        - deep_research: ✗ ERROR (timeout)
-        
-        [Uses think tool]:
-        "Iteration 3 of 4. web_search has some info. deep_research errored. After 3 tries, what we have from web_search is enough. Time to respond."
-
-        Response:
-        {
-            "is_sufficient": true,
-            "missing_aspects": [],
-            "reasoning": "At iteration 3, web_search has provided usable information. deep_research error is acceptable at this stage. Sufficient to provide helpful answer.",
-            "suggested_next_action": "respond",
-            "refined_query": null,
-            "subgraphs_to_retry": []
-        }
-
-        </examples>
         """)
 
     ORCHESTRATOR_REFLECTION_HUMAN_PROMPT = textwrap.dedent("""\
