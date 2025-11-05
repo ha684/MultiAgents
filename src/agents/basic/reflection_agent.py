@@ -7,7 +7,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.basic.base import BaseAgent
 from src.domain.entities.state import ReflectionResult, OrchestratorState
-from src.agents.shared.prompts import PromptTemplates
+from src.agents.prompts.agent_prompts import PromptTemplates
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.core.config.llm_config import SupportedLLMProviders
 from src.utils import parse_response

@@ -10,7 +10,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from src.agents.basic.base import BaseAgent
 from src.domain.entities.state import OrchestratorState
 from src.domain.schemas.graph import RouteDecision
-from src.agents.shared.prompts import PromptTemplates
+from src.agents.prompts.agent_prompts import PromptTemplates
 from src.agents.shared.registry import SubgraphRegistry
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.core.config.llm_config import SupportedLLMProviders
