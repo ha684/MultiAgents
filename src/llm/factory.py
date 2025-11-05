@@ -1,6 +1,10 @@
 # src/llm/factory.py
+from lagom import Container
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_openai import ChatOpenAI
+from parlant.core.loggers import Logger
+from parlant.core.nlp.service import NLPService
+from parlant.sdk import SDKError
 from pydantic import SecretStr
 
 from src.core.config.llm_config import (
@@ -8,6 +12,7 @@ from src.core.config.llm_config import (
     LLM_MODELS_CONFIG,
     SupportedLLMProviders,
 )
+from src.llm.custom_openai_service import CustomOpenAIService
 from src.utils.logger_conf import logger
 
 
@@ -30,3 +35,11 @@ def get_llm(provider: SupportedLLMProviders) -> BaseChatModel:
         base_url=default_configs.base_url,
         temperature=default_configs.temperature,
     )
+
+
+def openai(container: Container) -> NLPService:
+    """Creates an OpenAI NLPService instance using the provided container."""
+    if error := CustomOpenAIService.verify_environment():
+        raise SDKError(error)
+
+    return CustomOpenAIService(container[Logger])

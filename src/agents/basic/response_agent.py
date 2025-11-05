@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.agents.basic.base import BaseAgent
-from src.agents.shared.prompts import PromptTemplates
+from src.agents.prompts.agent_prompts import PromptTemplates
 from src.core.config.llm_config import SupportedLLMProviders
 from src.domain.entities.graph import ResponseMode
 from src.utils.decorators import singleton

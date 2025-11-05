@@ -3570,10 +3570,11 @@ class PromptTemplates:
         Return a JSON object with this structure:
 
         {
+            "reasoning": "Clear explanation of evaluation",
             "is_sufficient": boolean,
             "missing_aspects": [
-                "Critical gap 1 (only if truly critical)",
-                "Critical gap 2 (only if truly critical)"
+                "Specific critical gap 1",
+                "Specific critical gap 2"
             ],
             "reasoning": "Clear explanation evaluating EACH subgraph and the combined results",
             "suggested_next_action": "search_more" | "switch_strategy" | "respond",
@@ -3582,9 +3583,15 @@ class PromptTemplates:
         }
 
         **Field Requirements:**
+<<<<<<< HEAD:src/agents/shared/prompts.py
         - is_sufficient: true if combined successful results are enough (bias toward true)
         - missing_aspects: Empty if sufficient, otherwise ONLY critical gaps from specific subgraphs
         - reasoning: Mention each subgraph status and whether combined results are adequate
+=======
+        - reasoning: 2-3 sentences explaining decision based on quality and iteration
+        - is_sufficient: true if can provide helpful answer; false only if critical gaps remain
+        - missing_aspects: Empty if sufficient; otherwise 1-3 specific critical gaps (not vague)
+>>>>>>> f237284465db9d7f2fbd3e099709d6cb198eab3a:src/agents/prompts/agent_prompts.py
         - suggested_next_action: 
         * "respond" - Default choice if any subgraph succeeded reasonably well
         * "search_more" - ONLY if specific successful/empty subgraphs need refinement
@@ -3610,9 +3617,13 @@ class PromptTemplates:
 
         Response:
         {
+            "reasoning": "Retrieved comprehensive definition and multiple specific benefits with details. Both aspects of the query are well-addressed after first search.",
             "is_sufficient": true,
             "missing_aspects": [],
+<<<<<<< HEAD:src/agents/shared/prompts.py
             "reasoning": "web_search provided comprehensive FastAPI information. sql_query error is not critical as web results sufficient for this question.",
+=======
+>>>>>>> f237284465db9d7f2fbd3e099709d6cb198eab3a:src/agents/prompts/agent_prompts.py
             "suggested_next_action": "respond",
             "refined_query": null,
             "subgraphs_to_retry": []
@@ -3634,7 +3645,33 @@ class PromptTemplates:
             "missing_aspects": [
                 "Detailed implementation examples and code snippets"
             ],
+<<<<<<< HEAD:src/agents/shared/prompts.py
             "reasoning": "vector_store succeeded but returned only overview docs. Need more specific search for implementation details. web_search error cannot be retried.",
+=======
+            "reasoning": "Retrieved old 2023 content when current events needed. Strategy mismatch detected.",
+            "suggested_next_action": "switch_strategy",
+            "refined_query": null
+        }
+
+        ---
+
+        Example 3:
+        User Query: "How to implement JWT authentication in FastAPI?"
+        Retrieved: Overview of JWT in FastAPI, mention of OAuth2PasswordBearer, but no implementation details
+        Current Strategy: RAG
+
+        [Uses think tool]:
+        "User wants JWT implementation. We have concepts but missing implementation details. Strategy (RAG) is correct - this is internal knowledge question. Just need better query to get implementation examples. Not switching strategy, refining query."
+
+        Response:
+        {
+            "reasoning": "Retrieved 2023 content for current events query. Need to switch to web search for recent December 2024 AI developments.",
+            "is_sufficient": false,
+            "missing_aspects": [
+                "Concrete JWT implementation code example"
+            ],
+            "reasoning": "Retrieved concepts but missing implementation details. Strategy is correct, need more specific query.",
+>>>>>>> f237284465db9d7f2fbd3e099709d6cb198eab3a:src/agents/prompts/agent_prompts.py
             "suggested_next_action": "search_more",
             "refined_query": "detailed implementation examples and code for the specific functionality",
             "subgraphs_to_retry": ["vector_store"]
@@ -3649,7 +3686,31 @@ class PromptTemplates:
         - sql_query: ✗ ERROR (table not found)
         
         [Uses think tool]:
+<<<<<<< HEAD:src/agents/shared/prompts.py
         "Two errors, one empty. web_search and sql_query can't be retried (errors). vector_store ran successfully but found nothing - can retry with broader query. Worth one retry."
+=======
+        "Two searches done. Have general concepts and some patterns. Not comprehensive but definitely useful. After 2 tries, this is enough. Strategy was right both times. User can work with this information."
+
+        Response:
+        {
+            "reasoning": "After two searches, retrieved microservices concepts and key patterns including API gateway, service discovery, circuit breakers, and monitoring. Sufficient to provide helpful guidance on best practices.",
+            "is_sufficient": true,
+            "missing_aspects": [],
+            "reasoning": "Retrieved microservices concepts and key patterns across two searches. Sufficient information to provide helpful guidance on best practices.",
+            "suggested_next_action": "respond",
+            "refined_query": null
+        }
+
+        ---
+
+        Example 5:
+        User Query: "Show me total sales by product category for Q4 2024"
+        Retrieved: Documents discussing sales strategies and product categories
+        Current Strategy: RAG
+
+        [Uses think tool]:
+        "User wants structured sales data with aggregation. RAG returned narrative documents. This is STRATEGY problem - need SQL to query structured sales database, not document search. Clear switch needed."
+>>>>>>> f237284465db9d7f2fbd3e099709d6cb198eab3a:src/agents/prompts/agent_prompts.py
 
         Response:
         {
