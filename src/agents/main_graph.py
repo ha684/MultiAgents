@@ -145,6 +145,9 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         subgraph_results: Dict[str, Dict[str, Any]] = state.get("subgraph_results", {})
         failed_subgraphs: Set[str] = state.get("failed_subgraphs", set())
 
+        seen_urls: Set[str] = set(state.get("seen_urls", set()))
+        seen_doc_ids: Set[str] = set(state.get("seen_doc_ids", set()))
+
         if reflection and reflection.get("refined_query") and current_iteration > 1:
             query_to_use = reflection["refined_query"]
 
@@ -201,6 +204,11 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
 
             execution_state = dict(state)
             execution_state["contextualized_query"] = query_to_use
+            execution_state["seen_urls"] = seen_urls
+            execution_state["seen_doc_ids"] = seen_doc_ids
+            execution_state["duplicate_skip_ratio"] = state.get(
+                "duplicate_skip_ratio", 0.7
+            )
 
             result_obj: SubgraphOutput = await executor(execution_state)
             main_context = result_obj.main_context or ""
@@ -227,25 +235,35 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             }
 
         results = await asyncio.gather(*[run_one(r) for r in routes_to_execute])
+
+        def _doc_key(d: Any) -> Optional[str]:
+            meta = getattr(d, "metadata", {}) or {}
+            return (
+                meta.get("document_id")
+                or meta.get("original_filename")
+                or (
+                    getattr(d, "page_content", None)
+                    if hasattr(d, "page_content")
+                    else (d.get("page_content") if isinstance(d, dict) else None)
+                )
+            )
+
         all_cited_docs = (state.get("cited_documents") or []).copy()
+        existing_keys = {k for k in (_doc_key(doc) for doc in all_cited_docs) if k}
 
-        def _content_of(d: Any) -> Optional[str]:
-            if hasattr(d, "page_content"):
-                return getattr(d, "page_content", None)
-            if isinstance(d, dict):
-                return d.get("page_content")
-            return None
-
-        existing = {c for c in (_content_of(d) for d in all_cited_docs) if c}
         accumulated_context = state.get("accumulated_context", "")
         search_iterations = state.get("search_iterations", [])
         response_metadata_map: Dict[str, Any] = state.get("response_metadata", {}) or {}
+
+        any_early_terminate = False
+        highest_dup_ratio = 0.0
 
         for route_name, data in results:
             status = data["status"]
             main_context = data["main_context"]
             cited_documents = data["cited_documents"]
             subgraph_error = data["subgraph_error"]
+            resp_meta = data["response_metadata"] or {}
 
             subgraph_results[route_name] = {
                 "status": status,
@@ -253,14 +271,24 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "error": subgraph_error,
                 "iteration": current_iteration,
             }
+            response_metadata_map[route_name] = resp_meta
 
-            response_metadata_map[route_name] = data["response_metadata"]
+            new_urls = set(resp_meta.get("new_urls", []))
+            new_doc_ids = set(resp_meta.get("new_doc_ids", []))
+            seen_urls |= new_urls
+            seen_doc_ids |= new_doc_ids
+
+            if resp_meta.get("early_terminate"):
+                any_early_terminate = True
+                highest_dup_ratio = max(
+                    highest_dup_ratio, float(resp_meta.get("duplicate_ratio", 0.0))
+                )
 
             for d in cited_documents:
-                c = _content_of(d)
-                if c and c not in existing:
+                k = _doc_key(d)
+                if k and k not in existing_keys:
                     all_cited_docs.append(d)
-                    existing.add(c)
+                    existing_keys.add(k)
 
             search_iterations.append(
                 {
@@ -269,6 +297,8 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                     "query": query_to_use,
                     "status": status,
                     "timestamp": datetime.now().isoformat(),
+                    "duplicate_ratio": resp_meta.get("duplicate_ratio"),
+                    "early_terminate": resp_meta.get("early_terminate", False),
                 }
             )
 
@@ -309,6 +339,8 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "response_metadata": response_metadata_map,
                 "subgraph_results": subgraph_results,
                 "failed_subgraphs": failed_subgraphs,
+                "seen_urls": seen_urls,
+                "seen_doc_ids": seen_doc_ids,
             }
 
         return {
@@ -325,11 +357,26 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             "pending_routes": [],
             "subgraph_results": subgraph_results,
             "failed_subgraphs": failed_subgraphs,
+            "seen_urls": seen_urls,
+            "seen_doc_ids": seen_doc_ids,
+            "duplication_high": any_early_terminate,
         }
 
     async def reflection_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """Reflect on current aggregated results to decide the next step."""
         routes = state.get("route_decisions", [])
+
+        if state.get("duplication_high"):
+            return {
+                "reflection_result": {
+                    "is_sufficient": True,
+                    "missing_aspects": [],
+                    "reasoning": "High duplication detected, responding without further search.",
+                    "suggested_next_action": "respond",
+                    "refined_query": None,
+                    "subgraphs_to_retry": [],
+                }
+            }
 
         if routes and all(r in ["direct_response"] for r in routes):
             return {

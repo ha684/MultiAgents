@@ -44,6 +44,9 @@ async def _run_simple_search(
         conversation=conv_update["conversation"],
         original_query=state["conversation"][-1].content,
         contextualized_query=state["contextualized_query"],
+        seen_urls=set(state.get("seen_urls", set())),
+        seen_doc_ids=set(state.get("seen_doc_ids", set())),
+        duplicate_skip_ratio=state.get("duplicate_skip_ratio", 0.8),
     )
     result = await simple_search_graph.ainvoke(state=simple_search_state)
     return SubgraphOutput(

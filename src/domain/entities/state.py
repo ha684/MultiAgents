@@ -105,6 +105,11 @@ class OrchestratorState(TypedDict):
     subgraph_results: Dict[str, Dict[str, Any]]
     failed_subgraphs: Set[str]
 
+    seen_urls: Set[str]
+    seen_doc_ids: Set[str]
+    duplicate_skip_ratio: float
+    duplication_high: bool
+
 
 class SimpleSearchState(TypedDict):
     """State for simple search operations"""
@@ -113,6 +118,11 @@ class SimpleSearchState(TypedDict):
     contextualized_query: str
     cited_documents: List[Document]
     response_metadata: Dict[str, Any]
+
+    seen_urls: Set[str]
+    seen_doc_ids: Set[str]
+    duplicate_skip_ratio: float
+    early_terminate: bool
 
 
 class ResearchState(TypedDict):
