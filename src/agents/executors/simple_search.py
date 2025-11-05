@@ -46,7 +46,6 @@ async def _run_simple_search(
         contextualized_query=state["contextualized_query"],
     )
     result = await simple_search_graph.ainvoke(state=simple_search_state)
-
     return SubgraphOutput(
         main_context="",
         cited_documents=result.state.get("cited_documents", []),

@@ -724,7 +724,6 @@ class ResponseAgent(BaseAgent):
             error_message=error_message,
             pending_route=pending_route,
         )
-
         response = await self.simple_llm_call(messages)
         return response
 

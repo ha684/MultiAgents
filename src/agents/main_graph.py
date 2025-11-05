@@ -1,6 +1,6 @@
 # src/agents/main_graph.py
 from datetime import datetime
-from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Dict, List, Optional, Set, Tuple
 import asyncio
 
 from langchain_core.messages import BaseMessage
@@ -100,12 +100,17 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             resolved.append(r if cfg or r == "direct_response" else "direct_response")
         routes = [r for r in resolved if r]
         routes = list(dict.fromkeys(routes))
-        if not routes:
-            routes = ["direct_response"]
+
+        failed = state.get("failed_subgraphs", set())
+        routes = [r for r in routes if r not in failed] or ["direct_response"]
+
         return {"route_decisions": routes}
 
     def _determine_response_mode_from_result(
-        self, state: OrchestratorState, routes: List[str], any_success: bool
+        self,
+        state: OrchestratorState,
+        routes: List[str],
+        subgraph_results: Dict[str, Dict[str, Any]],
     ) -> str:
         """Select response mode from the set of routes and whether any subgraph succeeded."""
         execution_history = state.get("execution_history", [])
@@ -115,7 +120,10 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             if len(state["conversation"]) > 2:
                 return ResponseMode.FOLLOWUP
             return ResponseMode.CHITCHAT
-        if not any_success and len(execution_history) >= self.MAX_RETRY_ATTEMPTS:
+        if (
+            any(r["status"] == "error" for r in subgraph_results.values())
+            and len(execution_history) >= self.MAX_RETRY_ATTEMPTS
+        ):
             return ResponseMode.NO_VIABLE_OPTION
         if all(r == "sql_query" for r in routes):
             return ResponseMode.SQL_RESPONSE
@@ -133,17 +141,23 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         current_iteration = state.get("current_iteration", 1)
         reflection = state.get("reflection_result")
         query_to_use = state.get("contextualized_query", "")
+
+        subgraph_results: Dict[str, Dict[str, Any]] = state.get("subgraph_results", {})
+        failed_subgraphs: Set[str] = state.get("failed_subgraphs", set())
+
         if reflection and reflection.get("refined_query") and current_iteration > 1:
             query_to_use = reflection["refined_query"]
+
         if routes == ["direct_response"]:
             response_mode = self._determine_response_mode_from_result(
-                state, routes, any_success=False
+                state, routes, subgraph_results
             )
             return {
                 "subgraph_result": "direct_response",
                 "response_mode": response_mode,
                 "current_iteration": current_iteration,
             }
+
         policy = state.get("subgraph_policy", {})
         active_map = SubgraphRegistry.resolve_active(
             allow=policy.get("allow"),
@@ -151,8 +165,11 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             extras=policy.get("extras"),
         )
         execution_history = state.get("execution_history", [])
-        if len(execution_history) >= self.MAX_RETRY_ATTEMPTS:
-            error_msg = "All retrieval options exhausted after multiple attempts, inform the user."
+
+        routes_to_execute = [r for r in routes if r not in failed_subgraphs]
+
+        if not routes_to_execute:
+            error_msg = "All subgraphs have failed, no viable options remaining."
             return {
                 "subgraph_result": "exhausted",
                 "subgraph_error": error_msg,
@@ -160,6 +177,8 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "execution_history": execution_history,
                 "route_decisions": ["direct_response"],
                 "current_iteration": current_iteration,
+                "subgraph_results": subgraph_results,
+                "failed_subgraphs": failed_subgraphs,
             }
 
         async def run_one(route_name: str) -> Tuple[str, Dict[str, Any]]:
@@ -172,30 +191,42 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             )
             if not executor or not callable(executor):
                 return route_name, {
+                    "status": "error",
                     "main_context": "",
                     "cited_documents": [],
                     "response_metadata": None,
                     "subgraph_error": f"Executor '{executor}' not found.",
                     "docs_retrieved": 0,
                 }
+
             execution_state = dict(state)
             execution_state["contextualized_query"] = query_to_use
+
             result_obj: SubgraphOutput = await executor(execution_state)
             main_context = result_obj.main_context or ""
             cited_documents = result_obj.cited_documents or []
             response_metadata = result_obj.response_metadata
-            subgraph_error = result_obj.subgraph_error
+            subgraph_error = result_obj.subgraph_error or ""
+
             if not main_context and cited_documents:
                 main_context = format_context_for_response(cited_documents)
+
+            if subgraph_error:
+                status = "error"
+            elif main_context or cited_documents:
+                status = "success"
+            else:
+                status = "empty"
+
             return route_name, {
+                "status": status,
                 "main_context": main_context or "",
                 "cited_documents": cited_documents,
                 "response_metadata": response_metadata,
-                "subgraph_error": subgraph_error,
-                "docs_retrieved": len(cited_documents),
+                "subgraph_error": subgraph_error if subgraph_error else None,
             }
 
-        results = await asyncio.gather(*[run_one(r) for r in routes])
+        results = await asyncio.gather(*[run_one(r) for r in routes_to_execute])
         all_cited_docs = (state.get("cited_documents") or []).copy()
 
         def _content_of(d: Any) -> Optional[str]:
@@ -209,77 +240,63 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         accumulated_context = state.get("accumulated_context", "")
         search_iterations = state.get("search_iterations", [])
         response_metadata_map: Dict[str, Any] = state.get("response_metadata", {}) or {}
-        pending_fallbacks: List[str] = []
-        any_success = False
+
         for route_name, data in results:
+            status = data["status"]
             main_context = data["main_context"]
             cited_documents = data["cited_documents"]
             subgraph_error = data["subgraph_error"]
+
+            subgraph_results[route_name] = {
+                "status": status,
+                "main_context": main_context,
+                "error": subgraph_error,
+                "iteration": current_iteration,
+            }
+
             response_metadata_map[route_name] = data["response_metadata"]
+
             for d in cited_documents:
                 c = _content_of(d)
                 if c and c not in existing:
                     all_cited_docs.append(d)
                     existing.add(c)
-            docs_retrieved = data["docs_retrieved"]
+
             search_iterations.append(
                 {
                     "iteration": current_iteration,
                     "subgraph": route_name,
                     "query": query_to_use,
-                    "documents_count": docs_retrieved,
+                    "status": status,
                     "timestamp": datetime.now().isoformat(),
                 }
             )
-            if main_context:
+
+            if status == "success" and main_context:
                 if accumulated_context:
                     accumulated_context += (
                         f"\n\n--- Search {current_iteration} ({route_name}) ---\n"
                     )
                 accumulated_context += main_context
-                any_success = True
-            failure_result_condition = (
-                subgraph_error and not main_context and docs_retrieved == 0
-            )
-            if failure_result_condition:
+
+            if status == "error":
+                failed_subgraphs.add(route_name)
                 execution_history.append(
-                    {"subgraph": route_name, "error": subgraph_error}
+                    {
+                        "subgraph": route_name,
+                        "error": subgraph_error,
+                        "iteration": current_iteration,
+                    }
                 )
-                subgraph_config = SubgraphRegistry.get_subgraph_active(
-                    route_name, active_map
-                )
-                if (
-                    subgraph_config
-                    and subgraph_config.fallback_chain
-                    and len(execution_history) < self.MAX_RETRY_ATTEMPTS
-                ):
-                    tried_routes = {h["subgraph"] for h in execution_history}
-                    available_fallbacks = [
-                        fb
-                        for fb in subgraph_config.fallback_chain
-                        if fb not in tried_routes
-                    ]
-                    if available_fallbacks:
-                        pending_fallbacks.append(available_fallbacks[0])
+
         response_mode = self._determine_response_mode_from_result(
-            state, routes, any_success
+            state, routes, subgraph_results
         )
-        if pending_fallbacks:
-            return {
-                "subgraph_result": "retry_fallback",
-                "execution_history": execution_history,
-                "route_decisions": routes,
-                "pending_routes": pending_fallbacks,
-                "main_context": None,
-                "cited_documents": all_cited_docs,
-                "subgraph_error": None,
-                "search_iterations": search_iterations,
-                "accumulated_context": accumulated_context,
-                "current_iteration": current_iteration + 1,
-                "response_metadata": response_metadata_map,
-                "response_mode": response_mode,
-            }
-        if not any_success and routes != ["direct_response"]:
+
+        had_error = any(data["status"] == "error" for _, data in results)
+        had_success = any(data["status"] == "success" for _, data in results)
+
+        if had_error and not had_success and routes != ["direct_response"]:
             return {
                 "subgraph_result": "retry_router",
                 "execution_history": execution_history,
@@ -290,7 +307,10 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "current_iteration": current_iteration + 1,
                 "subgraph_error": "No successful results; retrying router.",
                 "response_metadata": response_metadata_map,
+                "subgraph_results": subgraph_results,
+                "failed_subgraphs": failed_subgraphs,
             }
+
         return {
             "main_context": accumulated_context,
             "cited_documents": all_cited_docs,
@@ -303,6 +323,8 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             "accumulated_context": accumulated_context,
             "current_iteration": current_iteration + 1,
             "pending_routes": [],
+            "subgraph_results": subgraph_results,
+            "failed_subgraphs": failed_subgraphs,
         }
 
     async def reflection_node(self, state: OrchestratorState) -> Dict[str, Any]:
@@ -317,8 +339,10 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                     "reasoning": f"No reflection needed for {', '.join(routes)}",
                     "suggested_next_action": "respond",
                     "refined_query": None,
+                    "subgraphs_to_retry": [],
                 }
             }
+
         reflection_result = await reflection_agent.ainvoke(state)
         if not reflection_result:
             reflection_result = {
@@ -327,23 +351,38 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "reasoning": "Failed to get reflection, proceeding to respond",
                 "suggested_next_action": "respond",
                 "refined_query": None,
+                "subgraphs_to_retry": [],
             }
-        return {"reflection_result": reflection_result}
+
+        updates = {"reflection_result": reflection_result}
+        if reflection_result.get("suggested_next_action") == "search_more":
+            subgraphs_to_retry = reflection_result.get("subgraphs_to_retry", [])
+            failed_subgraphs = state.get("failed_subgraphs", set())
+            valid_retries = [s for s in subgraphs_to_retry if s not in failed_subgraphs]
+            if valid_retries:
+                updates["pending_routes"] = valid_retries
+
+        return updates
 
     def route_after_reflection(self, state: OrchestratorState) -> str:
         """Choose the next step after reflection."""
         reflection = state.get("reflection_result")
         if not reflection:
             return "final_response"
+
         action = reflection.get("suggested_next_action", "respond")
         current_iteration = state.get("current_iteration", 1)
         max_iterations = state.get("max_iterations", self.MAX_SEARCH_ITERATIONS)
+
         if current_iteration >= max_iterations:
             return "final_response"
+
         if action == "respond" or reflection.get("is_sufficient"):
             return "final_response"
         elif action == "search_more":
-            return "dispatch_subgraph"
+            if state.get("pending_routes"):
+                return "dispatch_subgraph"
+            return "final_response"
         elif action == "switch_strategy":
             return "router"
         else:
@@ -364,6 +403,8 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         response_mode = state.get("response_mode", ResponseMode.STANDARD)
         search_iterations = state.get("search_iterations", [])
         num_iterations = len(search_iterations)
+        subgraph_results = state.get("subgraph_results", {})
+
         response = await response_agent.ainvoke(state)
         response_metadata = state.get("response_metadata", {})
         response_metadata.update(
@@ -373,8 +414,11 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "execution_history": state.get("execution_history", []),
                 "search_iterations": num_iterations,
                 "reflection_used": state.get("reflection_result") is not None,
+                "subgraph_results": subgraph_results,
+                "failed_subgraphs": list(state.get("failed_subgraphs", set())),
             }
         )
+
         return {
             "final_answer": response.content,
             "response_metadata": response_metadata,

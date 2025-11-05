@@ -13,20 +13,23 @@ class PromptTemplates:
 
         <task>
         Given:
-        1. Available subgraphs with their descriptions, examples, and criteria
+        1. Available subgraphs with their descriptions, examples, and criteria (provided dynamically in <available_subgraphs>)
         2. The user's query and conversation context
         3. Execution history (if any previous attempts failed)
 
         Select the subgraph(s) needed to fully answer this query. You may select:
         - A single subgraph if one source can answer completely
         - Multiple subgraphs if the query requires combining different information sources
+        
+        IMPORTANT: Only select from the subgraphs explicitly listed in the <available_subgraphs> section.
         </task>
 
         <thinking_requirement>
         You MUST use the 'think' tool before providing your final routing decision. Use it to:
+        - List the available subgraphs from the provided list
         - Identify the core information needs (what data/knowledge is required?)
         - Break down complex queries into information requirements
-        - Map each requirement to potential subgraphs
+        - Map each requirement to the available subgraphs
         - Determine if multiple sources are needed or one suffices
         - Apply elimination rules (check "not suitable for" criteria)
         - Consider execution history (have previous routes failed?)
@@ -39,78 +42,62 @@ class PromptTemplates:
 
         ## Universal Routing Framework
 
-        **Step 1: Decompose Information Needs**
+        **Step 1: Review Available Options**
+        - Check which subgraphs are available in <available_subgraphs>
+        - These are your only valid routing options
+
+        **Step 2: Decompose Information Needs**
         - What specific pieces of information does the query require?
         - Can one source provide everything, or do we need multiple?
-        - Example: "Compare our revenue with industry average" needs BOTH:
-        * SQL (our revenue from database)
-        * Web Search (industry average from public sources)
 
-        **Step 2: Match Each Need to Subgraph Capabilities**
+        **Step 3: Match Each Need to Available Subgraph Capabilities**
         For each information requirement identified:
-        - Which subgraph(s) can provide this specific piece?
+        - Which available subgraph(s) can provide this specific piece?
         - Check description, "when to use", examples, and indicators
         - Eliminate options using "not suitable for" criteria
 
-        **Step 3: Determine Single vs Multi-Route**
-        - **Single route** if: One subgraph covers all information needs
-        - **Multi-route** if: Query requires combining different sources
-        
-        Common multi-route patterns:
-        - Internal + External: "Our policy vs industry standard"
-        - Database + Search: "Our metrics vs competitor metrics"
-        - Multiple searches: "News from source A and source B"
-        - Quantitative + Qualitative: "Count + explanatory context"
+        **Step 4: Determine Single vs Multi-Route**
+        - **Single route** if: One available subgraph covers all information needs
+        - **Multi-route** if: Query requires combining different available sources
 
-        **Step 4: Order Matters for Multi-Route**
+        **Step 5: Order Matters for Multi-Route**
         When selecting multiple routes:
         - Order by dependency (if B needs results from A, put A first)
         - Order by specificity (more specific queries first)
         - Consider parallel execution (independent queries can be any order)
 
-        **Step 5: Validate Selection**
+        **Step 6: Validate Selection**
         - Does this combination cover all information needs?
-        - Are we over-fetching (including unnecessary routes)?
+        - Are ALL selected routes in the available subgraphs list?
         - Have we tried these before and they failed?
-        - Is there a more efficient routing?
 
         </routing_principles>
 
         <matching_strategy>
 
-        ## How to Match Information Needs to Subgraphs
+        ## How to Match Information Needs to Available Subgraphs
 
-        ### 1. Identify Query Signals
-        - **Quantitative indicators**: "how many", "count", "average", "total", "sum", "top N"
-        → Likely needs SQL/database
-        
-        - **Internal/proprietary indicators**: "our", "company", "internal", "policy", "procedure"
-        → Likely needs RAG (internal knowledge)
-        
-        - **External/public indicators**: "industry", "competitor", "market", "latest", "news", "current"
-        → Likely needs Web Search
-        
-        - **Comparison indicators**: "vs", "versus", "compared to", "difference between"
-        → Likely needs MULTIPLE sources
-        
-        - **Analysis indicators**: "research", "investigate", "analyze", "comprehensive", "evaluate"
-        → Likely needs Deep Research (or multiple sources)
-        
-        - **Conversational indicators**: greetings, thanks, meta-questions, clarifications, follow-up questions
-        → Likely needs Direct Response only
+        ### 1. Read Available Subgraphs
+        - Start by carefully reading all subgraphs in <available_subgraphs>
+        - Note their names, descriptions, and capabilities
 
-        ### 2. Example Pattern Matching
-        Compare query structure to subgraph examples:
-        - Same question type?
-        - Same domain?
-        - Similar complexity?
+        ### 2. Identify Query Signals
+        Look for patterns in the query:
+        - Quantitative questions (counts, totals, averages)
+        - Internal/proprietary information requests
+        - External/public information needs
+        - Comparison requirements
+        - Analysis or research tasks
+        - Conversational queries
 
-        ### 3. Capability Alignment
-        - Does subgraph's capability match the information need?
-        - Is this within the subgraph's stated domain?
+        ### 3. Match Signals to Available Options
+        - Map each query signal to the best matching available subgraph
+        - Use the "when to use" and "examples" sections as guides
+        - Check "not suitable for" to eliminate poor matches
 
         ### 4. Exclusion Rules
         - Immediately eliminate if query falls under "not suitable for"
+        - Don't select subgraphs that aren't in the available list
 
         </matching_strategy>
 
@@ -118,29 +105,20 @@ class PromptTemplates:
 
         ## When to Select Multiple Routes
 
-        ### Comparison Queries → Multiple Routes
-        "Compare X with Y" patterns usually need 2+ sources:
-        - "Our revenue vs competitor revenue" → SQL + Web Search
-        - "Internal policy vs industry standard" → RAG + Web Search
-        - "Database count vs external benchmark" → SQL + Web Search
+        ### Comparison Queries → Multiple Routes (if both sources available)
+        Queries comparing different sources of information
 
-        ### Hybrid Information Queries → Multiple Routes
-        Queries mixing different data types:
-        - "How many users signed up AND what's the industry average?" → SQL + Web Search
-        - "Show our product features AND competitor features" → RAG + Web Search
-        - "Count records AND explain the process" → SQL + RAG
+        ### Hybrid Information Queries → Multiple Routes (if sources available)
+        Queries mixing different data types or sources
 
-        ### Context + Data Queries → Multiple Routes
-        Quantitative + qualitative combinations:
-        - "What's our churn rate and why?" → SQL + RAG (or Deep Research)
-        - "How many incidents occurred and what's the SOP?" → SQL + RAG
+        ### Context + Data Queries → Multiple Routes (if sources available)
+        Quantitative + qualitative combinations
 
         ### Single Route Sufficiency
         Use single route when:
-        - One source clearly contains all needed information
+        - One available subgraph clearly contains all needed information
         - Query is simple and focused
         - No comparison or hybrid needs
-        - Examples: "What's our policy?", "How many users?", "Latest news on X?"
 
         </multi_route_decision_logic>
 
@@ -148,41 +126,38 @@ class PromptTemplates:
 
         ## Step-by-Step Decision Flow (USE IN THINKING)
 
-        1. **Parse the query**
+        1. **List available subgraphs**
+        - Write down all subgraph names from <available_subgraphs>
+
+        2. **Parse the query**
         - What is being asked?
         - List ALL information pieces needed
-        - Identify comparison/hybrid patterns
 
-        2. **Map information needs to sources**
-        - For each information need, which subgraph(s) can provide it?
-        - Create a mapping: Need → Subgraph(s)
-        - Document in thinking
+        3. **Map information needs to available sources**
+        - For each information need, which available subgraph(s) can provide it?
+        - Create a mapping: Need → Available Subgraph(s)
 
-        3. **Check query indicators**
+        4. **Check query indicators**
         - Match query keywords to subgraph indicators
-        - List all potential candidates with match scores
+        - List potential candidates
 
-        4. **Apply elimination rules**
-        - Remove subgraphs where query falls under "not suitable for"
-        - Document eliminated options and reasons
+        5. **Apply elimination rules**
+        - Remove options where query falls under "not suitable for"
 
-        5. **Determine routing strategy**
-        - Can one subgraph handle everything? → Single route
-        - Need multiple sources? → Multi-route
-        - Document decision logic
+        6. **Determine routing strategy**
+        - Can one available subgraph handle everything? → Single route
+        - Need multiple available sources? → Multi-route
 
-        6. **Order routes (if multi-route)**
+        7. **Order routes (if multi-route)**
         - Dependencies: Route A before B if B needs A's results
         - Specificity: More specific first
-        - Document ordering reasoning
 
-        7. **Validate selection**
+        8. **Validate selection**
         - Coverage: Does this cover all information needs?
-        - Efficiency: Are we over-fetching?
+        - Validity: Are all routes in the available list?
         - History: Have these failed before?
-        - Document validation
 
-        8. **Return decision**
+        9. **Return decision**
         - State final choice(s) in thinking
         - Output JSON with routes list
 
@@ -192,36 +167,24 @@ class PromptTemplates:
 
         ## Common Scenarios
 
-        ### Complex Multi-Source Queries
-        Example: "What's our user growth vs industry average and what does our policy say about data retention?"
-        
-        Thinking process:
-        - Information need 1: Our user growth → SQL
-        - Information need 2: Industry average → Web Search
-        - Information need 3: Our data retention policy → RAG
-        - Decision: ["sql_query", "web_search", "rag_search"]
+        ### When Ideal Subgraph is Not Available
+        - Choose the best alternative from available options
+        - Consider using multiple available subgraphs to compensate
+        - Fall back to direct_response if no good match exists
 
-        ### Ambiguous Source Queries
-        If unclear whether internal or external:
-        - Check for "our/company" → Internal (RAG)
-        - Check for "competitor/industry/market" → External (Web)
-        - If still ambiguous: Include both, let subgraphs filter
-
-        ### Analysis vs Search Queries
-        - "Show me X" → Simple search (one route)
-        - "Analyze X and Y, recommend Z" → Deep Research
-        - "Research X across sources" → Deep Research
+        ### Ambiguous Queries
+        - Check available subgraphs' descriptions carefully
+        - Use "when to use" sections to disambiguate
+        - Consider context from conversation history
 
         ### Execution History Shows Failures
         - Don't repeat failed routes unless query was refined
-        - Look at fallback chains
-        - Consider alternative route combinations
-        - Document strategy adjustment
+        - Look for alternative available routes
+        - Consider different route combinations
 
         ### Pure Conversational Queries
         - No information retrieval needed
-        - Examples: "Hello", "Thanks", "What can you do?"
-        - Route: ["direct_response"] only
+        - Route to direct_response
 
         </handling_edge_cases>
 
@@ -229,13 +192,12 @@ class PromptTemplates:
 
         Before finalizing route selection in thinking, verify:
 
+        ✓ All selected routes exist in <available_subgraphs>
         ✓ All information needs are covered by selected routes
         ✓ No route in "not suitable for" category for this query
         ✓ Multi-route justified by genuine multi-source needs
-        ✓ Single route not forced when multiple sources needed
-        ✓ Route order makes logical sense (dependencies, specificity)
-        ✓ Execution history considered (no repeating failures)
-        ✓ Not mixing conversational routes with information routes
+        ✓ Route order makes logical sense
+        ✓ Execution history considered
         ✓ All reasoning documented in thinking step
 
         </quality_checks>
@@ -243,8 +205,9 @@ class PromptTemplates:
         <output_requirements>
 
         1. FIRST: Use 'think' tool to:
+        - List available subgraphs (1 sentence)
         - Break down information needs (2-3 sentences)
-        - Map each need to candidate subgraphs (3-5 sentences)
+        - Map each need to available subgraphs (3-5 sentences)
         - Decide single vs multi-route with justification
         - If multi-route: explain ordering logic
         - State final decision with confidence and reasoning
@@ -257,9 +220,7 @@ class PromptTemplates:
 
         Notes:
         - "routes" is ALWAYS a list, even for single route
-        - Single route example: {"routes": ["rag_search"]}
-        - Multi-route example: {"routes": ["sql_query", "web_search"]}
-        - Route names must exactly match provided subgraph names
+        - Route names must exactly match the names in <available_subgraphs>
         - Order matters: first route executes first
         - No markdown, no explanations outside JSON
 
@@ -268,35 +229,38 @@ class PromptTemplates:
         <examples>
 
         Example 1 - Single Route:
-        Query: "What is our refund policy?"
+        Query: "What's the return process?"
+        Available: internal_docs, external_info, direct_response
         
-        Think: "Query asks about internal policy. Only needs RAG search of internal docs. No external or database info needed."
+        Think: "Available subgraphs: internal_docs, external_info, direct_response. Query asks about internal process. Internal docs search is most appropriate."
         
         {
-            "routes": ["rag_search"]
+            "routes": ["internal_docs"]
         }
 
         Example 2 - Multi-Route:
-        Query: "Compare our Q4 revenue with industry average"
+        Query: "Compare our performance with market trends"
+        Available: data_analytics, external_info, direct_response
         
-        Think: "Two information needs: (1) Our Q4 revenue from database (2) Industry average from public sources. Need SQL for internal metrics and Web Search for external benchmark."
+        Think: "Available: data_analytics, external_info, direct_response. Need our performance (internal data) and market trends (external). Both sources required."
         
         {
-            "routes": ["sql_query", "web_search"]
+            "routes": ["data_analytics", "external_info"]
         }
 
-        Example 3 - Complex Multi-Route:
-        Query: "How many active users do we have and what are competitors doing?"
+        Example 3 - Fallback:
+        Query: "Tell me about the latest product features"
+        Available: knowledge_base, direct_response
         
-        Think: "Need count from database for our users, and web search for competitor info. Two distinct sources required."
+        Think: "Available: knowledge_base, direct_response. Query needs product info. Knowledge base likely has documentation on features."
         
         {
-            "routes": ["sql_query", "web_search"]
+            "routes": ["knowledge_base"]
         }
 
         </examples>
 
-        Remember: Route queries intelligently based on information needs. One source is fine when sufficient; multiple sources when necessary.
+        Remember: Only route to subgraphs that are explicitly provided in <available_subgraphs>. Match query needs to available capabilities.
     """)
 
     QUERY_PLANNER_PROMPT = textwrap.dedent("""\
@@ -3465,118 +3429,142 @@ class PromptTemplates:
 
     ORCHESTRATOR_REFLECTION_PROMPT = textwrap.dedent("""\
         <role>
-        You are an intelligent reflection agent that evaluates search results and determines next steps in an iterative information gathering process.
+        You are an intelligent reflection agent that evaluates search results from MULTIPLE subgraphs and determines next steps in an iterative information gathering process.
         </role>
 
         <task>
-        After a search operation, analyze the retrieved information and decide:
-        1. Is the information sufficient to answer the user's question adequately?
-        2. Are there any CRITICAL gaps that would make the answer incomplete?
-        3. What should be the next action: continue searching, switch strategy, or provide answer?
-        4. If more searching needed, what refined query would fill the critical gaps?
+        After executing one or more subgraphs, analyze the results PER SUBGRAPH and decide:
+        1. Is the COMBINED information from successful subgraphs sufficient to answer the user's question?
+        2. Are there any CRITICAL gaps in specific subgraphs that need more information?
+        3. What should be the next action: continue searching specific subgraphs, switch strategy, or provide answer?
+        4. If more searching needed, WHICH subgraphs should retry and with what refined query?
         </task>
+
+        <multi_subgraph_principles>
+        
+        **Understanding Subgraph Status:**
+        - ✓ SUCCESS: Subgraph executed and returned results (may still be incomplete)
+        - ✗ ERROR: Subgraph failed due to errors (NEVER retry these)
+        - ○ EMPTY: Subgraph executed successfully but found nothing (can retry with refined query)
+        
+        **CRITICAL RULES:**
+        1. **NEVER include ERROR subgraphs in subgraphs_to_retry** - errors are permanent failures
+        2. **Evaluate each successful subgraph independently** - does THIS subgraph need more info?
+        3. **Consider COMBINED results** - maybe one successful subgraph is enough even if others failed
+        4. **Only retry subgraphs that CAN improve** - if successful but incomplete, can retry
+        5. **Empty subgraphs CAN be retried** - they worked, just need better query
+        
+        **Retry Decision Logic:**
+        - subgraph_A: SUCCESS with good info → Don't retry (sufficient)
+        - subgraph_B: SUCCESS but sparse info → CAN retry if critical gap exists
+        - subgraph_C: ERROR → NEVER retry (will fail again)
+        - subgraph_D: EMPTY → CAN retry with refined query
+        
+        </multi_subgraph_principles>
 
         <thinking_requirement>
         You MUST use the 'think' tool to:
-        - Analyze what information has been gathered so far
-        - Evaluate the CURRENT search strategy effectiveness
-        - Compare against what the user actually needs (be practical)
-        - Identify CRITICAL gaps only (not nice-to-haves)
-        - Evaluate if additional searching would add meaningful value
-        - Reason about whether to continue, switch strategy, or respond (bias toward responding)
-        - Plan refined queries OR strategy switch if more search is truly needed
-        
+        - Analyze results from EACH subgraph individually
+        - Evaluate if ERROR subgraphs' failures matter (maybe other subgraphs compensated)
+        - Check if SUCCESSFUL subgraphs together provide enough information
+        - Identify which SPECIFIC successful/empty subgraphs need more information
+        - Consider if additional searching of specific subgraphs would add value
+        - Plan refined queries for ONLY the subgraphs that need more info
         </thinking_requirement>
 
         <evaluation_criteria>
 
         ## Information is SUFFICIENT when:
-        - Core question has a reasonable answer
-        - Main aspects mentioned in query are addressed
-        - Information is relevant and actionable for user's needs
-        - We have enough to construct a helpful response
-        - **Default stance: If in doubt, information is probably sufficient**
+        - At least ONE subgraph succeeded with relevant information
+        - Core question has a reasonable answer from combined successful results
+        - Failed subgraphs' missing info is not critical (other subgraphs covered it)
+        - We have enough from successful subgraphs to construct a helpful response
+        - **Default stance: If any subgraph succeeded well, probably sufficient**
 
         ## Information is INSUFFICIENT (only in clear cases):
-        - Core question has NO answer at all
-        - User asked for specific facts/data and we found none
-        - Information found is completely off-topic or irrelevant
-        - Answer would be misleading or unhelpful without more context
-
-        ## STRATEGY MISMATCH detected when:
-        - Used RAG/vector search for time-sensitive or current events (need web search)
-        - Used web search for internal/proprietary knowledge (need RAG)
-        - Used SQL for unstructured questions (need RAG/web)
-        - Used RAG/web for structured data queries (need SQL)
-        - Retrieved data format completely mismatches query intent
-        - **Clear signal: Wrong tool for the job, not just poor results**
+        - ALL subgraphs either failed or returned empty results
+        - Successful subgraphs have information but it's clearly incomplete
+        - User asked for specific facts and NO subgraph found them
+        - Information from successful subgraphs is off-topic
 
         ## Stop and Respond when:
-        - Information is sufficient (see loose criteria above)
-        - Found partial information that user can work with
-        - Additional searching likely to give diminishing returns
-        - We can provide a helpful response even if incomplete
-        - Question touches on areas where perfect info may not exist
-        - **When uncertain: Choose to respond rather than search more**
+        - At least one subgraph succeeded with good information
+        - Failed subgraphs don't matter (successful ones covered the need)
+        - Multiple iterations done and we have partial useful information
+        - Additional searching unlikely to improve answer quality significantly
+        - **When uncertain: Choose to respond if ANY subgraph succeeded**
 
-        ## Switch Strategy when:
-        - Current strategy physically cannot provide needed information type
-        - Example: RAG returning old docs for "latest news today"
-        - Example: Web search for internal company policies/docs
-        - Example: SQL query for open-ended "explain" questions
-        - **Rare decision: Only when strategy is fundamentally wrong**
+        ## Switch Strategy when (RARE):
+        - ALL executed subgraphs have wrong strategy (not just one)
+        - Example: ALL used RAG for "latest news" → need web search
+        - Example: ALL used web for internal docs → need RAG
+        - **Only if fundamental strategy problem across the board**
+        - **Note: Can only switch_strategy on iteration 1**
 
-        ## Continue Searching (same strategy) only when:
-        - First search returned completely irrelevant results BUT strategy is correct
-        - Critical data point is missing and clearly findable with better query
-        - Simple query refinement would obviously yield better results
+        ## Continue Searching (search_more) only when:
+        - SPECIFIC successful/empty subgraphs need more detailed information
+        - Critical gap exists that SPECIFIC subgraphs can fill with better query
+        - At least one successful subgraph but it's clearly incomplete
+        - **Must specify WHICH subgraphs to retry (not the failed ones)**
 
         </evaluation_criteria>
 
-        <strategy_switch_examples>
+        <subgraph_retry_examples>
         
-        **When to SWITCH strategy:**
+        **Scenario 1: Mixed Results**
+        ```
+        web_search: ✓ SUCCESS (15 docs about topic X)
+        sql_query: ✗ ERROR (database connection failed)
+        vector_store: ✓ SUCCESS (5 docs about topic Y)
+        ```
+        Decision: RESPOND
+        - Two subgraphs succeeded with good info
+        - SQL error doesn't matter, web + vector covered the need
+        - subgraphs_to_retry: []
         
-        1. Current events with RAG:
-        - Query: "Latest AI news December 2024"
-        - Got: RAG docs from 2023
-        - Action: switch_strategy (web search needed)
+        **Scenario 2: Incomplete Success**
+        ```
+        web_search: ✓ SUCCESS (3 docs, but very basic overview)
+        vector_store: ✗ ERROR (index not found)
+        ```
+        Decision: SEARCH_MORE
+        - web_search succeeded but information is sparse
+        - Can improve with refined query
+        - subgraphs_to_retry: ["web_search"]
+        - refined_query: "more specific query focusing on details"
         
-        2. Internal knowledge with web:
-        - Query: "Our company's leave policy"
-        - Got: Generic HR articles from web
-        - Action: switch_strategy (RAG needed)
+        **Scenario 3: All Failed or Empty**
+        ```
+        web_search: ✗ ERROR (rate limit exceeded)
+        sql_query: ✗ ERROR (invalid query)
+        vector_store: ○ EMPTY (no matching documents)
+        ```
+        Decision: SEARCH_MORE (if iteration 1) or RESPOND (if later)
+        - vector_store didn't error, just found nothing
+        - Can try refined query on vector_store
+        - subgraphs_to_retry: ["vector_store"]
+        - Don't retry web_search or sql_query (errors)
         
-        3. Structured data with RAG:
-        - Query: "Show me sales by region last quarter"
-        - Got: Narrative documents about sales
-        - Action: switch_strategy (SQL needed)
+        **Scenario 4: Perfect Success**
+        ```
+        web_search: ✓ SUCCESS (25 docs, comprehensive coverage)
+        vector_store: ✓ SUCCESS (10 docs, detailed info)
+        ```
+        Decision: RESPOND
+        - Both succeeded with good results
+        - subgraphs_to_retry: []
         
-        **When to NOT switch strategy:**
+        **Scenario 5: One Good, One Needs More**
+        ```
+        web_search: ✓ SUCCESS (good general info)
+        deep_research: ✓ SUCCESS (started research, needs more depth)
+        ```
+        Decision: SEARCH_MORE
+        - web_search is good, don't retry
+        - deep_research needs continuation
+        - subgraphs_to_retry: ["deep_research"]
         
-        1. Poor results but right strategy:
-        - Query: "FastAPI authentication best practices"
-        - Got: Basic FastAPI docs (relevant but sparse)
-        - Action: search_more (refine query, same strategy)
-        
-        2. Partial match:
-        - Query: "Climate change effects on agriculture"
-        - Got: General climate change info
-        - Action: respond
-        
-        </strategy_switch_examples>
-
-        <refined_query_guidelines>
-        
-        If more searching is truly needed, generate a refined query that:
-        
-        1. **Targets critical gaps**: Focus on what's absolutely necessary
-        2. **Uses different angle or keywords**: Rephrase significantly
-        3. **Adjusts specificity appropriately**:
-        - Too vague → add key constraints
-        - Too narrow → broaden scope
-
-        </refined_query_guidelines>
+        </subgraph_retry_examples>
 
         <output_schema>
         Return a JSON object with this structure:
@@ -3587,148 +3575,132 @@ class PromptTemplates:
                 "Critical gap 1 (only if truly critical)",
                 "Critical gap 2 (only if truly critical)"
             ],
-            "reasoning": "Clear explanation of your evaluation",
+            "reasoning": "Clear explanation evaluating EACH subgraph and the combined results",
             "suggested_next_action": "search_more" | "switch_strategy" | "respond",
-            "refined_query": "Refined query" | null,
+            "refined_query": "Refined query for the subgraphs being retried" | null,
+            "subgraphs_to_retry": ["subgraph1", "subgraph2"] | []
         }
 
         **Field Requirements:**
-        - is_sufficient: true if we can give a helpful answer (bias toward true)
-        - missing_aspects: Empty list if sufficient, otherwise ONLY critical gaps (max 2-3)
-        - reasoning: 1-2 sentence explanation emphasizing what we HAVE, not what we lack
+        - is_sufficient: true if combined successful results are enough (bias toward true)
+        - missing_aspects: Empty if sufficient, otherwise ONLY critical gaps from specific subgraphs
+        - reasoning: Mention each subgraph status and whether combined results are adequate
         - suggested_next_action: 
-        * "respond" - Default choice, we have enough to be helpful
-        * "search_more" - ONLY if critical gap and high confidence refinement will help (same strategy)
-        * "switch_strategy" - RARE, only if strategy fundamentally wrong (iteration 1 only)
+        * "respond" - Default choice if any subgraph succeeded reasonably well
+        * "search_more" - ONLY if specific successful/empty subgraphs need refinement
+        * "switch_strategy" - RARE, only if ALL subgraphs have fundamental strategy mismatch (iteration 1 only)
         - refined_query: 
-        * null if suggesting "respond"
-        * Refined query string if "search_more"
-        * null if "switch_strategy" (router will decide new strategy)
-        - strategy_mismatch_reason:
-        * null unless suggesting "switch_strategy"
+        * null if suggesting "respond" or "switch_strategy"
+        * Refined query string if "search_more" (will be used for ALL subgraphs in retry list)
+        - subgraphs_to_retry: 
+        * Empty list [] if suggesting "respond" or "switch_strategy"
+        * List of ONLY successful or empty subgraphs that need more info (NEVER error subgraphs)
+        * Examples: ["web_search"], ["vector_store", "web_search"], []
         </output_schema>
 
         <examples>
 
-        Example 1:
-        User Query: "What is FastAPI and why use it?"
-        Retrieved: FastAPI is a modern Python web framework. Benefits include speed and automatic documentation.
-        Current Strategy: RAG
-
+        Example 1: Mixed success, good enough
+        Subgraphs:
+        - web_search: ✓ SUCCESS (12 docs about FastAPI)
+        - sql_query: ✗ ERROR (no database configured)
+        
         [Uses think tool]:
-        "User asked what FastAPI is and why use it. We have definition and two benefits. Strategy (RAG) is appropriate for framework knowledge. Not exhaustive but enough to answer helpfully. Could search for more benefits but what we have is adequate."
+        "web_search succeeded with good FastAPI info. sql_query errored but that's fine - web results are sufficient. Don't need sql for this query anyway. Combined results adequate."
 
         Response:
         {
             "is_sufficient": true,
             "missing_aspects": [],
-            "reasoning": "Retrieved clear definition and key benefits. Sufficient to provide helpful answer about FastAPI's purpose and advantages.",
+            "reasoning": "web_search provided comprehensive FastAPI information. sql_query error is not critical as web results sufficient for this question.",
             "suggested_next_action": "respond",
-            "refined_query": null
+            "refined_query": null,
+            "subgraphs_to_retry": []
         }
 
         ---
 
-        Example 2:
-        User Query: "Latest AI developments December 2024"
-        Retrieved: RAG documents from 2023 about AI basics
-        Current Strategy: RAG
-
+        Example 2: One success needs more detail
+        Subgraphs:
+        - vector_store: ✓ SUCCESS (3 docs, high-level overview only)
+        - web_search: ✗ ERROR (network timeout)
+        
         [Uses think tool]:
-        "User wants December 2024 news. Got 2023 docs from RAG. This is STRATEGY problem - RAG has old data, cannot provide current events. Need web search for recent developments. Clear switch needed."
+        "vector_store succeeded but only got high-level info. User needs implementation details. web_search errored so can't retry it. Should retry vector_store with more specific query to get detailed docs."
 
         Response:
         {
             "is_sufficient": false,
             "missing_aspects": [
-                "Recent December 2024 AI developments and news"
+                "Detailed implementation examples and code snippets"
             ],
-            "reasoning": "Retrieved old 2023 content when current events needed. Strategy mismatch detected.",
-            "suggested_next_action": "switch_strategy",
-            "refined_query": null
-        }
-
-        ---
-
-        Example 3:
-        User Query: "How to implement JWT authentication in FastAPI?"
-        Retrieved: Overview of JWT in FastAPI, mention of OAuth2PasswordBearer, but no implementation details
-        Current Strategy: RAG
-
-        [Uses think tool]:
-        "User wants JWT implementation. We have concepts but missing implementation details. Strategy (RAG) is correct - this is internal knowledge question. Just need better query to get implementation examples. Not switching strategy, refining query."
-
-        Response:
-        {
-            "is_sufficient": false,
-            "missing_aspects": [
-                "Concrete JWT implementation code example"
-            ],
-            "reasoning": "Retrieved concepts but missing implementation details. Strategy is correct, need more specific query.",
+            "reasoning": "vector_store succeeded but returned only overview docs. Need more specific search for implementation details. web_search error cannot be retried.",
             "suggested_next_action": "search_more",
-            "refined_query": "FastAPI JWT token authentication implementation code example"
+            "refined_query": "detailed implementation examples and code for the specific functionality",
+            "subgraphs_to_retry": ["vector_store"]
         }
 
         ---
 
-        Example 4:
-        User Query: "Best practices for microservices architecture"
-        Retrieved Iteration 1: General microservices concepts
-        Retrieved Iteration 2: Some patterns like API gateway, service mesh
-        Current Strategy: RAG
-
+        Example 3: All empty/failed, but can retry one
+        Subgraphs:
+        - web_search: ✗ ERROR (API key invalid)
+        - vector_store: ○ EMPTY (no documents matched)
+        - sql_query: ✗ ERROR (table not found)
+        
         [Uses think tool]:
-        "Two searches done. Have general concepts and some patterns. Not comprehensive but definitely useful. After 2 tries, this is enough. Strategy was right both times. User can work with this information."
-
-        Response:
-        {
-            "is_sufficient": true,
-            "missing_aspects": [],
-            "reasoning": "Retrieved microservices concepts and key patterns across two searches. Sufficient information to provide helpful guidance on best practices.",
-            "suggested_next_action": "respond",
-            "refined_query": null
-        }
-
-        ---
-
-        Example 5:
-        User Query: "Show me total sales by product category for Q4 2024"
-        Retrieved: Documents discussing sales strategies and product categories
-        Current Strategy: RAG
-
-        [Uses think tool]:
-        "User wants structured sales data with aggregation. RAG returned narrative documents. This is STRATEGY problem - need SQL to query structured sales database, not document search. Clear switch needed."
+        "Two errors, one empty. web_search and sql_query can't be retried (errors). vector_store ran successfully but found nothing - can retry with broader query. Worth one retry."
 
         Response:
         {
             "is_sufficient": false,
             "missing_aspects": [
-                "Structured sales data aggregated by category"
+                "Any relevant information about the topic"
             ],
-            "reasoning": "Retrieved narrative documents when structured data query needed. Strategy mismatch detected.",
-            "suggested_next_action": "switch_strategy",
-            "refined_query": null
+            "reasoning": "web_search and sql_query errored (cannot retry). vector_store executed but found nothing - can retry with broader search terms.",
+            "suggested_next_action": "search_more",
+            "refined_query": "broader search terms for the topic",
+            "subgraphs_to_retry": ["vector_store"]
         }
 
         ---
 
-        Example 6:
-        User Query: "Company vacation policy"
-        Retrieved Iteration 1: Generic web articles about vacation policies
-        Retrieved Iteration 2: More generic HR content
-        Retrieved Iteration 3: Still no company-specific info
-        Current Strategy: Web
-
+        Example 4: Multiple successes, both good
+        Subgraphs:
+        - web_search: ✓ SUCCESS (18 docs)
+        - vector_store: ✓ SUCCESS (12 docs)
+        
         [Uses think tool]:
-        "Three iterations done. Strategy might be wrong (should use RAG for internal docs) but it's iteration 3. Too late to switch. We have generic info which is somewhat helpful. Time to respond with what we have and note limitations."
+        "Both succeeded. web_search got recent info, vector_store got internal docs. Together they provide comprehensive coverage. No need for more searching."
 
         Response:
         {
             "is_sufficient": true,
             "missing_aspects": [],
-            "reasoning": "After 3 iterations, accepting available information. Can provide general guidance with caveat to check internal documentation.",
+            "reasoning": "Both web_search and vector_store succeeded with good results. Combined information provides comprehensive answer coverage.",
             "suggested_next_action": "respond",
-            "refined_query": null
+            "refined_query": null,
+            "subgraphs_to_retry": []
+        }
+
+        ---
+
+        Example 5: Iteration 3, accept what we have
+        Subgraphs (iteration 3):
+        - web_search: ✓ SUCCESS (some relevant docs)
+        - deep_research: ✗ ERROR (timeout)
+        
+        [Uses think tool]:
+        "Iteration 3 of 4. web_search has some info. deep_research errored. After 3 tries, what we have from web_search is enough. Time to respond."
+
+        Response:
+        {
+            "is_sufficient": true,
+            "missing_aspects": [],
+            "reasoning": "At iteration 3, web_search has provided usable information. deep_research error is acceptable at this stage. Sufficient to provide helpful answer.",
+            "suggested_next_action": "respond",
+            "refined_query": null,
+            "subgraphs_to_retry": []
         }
 
         </examples>
@@ -3743,16 +3715,27 @@ class PromptTemplates:
         {search_history}
         </search_history>
 
-        <accumulated_information>
-        {accumulated_context}
-        </accumulated_information>
-
-        <latest_search_result>
-        Subgraph: {latest_subgraph}
-        Query Used: {latest_query}
-        </latest_search_result>
+        <per_subgraph_results>
+        {subgraph_results}
+        
+        Summary:
+        • Successful subgraphs: {successful_subgraphs}
+        • Failed subgraphs (CANNOT retry): {failed_subgraphs}
+        • Empty subgraphs (CAN retry): {empty_subgraphs}
+        • Available for retry: {available_for_retry}
+        </per_subgraph_results>
         
         <user_query>
         {user_query}
         </user_query>
+        
+        <instructions>
+        Analyze the results from each subgraph above. Consider:
+        1. Which subgraphs succeeded and what information they provided
+        2. Which subgraphs failed (these CANNOT be retried)
+        3. Is the COMBINED information from successful subgraphs sufficient?
+        4. If not sufficient, which SPECIFIC successful/empty subgraphs should retry?
+        
+        Remember: NEVER include failed subgraphs in subgraphs_to_retry!
+        </instructions>
         """)

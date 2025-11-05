@@ -29,11 +29,11 @@ GRAPH_CONFIGS = {
     "SimpleSearchGraph": GraphMetadata(
         name="SimpleSearchGraph",
         nodes={
-            "extract_filename": NodeMetadata(
-                display_message="Identifying sources...",
-                stream_phase=StreamPhase.RETRIEVAL,
-                show_in_ui=False,
-            ),
+            # "extract_filename": NodeMetadata(
+            #     display_message="Identifying sources...",
+            #     stream_phase=StreamPhase.RETRIEVAL,
+            #     show_in_ui=False,
+            # ),
             "retrieve_documents": NodeMetadata(
                 display_message="Searching knowledge base...",
                 stream_phase=StreamPhase.RETRIEVAL,
@@ -156,7 +156,6 @@ RAG_SEARCH_CONFIG = SubgraphConfig(
     ],
     entry_state_type=SimpleSearchState,
     executor="rag_search",
-    fallback_chain=["web_search", "deep_research"],
 )
 
 WEB_SEARCH_CONFIG = SubgraphConfig(
@@ -198,7 +197,6 @@ WEB_SEARCH_CONFIG = SubgraphConfig(
     ],
     entry_state_type=SimpleSearchState,
     executor="web_search",
-    fallback_chain=["rag_search", "deep_research"],
 )
 
 DEEP_RESEARCH_CONFIG = SubgraphConfig(
@@ -239,7 +237,6 @@ DEEP_RESEARCH_CONFIG = SubgraphConfig(
     ],
     entry_state_type=ResearchState,
     executor="deep_research",
-    fallback_chain=["rag_search", "web_search"],
 )
 
 DIRECT_RESPONSE_CONFIG = SubgraphConfig(
@@ -280,5 +277,4 @@ DIRECT_RESPONSE_CONFIG = SubgraphConfig(
     ],
     entry_state_type=None,
     executor=None,
-    fallback_chain=None,
 )

@@ -1,5 +1,5 @@
 # src/agents/graph/state.py
-from typing import Any, Dict, List, Literal, Optional, TypedDict
+from typing import Any, Dict, List, Literal, Optional, Set, TypedDict
 
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
@@ -50,16 +50,14 @@ class ExecutionRecord(TypedDict):
 
 
 class ReflectionResult(TypedDict):
-    """Simplified reflection result with only 2 actions."""
+    """Result from reflection agent"""
 
     is_sufficient: bool
     missing_aspects: List[str]
     reasoning: str
-    suggested_next_action: str
+    suggested_next_action: str  # "search_more" | "switch_strategy" | "respond"
     refined_query: Optional[str]
-    successful_subgraphs: Optional[List[str]]  # Subgraphs that returned results
-    failed_subgraphs: Optional[List[str]]  # Subgraphs that failed or returned nothing
-    missing_subgraphs: Optional[List[str]]  # Subgraphs needed for missing aspects
+    subgraphs_to_retry: List[str]
 
 
 class SearchIteration(TypedDict):
@@ -103,9 +101,9 @@ class OrchestratorState(TypedDict):
     max_iterations: int
     accumulated_context: str
     reflection_result: Optional[ReflectionResult]
-    needs_confirmation: Optional[bool]
-    successful_subgraphs: Optional[List[str]]
-    failed_subgraphs: Optional[List[str]]
+
+    subgraph_results: Dict[str, Dict[str, Any]]
+    failed_subgraphs: Set[str]
 
 
 class SimpleSearchState(TypedDict):

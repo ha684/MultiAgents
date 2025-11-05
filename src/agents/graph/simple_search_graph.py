@@ -163,7 +163,6 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
 
         workflow.set_entry_point("retrieve_documents")
 
-        workflow.add_edge("extract_filename", "retrieve_documents")
         workflow.add_edge("retrieve_documents", "filter_citations")
 
         workflow.set_finish_point("filter_citations")

@@ -46,7 +46,6 @@ class SubgraphConfig:
     examples: List[str]
     entry_state_type: Type
     executor: Union[str, SubgraphExecutor]
-    fallback_chain: Optional[List[Union[str, SubgraphExecutor]]]
 
     query_indicators: Optional[List[str]] = None
     not_suitable_for: Optional[List[str]] = None
