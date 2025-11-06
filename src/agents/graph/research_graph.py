@@ -1,12 +1,12 @@
 # src/agents/graph/research_graph.py
 from __future__ import annotations
-
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+import tiktoken
 
 from src.agents.basic import (
     citation_agent,
@@ -97,6 +97,82 @@ def _ensure_search_type(
     return st
 
 
+def distribute_documents_by_tokens(
+    documents: list, encoded_batches: list, max_tokens: int, min_chunk_tokens: int = 100
+) -> list:
+    """
+    Distribute token budget proportionally across all documents.
+
+    Args:
+        documents: List of documents to distribute
+        encoded_batches: List of token lists for each document
+        max_tokens: Maximum total tokens allowed
+        min_chunk_tokens: Minimum tokens to include from a document (skip if can't meet this)
+
+    Returns:
+        List of truncated documents
+    """
+    if not documents:
+        return []
+
+    total_tokens = sum(len(tokens) for tokens in encoded_batches)
+
+    # If under budget, return all documents as-is
+    if total_tokens <= max_tokens:
+        return documents
+
+    # Calculate proportion of tokens each document should get
+    doc_token_counts = [len(tokens) for tokens in encoded_batches]
+
+    # Allocate tokens proportionally
+    allocated_tokens = []
+    for doc_tokens in doc_token_counts:
+        proportion = doc_tokens / total_tokens
+        allocated = int(max_tokens * proportion)
+        # Ensure minimum viable chunk or skip
+        allocated_tokens.append(
+            max(allocated, min_chunk_tokens) if allocated >= min_chunk_tokens else 0
+        )
+
+    # If we over-allocated due to minimums, scale down proportionally
+    total_allocated = sum(allocated_tokens)
+    if total_allocated > max_tokens:
+        scale_factor = max_tokens / total_allocated
+        allocated_tokens = [int(t * scale_factor) for t in allocated_tokens]
+
+    # Create truncated documents
+    final_docs = []
+    for i, doc in enumerate(documents):
+        if allocated_tokens[i] == 0:
+            continue
+
+        tokens_for_doc = allocated_tokens[i]
+        actual_tokens = len(encoded_batches[i])
+
+        if actual_tokens <= tokens_for_doc:
+            # Keep entire document
+            final_docs.append(doc)
+        else:
+            # Truncate document content proportionally
+            truncate_ratio = tokens_for_doc / actual_tokens
+            original_content = doc.page_content
+            truncate_pos = int(len(original_content) * truncate_ratio)
+
+            # Create truncated document
+            truncated_doc = type(doc)(
+                page_content=original_content[:truncate_pos] + "...",
+                metadata=doc.metadata,
+            )
+            final_docs.append(truncated_doc)
+
+    logger.info(
+        f"Token distribution: {total_tokens} -> {sum(allocated_tokens)} tokens "
+        f"across {len(final_docs)}/{len(documents)} documents"
+    )
+
+    return final_docs
+
+
 class ResearchGraph(GraphAgentBase[ResearchState]):
     """Research Subgraph - Deep research with iterative search loop (refactored)."""
 
@@ -106,6 +182,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
         self.compiled_graph = self._build_graph()
         self.max_searches = 20
         self.max_consecutive_failures = 3
+        self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
         logger.info("ResearchGraph initialized successfully (refactored).")
 
     @property
@@ -318,12 +395,28 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                 )
             else:  # web
                 documents = await web_search(query=query_text)
-            consecutive_search_failures = 0  # reset on success
+
+            max_tokens = 8192
+            texts_list = [doc.page_content for doc in documents]
+            encoded_batches = self.tokenizer.encode_batch(
+                text=texts_list, num_threads=4
+            )
+            total_tokens = sum(len(tokens) for tokens in encoded_batches)
+
+            logger.info(f"Total tokens: {total_tokens} / {max_tokens}")
+
+            if total_tokens > max_tokens:
+                documents = distribute_documents_by_tokens(
+                    documents=documents,
+                    encoded_batches=encoded_batches,
+                    max_tokens=max_tokens,
+                    min_chunk_tokens=100,
+                )
+            consecutive_search_failures = 0
         except Exception as e:
             logger.error(
                 f"[SearchExecutor] HARD FAILURE in {search_type.upper()} search for '{query_text}'. Error: {e}"
             )
-            # Mark unavailability for the failing channel
             new_rag_unavail = rag_unavailable
             new_web_unavail = web_unavailable
             fallback_type = ""
@@ -337,7 +430,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                 if not rag_unavailable:
                     fallback_type = "rag"
 
-            # If we have a fallback channel, switch all future queries of failing type
             new_pending_queries = list(remaining_queries)
             if fallback_type:
                 logger.warning(
@@ -347,7 +439,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                     if new_pending_queries[i].get("search_type") == search_type:
                         new_pending_queries[i]["search_type"] = fallback_type
 
-            # If both channels are now unavailable => hard stop
             hard_stop = new_rag_unavail and new_web_unavail
 
             return {
@@ -362,7 +453,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                 **_base_state_fragment(state),
             }
 
-        # Successful search -> push result
         search_result: Dict[str, Any] = {
             "query": query_text,
             "documents": documents,
@@ -427,7 +517,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                     **_base_state_fragment(state),
                 }
         else:
-            # RAG path
             source_ids_all = [
                 (getattr(d, "metadata", {}) or d.metadata).get("document_id", "")
                 for d in docs
@@ -457,7 +546,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             )
             return {"should_retry_query": True, **_base_state_fragment(state)}
 
-        # Rank/select relevant documents with citation agent
         relevant_indices = await citation_agent.ainvoke(
             history=[HumanMessage(content=current_query)], reference=new_documents
         )
@@ -467,7 +555,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             )
             return {"should_retry_query": True, **_base_state_fragment(state)}
 
-        # NOTE: indexes are 1-based (as bạn đã confirm)
         idxs = [
             i
             for i in getattr(relevant_indices, "indexes")
@@ -477,7 +564,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
 
         citation_start_index = state.get("citation_counter", 0)
         all_cited_docs_so_far = list(state.get("cited_documents", []))
-        citation_map = list(state.get("citation_map", []))  # list of {idx, meta}
+        citation_map = list(state.get("citation_map", []))
 
         docs_with_markers = []
         current_citation_index = citation_start_index
@@ -485,24 +572,18 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
         for doc in cited_docs:
             meta = getattr(doc, "metadata", {}) or doc.metadata
             doc_copy = doc.model_copy(deep=True) if hasattr(doc, "model_copy") else doc
-            try:
-                # prepend marker to page_content
-                page = getattr(doc_copy, "page_content", None)
-                if page is None:
-                    # some types might use .content
-                    page = getattr(doc_copy, "content", "")
-                    setattr(
-                        doc_copy,
-                        "content",
-                        f"[CITATION: {current_citation_index}] {page}",
-                    )
-                else:
-                    doc_copy.page_content = (
-                        f"[CITATION: {current_citation_index}] {page}"
-                    )
-            except Exception:
-                # best-effort
-                pass
+
+            page = getattr(doc_copy, "page_content", None)
+            if page is None:
+                page = getattr(doc_copy, "content", "")
+                setattr(
+                    doc_copy,
+                    "content",
+                    f"[CITATION: {current_citation_index}] {page}",
+                )
+            else:
+                doc_copy.page_content = f"[CITATION: {current_citation_index}] {page}"
+
             docs_with_markers.append(doc_copy)
             all_cited_docs_so_far.append(doc)
             citation_map.append(
@@ -536,7 +617,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             else:
                 merged = compressed
 
-        # Update used IDs
         new_rag_ids = list(state.get("used_rag_ids", []))
         new_web_urls = list(state.get("used_web_urls", []))
         if search_type == "rag":
@@ -550,7 +630,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             to_add = [sid for sid in to_add if sid]
             new_web_urls = list(set(new_web_urls + to_add))
 
-        # Mark last search result processed
         last_history = list(state.get("all_search_history", []))
         if last_history:
             last_history[-1] = {**last_history[-1], "processed": True}
