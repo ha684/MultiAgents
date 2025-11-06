@@ -154,7 +154,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "response_mode": response_mode,
                 "current_iteration": current_iteration,
             }
-
         execution_history = state.get("execution_history", [])
 
         routes_to_execute = [r for r in routes if r not in failed_subgraphs]
@@ -293,6 +292,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                     "status": status,
                     "timestamp": datetime.now().isoformat(),
                     "duplicate_ratio": resp_meta.get("duplicate_ratio"),
+                    "early_terminate": resp_meta.get("early_terminate", False),
                 }
             )
 
@@ -367,12 +367,38 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         """Reflect on current aggregated results to decide the next step."""
         routes = state.get("route_decisions", [])
 
-        if state.get("duplication_high"):
+        duplication_high = state.get("duplication_high")
+
+        last_iteration_num = state.get("current_iteration", 2) - 1
+        subgraph_results = state.get("subgraph_results", {})
+
+        failed_in_last_iteration = False
+        for route, result in subgraph_results.items():
+            if (
+                result.get("iteration") == last_iteration_num
+                and result.get("status") == "error"
+            ):
+                failed_in_last_iteration = True
+                break
+
+        if duplication_high and not failed_in_last_iteration:
             return {
                 "reflection_result": {
                     "is_sufficient": True,
                     "missing_aspects": [],
-                    "reasoning": "High duplication detected, responding without further search.",
+                    "reasoning": "High duplication detected and no subgraphs failed. Responding.",
+                    "suggested_next_action": "respond",
+                    "refined_query": None,
+                    "subgraphs_to_retry": [],
+                }
+            }
+
+        if routes and all(r in ["direct_response"] for r in routes):
+            return {
+                "reflection_result": {
+                    "is_sufficient": True,
+                    "missing_aspects": [],
+                    "reasoning": f"No reflection needed for {', '.join(routes)}",
                     "suggested_next_action": "respond",
                     "refined_query": None,
                     "subgraphs_to_retry": [],
