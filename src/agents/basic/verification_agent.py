@@ -1,17 +1,17 @@
 # src/agents/basic/verification_agent.py
-from typing import List
+from typing import List, Optional
 
-from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.basic.base import BaseAgent
+from src.domain.entities.state import OrchestratorState
+from src.domain.schemas.graph import VerificationSchema
 from src.agents.tools.server.mcp_retrieve_tools import think
+from src.agents.prompts.agent_prompts import PromptTemplates
 from src.core.config.llm_config import SupportedLLMProviders
 from src.utils.decorators import singleton
+from src.utils import parse_response
 from src.utils.logger_conf import logger
-
-VERIFICATION_PROMPT_TEMPLATE = """
-"""
 
 
 @singleton
@@ -22,36 +22,49 @@ class VerificationAgent(BaseAgent):
         super().__init__(provider)
         logger.info("Verification Agent initialized successfully.")
 
-    async def ainvoke(self, query: str, reference: List[Document]) -> str:
+    async def ainvoke(self, state: OrchestratorState) -> str:
         """
         Verifies information from relevant documents.
         """
-        if not reference:
-            logger.warning("No relevant documents to verify")
-            return ""
+        max_iterations = 3
 
-        fallback = "\n\n".join([doc.page_content for doc in reference])
+        prompt_input = PromptTemplates.VERIFICATION_HUMAN_PROMPT.format(
+            original_query=state["contextualized_query"],
+            accumulated_knowledge=state["accumulated_knowledge"],
+        )
 
-        try:
-            system_prompt = SystemMessage(content=VERIFICATION_PROMPT_TEMPLATE)
-            user_content = HumanMessage(
-                content=f"""Query: {query}\n\n---\n\nExtract and organize all relevant information from these documents. Remember: extract information, don't answer the query."""
+        messages: List[BaseMessage] = [
+            SystemMessage(content=PromptTemplates.VERIFICATION_PROMPT),
+            HumanMessage(content=prompt_input),
+        ]
+
+        verification_llm = self.thinking_llm
+        verification_dict = await self.iterative_llm_call_structured(
+            messages=messages,
+            llm_with_tools=verification_llm,
+            available_tools={"think": think},
+            max_iterations=max_iterations,
+            parse_fn=parse_verification_response,
+            retry_prompt="Please provide the verification result in correct JSON format.",
+        )
+
+        return verification_dict
+
+
+def parse_verification_response(content: str) -> Optional[VerificationSchema]:
+    """Parse verification response"""
+    try:
+        parsed = parse_response(content)
+        if not parsed:
+            logger.warning(
+                "[Parser] Failed to parse verification response (null result)."
             )
-            messages: List[BaseMessage] = [system_prompt, user_content]
-
-            response = await self.iterative_llm_call_text(
-                messages=messages,
-                llm_with_tools=self.thinking_llm,
-                available_tools={"think": think},
-                max_iterations=10,
-                retry_prompt="Please provide your output again.",
-                fallback_value=fallback,
-            )
-
-            compressed_content = response.content
-            return compressed_content
-
-        except Exception as e:
-            logger.error(f"Error verifying information: {e}", exc_info=True)
-            logger.warning("Using fallback: returning raw document content")
-            return fallback
+            return content
+        response = VerificationSchema(**parsed)
+        dumped = response.model_dump()
+        return dumped
+    except Exception as e:
+        logger.error(
+            f"[Parser] Error parsing verification response: {e}", exc_info=True
+        )
+        return content

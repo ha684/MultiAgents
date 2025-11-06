@@ -151,6 +151,7 @@ class ResearchState(TypedDict):
 
     should_retry_query: bool
     is_rag_source_relevant: bool
+    citation_map: List[Dict[str, Any]]
 
 
 class SqlState(TypedDict):

@@ -68,9 +68,8 @@ class OrchestratorStreamer:
                     final_result = output
                     continue
 
-                if name in ["SimpleSearchGraph", "ResearchGraph"]:
-                    self._print_box(f"✅ Graph: {name} COMPLETED", color="green")
-                    continue
+                self._print_box(f"✅ Graph: {name} COMPLETED", color="green")
+                continue
 
             elif kind == "on_chat_model_stream":
                 chunk = event["data"]["chunk"]
