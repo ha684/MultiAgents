@@ -1,14 +1,14 @@
 # src/agents/executors/deep_research.py
-import asyncio
+
 
 from src.agents.graph import research_graph
-from src.agents.shared.manager import execution_manager
 from src.domain.entities.graph import SubgraphOutput
 from src.domain.entities.state import OrchestratorState, ResearchState
-from src.utils.logger_conf import logger
 
 
-async def _run_deep_research(state: OrchestratorState) -> SubgraphOutput:
+async def _run_deep_research(
+    state: OrchestratorState,
+) -> SubgraphOutput:
     """Execute research subgraph"""
     context_metadata = state["conversation"][-1].additional_kwargs.get(
         "message_metadata", {}
@@ -17,39 +17,59 @@ async def _run_deep_research(state: OrchestratorState) -> SubgraphOutput:
         contextualized_query=state["contextualized_query"],
         context_metadata=context_metadata,
     )
-    execution = execution_manager.get_execution(
-        state["conversation"][-1].additional_kwargs.get("conversation_id")
-    )
+    # execution = execution_manager.get_execution(
+    #     state["conversation"][-1].additional_kwargs.get("conversation_id")
+    # )
 
-    research_task = asyncio.create_task(research_graph.ainvoke(state=research_state))
+    result = await research_graph.ainvoke(research_state)
 
-    done, pending = await asyncio.wait(
-        [research_task, asyncio.create_task(execution.skip_event.wait())],
-        return_when=asyncio.FIRST_COMPLETED,
-    )
+    # ctx = contextvars.copy_context()
+    # research_task = ctx.run(lambda: asyncio.create_task(sub_coro))
+    # skip_task = ctx.run(lambda: asyncio.create_task(execution.skip_event.wait()))
 
-    for task in pending:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+    # done, pending = await asyncio.wait([research_task, skip_task], return_when=asyncio.FIRST_COMPLETED)
 
-    if execution.should_skip():
-        logger.warning("User requested skip during research")
-        result = execution.partial_state or {
-            "accumulated_knowledge": "",
-            "cited_documents": [],
-        }
-    else:
-        result = await research_task
-        execution.update_partial_state(result)
+    # for t in pending:
+    #     t.cancel()
+    #     try:
+    #         await t
+    #     except asyncio.CancelledError:
+    #         pass
+
+    # if execution.should_skip():
+    #     logger.warning("User requested skip during research")
+    #     if not research_task.done():
+    #         research_task.cancel()
+    #         try:
+    #             await research_task
+    #         except asyncio.CancelledError:
+    #             pass
+    #     result_state = execution.partial_state or {
+    #         "accumulated_knowledge": "",
+    #         "cited_documents": [],
+    #         "response_metadata": {},
+    #     }
+    #     message = "Skipped by user."
+    # else:
+    #     result_state = await research_task
+    #     execution.update_partial_state(result_state)
+    #     message = None
+
+    if getattr(result, "status", None) != "success":
+        return SubgraphOutput(
+            main_context="",
+            cited_documents=[],
+            response_metadata={},
+            subgraph_error=(
+                getattr(result, "message", None) or "DeepResearchGraph failed"
+            ),
+        )
 
     return SubgraphOutput(
         main_context=result.state.get("accumulated_knowledge", ""),
         cited_documents=result.state.get("cited_documents", []),
         response_metadata=result.state.get("response_metadata", {}),
-        subgraph_error=result.message,
+        subgraph_error=None,
     )
 
 

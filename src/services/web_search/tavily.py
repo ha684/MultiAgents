@@ -52,7 +52,6 @@ class TavilyService(BaseSearchService):
                         "title": result.get("title"),
                         "content": result.get("raw_content")
                         if result.get("raw_content")
-                        and len(result.get("raw_content")) < 10000
                         else result.get("content"),
                         "url": url,
                         "favicon": result.get("favicon"),

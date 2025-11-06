@@ -51,8 +51,6 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
     ) -> InvokeResult[StateT]:
         """Invoke and return the final result - used for subgraph nodes"""
         run_cfg = config_override or self.default_run_config()
-        langfuse_handler = setup_langfuse()
-        run_cfg.extra["callbacks"] = [langfuse_handler]
         lg_config = run_cfg.as_langgraph_config()
         last_state: StateT = state
 
@@ -98,6 +96,8 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
     ) -> AsyncGenerator[StreamEvent, None]:
         """Stream events - use for testing and monitoring"""
         run_cfg = config_override or self.default_run_config()
+        langfuse_handler = setup_langfuse()
+        run_cfg.extra["callbacks"] = [langfuse_handler]
         lg_config = run_cfg.as_langgraph_config()
         last_state: StateT = state
 

@@ -78,12 +78,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
 
     async def router_node(self, state: OrchestratorState) -> Dict[str, Any]:
         """Determine one or more subgraph routes based on policy, history, and context."""
-        policy = state.get("subgraph_policy", {})
-        active_map = SubgraphRegistry.resolve_active(
-            allow=policy.get("allow"),
-            block=policy.get("block"),
-            extras=policy.get("extras"),
-        )
         route_decision = await router_agent.ainvoke(state)
         routes = []
         if route_decision is None:
@@ -96,7 +90,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             routes = ["direct_response"]
         resolved = []
         for r in routes:
-            cfg = SubgraphRegistry.get_subgraph_active(r, active_map)
+            cfg = SubgraphRegistry.get_profile(r)
             resolved.append(r if cfg or r == "direct_response" else "direct_response")
         routes = [r for r in resolved if r]
         routes = list(dict.fromkeys(routes))
@@ -121,7 +115,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 return ResponseMode.FOLLOWUP
             return ResponseMode.CHITCHAT
         if (
-            any(r["status"] == "error" for r in subgraph_results.values())
+            any(r.get("status") == "error" for r in subgraph_results.values())
             and len(execution_history) >= self.MAX_RETRY_ATTEMPTS
         ):
             return ResponseMode.NO_VIABLE_OPTION
@@ -161,12 +155,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "current_iteration": current_iteration,
             }
 
-        policy = state.get("subgraph_policy", {})
-        active_map = SubgraphRegistry.resolve_active(
-            allow=policy.get("allow"),
-            block=policy.get("block"),
-            extras=policy.get("extras"),
-        )
         execution_history = state.get("execution_history", [])
 
         routes_to_execute = [r for r in routes if r not in failed_subgraphs]
@@ -185,54 +173,61 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             }
 
         async def run_one(route_name: str) -> Tuple[str, Dict[str, Any]]:
-            subgraph_config = SubgraphRegistry.get_subgraph_active(
-                route_name, active_map
-            )
-            exec_ref = subgraph_config.executor if subgraph_config else None
-            executor = (
-                EXECUTORS.get(exec_ref) if isinstance(exec_ref, str) else exec_ref
-            )
-            if not executor or not callable(executor):
+            try:
+                subgraph_config = SubgraphRegistry.get_profile(route_name)
+                exec_ref = subgraph_config.executor if subgraph_config else None
+                executor = (
+                    EXECUTORS.get(exec_ref) if isinstance(exec_ref, str) else exec_ref
+                )
+                if not executor or not callable(executor):
+                    return route_name, {
+                        "status": "error",
+                        "main_context": "",
+                        "cited_documents": [],
+                        "response_metadata": None,
+                        "subgraph_error": f"Executor '{executor}' not found.",
+                    }
+
+                execution_state = dict(state)
+                execution_state["contextualized_query"] = query_to_use
+                execution_state["seen_urls"] = seen_urls
+                execution_state["seen_doc_ids"] = seen_doc_ids
+                execution_state["duplicate_skip_ratio"] = state.get(
+                    "duplicate_skip_ratio", 0.7
+                )
+
+                result_obj: SubgraphOutput = await executor(execution_state)
+
+                main_context = result_obj.main_context or ""
+                cited_documents = result_obj.cited_documents or []
+                response_metadata = result_obj.response_metadata
+                subgraph_error = result_obj.subgraph_error or ""
+
+                if not main_context and cited_documents:
+                    main_context = format_context_for_response(cited_documents)
+
+                status = (
+                    "error"
+                    if subgraph_error
+                    else ("success" if (main_context or cited_documents) else "empty")
+                )
+
+                return route_name, {
+                    "status": status,
+                    "main_context": main_context,
+                    "cited_documents": cited_documents,
+                    "response_metadata": response_metadata,
+                    "subgraph_error": subgraph_error or None,
+                }
+
+            except Exception as e:
                 return route_name, {
                     "status": "error",
                     "main_context": "",
                     "cited_documents": [],
-                    "response_metadata": None,
-                    "subgraph_error": f"Executor '{executor}' not found.",
-                    "docs_retrieved": 0,
+                    "response_metadata": {"exception": f"{type(e).__name__}: {e}"},
+                    "subgraph_error": f"{type(e).__name__}: {e}",
                 }
-
-            execution_state = dict(state)
-            execution_state["contextualized_query"] = query_to_use
-            execution_state["seen_urls"] = seen_urls
-            execution_state["seen_doc_ids"] = seen_doc_ids
-            execution_state["duplicate_skip_ratio"] = state.get(
-                "duplicate_skip_ratio", 0.7
-            )
-
-            result_obj: SubgraphOutput = await executor(execution_state)
-            main_context = result_obj.main_context or ""
-            cited_documents = result_obj.cited_documents or []
-            response_metadata = result_obj.response_metadata
-            subgraph_error = result_obj.subgraph_error or ""
-
-            if not main_context and cited_documents:
-                main_context = format_context_for_response(cited_documents)
-
-            if subgraph_error:
-                status = "error"
-            elif main_context or cited_documents:
-                status = "success"
-            else:
-                status = "empty"
-
-            return route_name, {
-                "status": status,
-                "main_context": main_context or "",
-                "cited_documents": cited_documents,
-                "response_metadata": response_metadata,
-                "subgraph_error": subgraph_error if subgraph_error else None,
-            }
 
         results = await asyncio.gather(*[run_one(r) for r in routes_to_execute])
 
@@ -259,7 +254,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         highest_dup_ratio = 0.0
 
         for route_name, data in results:
-            status = data["status"]
+            status = data.get("status", "error")
             main_context = data["main_context"]
             cited_documents = data["cited_documents"]
             subgraph_error = data["subgraph_error"]
@@ -298,7 +293,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                     "status": status,
                     "timestamp": datetime.now().isoformat(),
                     "duplicate_ratio": resp_meta.get("duplicate_ratio"),
-                    "early_terminate": resp_meta.get("early_terminate", False),
                 }
             )
 
@@ -308,6 +302,13 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                         f"\n\n--- Search {current_iteration} ({route_name}) ---\n"
                     )
                 accumulated_context += main_context
+                execution_history.append(
+                    {
+                        "subgraph": route_name,
+                        "error": "subgraph succeeded",
+                        "iteration": current_iteration,
+                    }
+                )
 
             if status == "error":
                 failed_subgraphs.add(route_name)
@@ -323,8 +324,8 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             state, routes, subgraph_results
         )
 
-        had_error = any(data["status"] == "error" for _, data in results)
-        had_success = any(data["status"] == "success" for _, data in results)
+        had_error = any(data.get("status") == "error" for _, data in results)
+        had_success = any(data.get("status") == "success" for _, data in results)
 
         if had_error and not had_success and routes != ["direct_response"]:
             return {
@@ -512,12 +513,14 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
         db_url = meta.get("db_url")
         allow_tables = meta.get("allow_tables", [])
 
-        allow = meta.get("enabled_subgraphs")
-        block = meta.get("disabled_subgraphs")
+        allow = meta.get("enabled_subgraphs", [])
+        block = meta.get("disabled_subgraphs", [])
 
         extras = {}
         if db_url and allow_tables:
             extras["sql_query"] = enable_sql(db_url, allow_tables)
+        else:
+            block.append("sql_query")
 
         subgraph_policy = {
             "allow": allow or None,

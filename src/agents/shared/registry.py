@@ -1,38 +1,58 @@
 # src/agents/shared/registry.py
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Literal
 
-from src.core.config.graph_configs import (
-    DEEP_RESEARCH_CONFIG,
-    DIRECT_RESPONSE_CONFIG,
-    RAG_SEARCH_CONFIG,
-    WEB_SEARCH_CONFIG,
-)
 from src.database.sql_database import AsyncSQLDatabase
-from src.domain.entities.graph import SubgraphConfig
-from src.domain.entities.state import SqlState
+from src.domain.entities.graph import (
+    SubgraphProfile,
+    SubgraphBehavior,
+    RoutingCondition,
+    RoutingAction,
+    SubgraphJourney,
+)
+from src.domain.entities.state import SqlState, SimpleSearchState, ResearchState
 
 
 class SubgraphRegistry:
-    _subgraphs: Dict[str, SubgraphConfig] = {}
+    """
+    Enhanced registry with Parlant-inspired design principles.
+    """
+
+    _profiles: Dict[str, SubgraphProfile] = {}
 
     @classmethod
-    def register(cls, config: SubgraphConfig):
-        cls._subgraphs[config.name] = config
+    def register(cls, profile: SubgraphProfile):
+        """Register a subgraph profile."""
+        cls._profiles[profile.name] = profile
 
     @classmethod
     def unregister(cls, name: str):
-        cls._subgraphs.pop(name, None)
+        """Remove a subgraph profile."""
+        cls._profiles.pop(name, None)
+
+    @classmethod
+    def get_profile(cls, name: str) -> Optional[SubgraphProfile]:
+        """Get a specific profile."""
+        return cls._profiles.get(name)
 
     @classmethod
     def resolve_active(
         cls,
         allow: Optional[List[str]] = None,
         block: Optional[List[str]] = None,
-        extras: Optional[Dict[str, SubgraphConfig]] = None,
-    ) -> Dict[str, SubgraphConfig]:
-        base = dict(cls._subgraphs)
+        extras: Optional[Dict[str, SubgraphProfile]] = None,
+        tags: Optional[List[str]] = None,
+    ) -> Dict[str, SubgraphProfile]:
+        """
+        Resolve active subgraphs with filtering.
+        Similar to Parlant's dynamic context management.
+        """
+        base = dict(cls._profiles)
+
         if extras:
             base.update(extras)
+
+        if tags:
+            base = {k: v for k, v in base.items() if any(tag in v.tags for tag in tags)}
 
         if allow:
             base = {k: v for k, v in base.items() if k in set(allow)}
@@ -41,54 +61,765 @@ class SubgraphRegistry:
             for b in block:
                 base.pop(b, None)
 
-        if "direct_response" not in base and "direct_response" in cls._subgraphs:
-            base["direct_response"] = cls._subgraphs["direct_response"]
+        if "direct_response" not in base and "direct_response" in cls._profiles:
+            base["direct_response"] = cls._profiles["direct_response"]
 
         return base
 
     @classmethod
-    def definitions_from_map(cls, m: Dict[str, SubgraphConfig]) -> List[Dict]:
+    def generate_routing_prompt(
+        cls,
+        active_profiles: Dict[str, SubgraphProfile],
+        format: Literal["detailed", "compact"] = "detailed",
+    ) -> str:
+        """
+        Generate dynamic routing instructions for LLM.
+        Only includes relevant information based on context.
+        """
+        if format == "compact":
+            return cls._generate_compact_prompt(active_profiles)
+        return cls._generate_detailed_prompt(active_profiles)
+
+    @classmethod
+    def _generate_detailed_prompt(
+        cls,
+        profiles: Dict[str, SubgraphProfile],
+    ) -> str:
+        """Generate detailed routing instructions."""
+        sections = []
+
+        sections.append("# AVAILABLE SUBGRAPHS\n")
+        sections.append(
+            "Route user queries to the most appropriate subgraph based on their intent and needs.\n"
+        )
+
+        sorted_profiles = sorted(
+            profiles.values(), key=lambda p: p.primary_behavior.priority, reverse=True
+        )
+
+        for profile in sorted_profiles:
+            sections.append(f"\n## {profile.display_name}")
+            sections.append(f"**Route Name:** `{profile.name}`\n")
+
+            # Primary behavior
+            behavior = profile.primary_behavior
+            sections.append("**Core Capability:**")
+            sections.append(f"{behavior.action.capability}\n")
+
+            sections.append("**When to Route Here:**")
+            sections.append(f"{behavior.condition.trigger}")
+
+            if behavior.condition.signals:
+                sections.append(
+                    f"\n**Signal Phrases:** {', '.join(behavior.condition.signals[:5])}"
+                )
+
+            if behavior.condition.exclude_when:
+                sections.append(
+                    f"\n**Do NOT route here if:** {' | '.join(behavior.condition.exclude_when)}"
+                )
+
+            # Routing instruction
+            sections.append("\n**Routing Guidance:**")
+            sections.append(f"{behavior.action.router_instruction}")
+
+            # Journeys (if any)
+            if profile.journeys:
+                sections.append("\n**Typical User Flows:**")
+                for journey in profile.journeys:
+                    sections.append(f"- {journey.name}: {journey.description}")
+
+            # Examples
+            if profile.canonical_examples:
+                sections.append("\n**Example Queries:**")
+                for ex in profile.canonical_examples[:3]:
+                    sections.append(f'  • "{ex["query"]}" → {ex["rationale"]}')
+
+            sections.append("\n" + "-" * 60)
+
+        return "\n".join(sections)
+
+    @classmethod
+    def _generate_compact_prompt(cls, profiles: Dict[str, SubgraphProfile]) -> str:
+        """Generate compact routing instructions for low-latency routing."""
         tools = []
-        for name, config in m.items():
-            tool_desc = f"**{name.upper()}**\n\n{config.description}"
-            tool_desc += f"\n\n**When to use:**\n{config.when_to_use}"
-            if config.examples:
-                tool_desc += "\n\n**Example queries:**" + "".join(
-                    f"\n  • {ex}" for ex in config.examples[:3]
-                )
-            if config.query_indicators:
-                tool_desc += (
-                    f"\n\n**Keyword indicators:** {', '.join(config.query_indicators)}"
-                )
-            if config.not_suitable_for:
-                tool_desc += (
-                    f"\n\n**NOT suitable for:** {', '.join(config.not_suitable_for)}"
-                )
+        for name, profile in profiles.items():
+            behavior = profile.primary_behavior
+            tool_desc = f"{behavior.action.capability}\n"
+            tool_desc += f"WHEN: {behavior.condition.trigger}\n"
+
+            if behavior.condition.signals:
+                tool_desc += f"SIGNALS: {', '.join(behavior.condition.signals[:5])}"
+
             tools.append({"name": name, "description": tool_desc})
+
         return tools
 
     @classmethod
-    def get_subgraph_active(
+    def get_subgraph_executor(
         cls,
         name: str,
-        active_map: Dict[str, SubgraphConfig],
-    ) -> Optional[SubgraphConfig]:
-        return active_map.get(name)
+        active_map: Dict[str, SubgraphProfile],
+    ) -> Optional[any]:
+        """Get executor for a subgraph."""
+        profile = active_map.get(name)
+        return profile.executor if profile else None
+
+
+def create_simple_subgraph(
+    name: str,
+    display_name: str,
+    capability: str,
+    trigger: str,
+    signals: List[str],
+    router_instruction: str,
+    examples: List[tuple[str, str]],
+    exclude_when: Optional[List[str]] = None,
+    executor: any = None,
+    entry_state_type: Optional[type] = None,
+) -> SubgraphProfile:
+    """
+    Helper to create a simple subgraph profile.
+    For backward compatibility with existing configs.
+    """
+    return SubgraphProfile(
+        name=name,
+        display_name=display_name,
+        primary_behavior=SubgraphBehavior(
+            condition=RoutingCondition(
+                trigger=trigger,
+                signals=signals,
+                exclude_when=exclude_when or [],
+            ),
+            action=RoutingAction(
+                capability=capability,
+                router_instruction=router_instruction,
+                expected_outcome=f"User query handled via {name}",
+            ),
+        ),
+        canonical_examples=[{"query": q, "rationale": r} for q, r in examples],
+        executor=executor,
+        entry_state_type=entry_state_type,
+    )
+
+
+def create_journey_subgraph(
+    name: str,
+    display_name: str,
+    capability: str,
+    trigger: str,
+    signals: List[str],
+    router_instruction: str,
+    journey_name: str,
+    journey_description: str,
+    flow_steps: List[str],
+    examples: List[tuple[str, str]],
+    executor: any = None,
+    entry_state_type: Optional[type] = None,
+) -> SubgraphProfile:
+    """
+    Helper to create a subgraph with a defined journey.
+    Use for complex multi-step processes.
+    """
+    profile = create_simple_subgraph(
+        name=name,
+        display_name=display_name,
+        capability=capability,
+        trigger=trigger,
+        signals=signals,
+        router_instruction=router_instruction,
+        examples=examples,
+        executor=executor,
+        entry_state_type=entry_state_type,
+    )
+
+    profile.journeys.append(
+        SubgraphJourney(
+            name=journey_name,
+            description=journey_description,
+            activation_conditions=[trigger],
+            typical_flow=flow_steps,
+        )
+    )
+
+    return profile
+
+
+RAG_SEARCH_PROFILE = create_simple_subgraph(
+    name="rag_search",
+    display_name="Internal Knowledge Search",
+    capability=(
+        "Searches internal knowledge base using semantic search. "
+        "Covers company docs, policies, procedures, and product documentation."
+    ),
+    trigger=(
+        "User asks about internal/company-specific information, policies, "
+        "procedures, or proprietary product features"
+    ),
+    signals=[
+        "our policy",
+        "our process",
+        "our product",
+        "our system",
+        "company",
+        "internal",
+        "how do I",
+        "how to",
+        "documentation",
+        "guide",
+        "procedure",
+        "onboarding",
+        "employee handbook",
+        "benefits",
+        "PTO",
+    ],
+    router_instruction=(
+        "Route user queries here when they need information from internal documentation. "
+        "This includes: company policies, HR procedures, product documentation, "
+        "internal tools/systems guides, and proprietary processes. "
+        "\n\n"
+        "DO NOT route here for:\n"
+        "- External/public information (use web_search)\n"
+        "- Database metrics/queries (use sql_query)\n"
+        "- Current events or news (use web_search)\n"
+        "\n"
+        "When routing, ensure the query is clear and specific. "
+        "If user asks vaguely like 'tell me about X', clarify what aspect they need."
+    ),
+    examples=[
+        ("What is our refund policy?", "Direct policy question"),
+        ("How do I submit a leave request?", "Internal HR process"),
+        ("Explain our product's authentication flow", "Product technical docs"),
+        ("What are the onboarding steps for new employees?", "HR documentation"),
+        ("How does our CI/CD pipeline work?", "Internal system documentation"),
+    ],
+    exclude_when=[
+        "asks about external/public information",
+        "asks about current events or news after 2025",
+        "asks for quantitative data or database queries",
+        "asks about competitors or market information",
+    ],
+    executor="rag_search",
+    entry_state_type=SimpleSearchState,
+)
+
+RAG_SEARCH_PROFILE.glossary = {
+    "PTO": "Paid Time Off - vacation and sick leave policy",
+    "OKR": "Objectives and Key Results - our goal-setting framework",
+    "RFC": "Request for Comments - our technical proposal process",
+    "Confluence": "Our internal wiki and documentation platform",
+}
+
+WEB_SEARCH_PROFILE = SubgraphProfile(
+    name="web_search",
+    display_name="Public Web Search",
+    primary_behavior=SubgraphBehavior(
+        condition=RoutingCondition(
+            trigger=(
+                "User asks about current events, external entities (competitors, industry), "
+                "public information, or anything requiring up-to-date external data"
+            ),
+            signals=[
+                "latest",
+                "recent",
+                "current",
+                "news",
+                "today",
+                "competitor",
+                "industry",
+                "market",
+                "trend",
+                "regulation",
+                "standard",
+                "benchmark",
+                "public",
+                "what's new",
+                "updates",
+                "announcement",
+            ],
+            exclude_when=[
+                "asks about internal company information",
+                "asks for database metrics",
+                "asks about proprietary data or processes",
+            ],
+        ),
+        action=RoutingAction(
+            capability=(
+                "Searches public web for external information including "
+                "news, industry data, competitors, regulations, and public knowledge"
+            ),
+            router_instruction=(
+                "Route here when user needs external, public information that:\n"
+                "• Has changed or might have changed recently\n"
+                "• Is about entities outside our company (competitors, industry)\n"
+                "• Requires current/live data (news, regulations, standards)\n"
+                "• Is public knowledge not in our internal docs\n"
+                "\n"
+                "Transform vague queries into specific, searchable questions. "
+                "For time-sensitive queries, include temporal context."
+            ),
+            expected_outcome="Current, externally-sourced information with proper citations",
+        ),
+        priority=50,
+    ),
+    canonical_examples=[
+        {
+            "query": "Latest AI developments in 2025",
+            "rationale": "Current events and industry news",
+        },
+        {
+            "query": "What did OpenAI announce last week?",
+            "rationale": "Recent competitor news",
+        },
+        {
+            "query": "Current GDPR requirements for data storage",
+            "rationale": "Up-to-date regulatory information",
+        },
+        {
+            "query": "Industry benchmark for SaaS churn rate",
+            "rationale": "Public market data",
+        },
+    ],
+    executor="web_search",
+    entry_state_type=SimpleSearchState,
+)
+
+WEB_SEARCH_PROFILE.secondary_behaviors.append(
+    SubgraphBehavior(
+        condition=RoutingCondition(
+            trigger="User asks to verify or fact-check information",
+            signals=["is it true", "verify", "fact check", "confirm", "validate"],
+        ),
+        action=RoutingAction(
+            capability="Verify claims using authoritative public sources",
+            router_instruction="Use for fact-checking and verification of claims",
+            expected_outcome="Verified information with source credibility assessment",
+        ),
+        priority=60,
+    )
+)
+
+SQL_QUERY_PROFILE = SubgraphProfile(
+    name="sql_query",
+    display_name="Database Query Executor",
+    primary_behavior=SubgraphBehavior(
+        condition=RoutingCondition(
+            trigger=(
+                "User needs quantitative data, metrics, counts, or aggregations "
+                "from structured databases"
+            ),
+            signals=[
+                "how many",
+                "count",
+                "total",
+                "average",
+                "sum",
+                "show me",
+                "list",
+                "top",
+                "bottom",
+                "rank",
+                "table",
+                "database",
+                "column",
+                "where",
+                "group by",
+                "order by",
+                "filter",
+                "query",
+            ],
+            requires_context={
+                "needs_data_access": True,
+            },
+            exclude_when=[
+                "asks conceptual questions about databases",
+                "asks for document content or search",
+                "needs external web information",
+            ],
+        ),
+        action=RoutingAction(
+            capability=(
+                "Executes SQL queries against structured databases. "
+                "Provides quantitative answers, data retrieval, aggregations, and analytics."
+            ),
+            router_instruction=(
+                "Route here for questions that require querying databases:\n"
+                "• Counting/summing/averaging (how many users, total revenue)\n"
+                "• Data retrieval with filters (show orders where status='pending')\n"
+                "• Rankings and aggregations (top customers, average by region)\n"
+                "• Schema exploration (what tables exist, show columns)\n"
+                "\n"
+                "Important:\n"
+                "- Ensure user query is specific about what data they need\n"
+                "- For vague queries, may need to ask clarifying questions first\n"
+                "- Extract clear data requirements before delegating\n"
+            ),
+            expected_outcome="Structured data results with insights and context",
+            query_transformation=(
+                "Transform natural language query into clear data requirement: "
+                "What to retrieve, from where, with what conditions, how to aggregate"
+            ),
+        ),
+        priority=70,
+    ),
+    journeys=[
+        SubgraphJourney(
+            name="Simple Data Retrieval",
+            description="Direct query for specific data points or lists",
+            activation_conditions=[
+                "User asks for specific count, value, or list",
+                "Query is straightforward with clear data target",
+            ],
+            typical_flow=[
+                "Understand what data is needed",
+                "Identify table and columns",
+                "Apply any filters or conditions",
+                "Execute query",
+                "Present results clearly",
+            ],
+            prerequisites=["Database access available", "Clear data requirement"],
+        ),
+        SubgraphJourney(
+            name="Exploratory Analysis",
+            description="Multi-step investigation of data patterns and insights",
+            activation_conditions=[
+                "User wants to explore data without specific question",
+                "Asks about trends, patterns, or anomalies",
+            ],
+            typical_flow=[
+                "Understand analytical goal",
+                "Explore schema and available data",
+                "Query initial data for overview",
+                "Identify interesting patterns",
+                "Drill down into specifics",
+                "Summarize insights",
+            ],
+            digression_patterns={
+                "user adds filter": "Incorporate new filter and re-query",
+                "user changes metric": "Adjust aggregation and recalculate",
+                "user asks for comparison": "Query comparison data and present side-by-side",
+            },
+            prerequisites=["User has exploratory intent", "Sufficient data exists"],
+        ),
+        SubgraphJourney(
+            name="Report Generation",
+            description="Create formatted report with multiple metrics",
+            activation_conditions=[
+                "User asks for report, summary, or dashboard",
+                "Needs multiple related metrics together",
+            ],
+            typical_flow=[
+                "Identify all required metrics",
+                "Plan efficient queries (avoid N+1)",
+                "Execute queries in optimal order",
+                "Format results cohesively",
+                "Add context and interpretations",
+                "Offer export or further analysis",
+            ],
+            prerequisites=["Clear report scope", "Multiple related metrics"],
+        ),
+    ],
+    canonical_examples=[
+        {
+            "query": "How many users signed up last month?",
+            "rationale": "Simple count with time filter → Simple Retrieval",
+        },
+        {
+            "query": "Show top 10 customers by purchase amount",
+            "rationale": "Ranked aggregation → Simple Retrieval",
+        },
+        {
+            "query": "What tables exist in the database?",
+            "rationale": "Schema exploration → Simple Retrieval",
+        },
+        {
+            "query": "Analyze sales trends by region over last year",
+            "rationale": "Pattern analysis over time → Exploratory Analysis",
+        },
+        {
+            "query": "Give me a monthly revenue report with breakdowns",
+            "rationale": "Multiple metrics, formatted output → Report Generation",
+        },
+    ],
+    entry_state_type=SqlState,
+    executor=None,
+    tags=["data", "analytics", "quantitative"],
+)
+
+SQL_QUERY_PROFILE.glossary = {
+    "users": "Main user accounts table with profile information",
+    "orders": "Transaction records with order details",
+    "customers": "Customer business profiles and metadata",
+    "products": "Product catalog with pricing and inventory",
+    "events": "User activity event log",
+}
+
+DEEP_RESEARCH_PROFILE = SubgraphProfile(
+    name="deep_research",
+    display_name="Multi-Source Research Agent",
+    primary_behavior=SubgraphBehavior(
+        condition=RoutingCondition(
+            trigger=(
+                "User poses complex question requiring comprehensive analysis "
+                "from multiple information sources with synthesis"
+            ),
+            signals=[
+                "research",
+                "investigate",
+                "analyze thoroughly",
+                "compare",
+                "evaluate",
+                "assess",
+                "recommend",
+                "advise",
+                "suggest approach",
+                "why did",
+                "root cause",
+                "comprehensive",
+                "deep dive",
+                "detailed analysis",
+            ],
+            exclude_when=[
+                "simple fact lookup (single answer)",
+                "straightforward query with single source",
+                "well-defined narrow question",
+            ],
+        ),
+        action=RoutingAction(
+            capability=(
+                "Conducts iterative multi-step research combining RAG and web search "
+                "with reflection and synthesis. Provides strategic analysis and recommendations."
+            ),
+            router_instruction=(
+                "Route here ONLY for complex analytical questions that clearly need:\n"
+                "1. Information from multiple disparate sources\n"
+                "2. Comparative analysis of multiple options/entities\n"
+                "3. Strategic recommendations based on synthesis\n"
+                "4. Root cause investigation with multiple angles\n"
+                "5. Comprehensive understanding of complex topic\n"
+                "\n"
+                "DO NOT route here for:\n"
+                "- Simple questions with straightforward answers\n"
+                "- Single-fact lookups\n"
+                "- Queries where one source is sufficient\n"
+                "\n"
+                "Ensure user has a clear research objective or decision to make."
+            ),
+            expected_outcome=(
+                "Comprehensive analysis with insights from multiple sources, "
+                "synthesized into actionable recommendations or deep understanding"
+            ),
+        ),
+        priority=10,
+    ),
+    journeys=[
+        SubgraphJourney(
+            name="Comparative Analysis",
+            description="Compare multiple options and provide recommendation",
+            activation_conditions=[
+                "User needs to choose between alternatives",
+                "Asks to compare products, services, or approaches",
+            ],
+            typical_flow=[
+                "Identify all options to compare",
+                "Define comparison criteria (may ask user)",
+                "Research each option from multiple angles",
+                "Gather internal knowledge (RAG)",
+                "Gather external information (web)",
+                "Synthesize findings into comparison matrix",
+                "Provide weighted recommendation",
+                "Explain tradeoffs and rationale",
+            ],
+            digression_patterns={
+                "user adds criterion": "Re-evaluate with new criterion",
+                "user eliminates option": "Focus on remaining options",
+                "user asks for more depth": "Deep dive into specific aspect",
+            },
+        ),
+        SubgraphJourney(
+            name="Root Cause Investigation",
+            description="Investigate why something happened or went wrong",
+            activation_conditions=[
+                "User asks 'why did X happen'",
+                "Requests investigation into problem or anomaly",
+            ],
+            typical_flow=[
+                "Understand the problem/event",
+                "Gather timeline and context",
+                "Query internal data for patterns",
+                "Research external factors",
+                "Form hypotheses",
+                "Test hypotheses against evidence",
+                "Identify most likely causes",
+                "Suggest preventive measures",
+            ],
+        ),
+        SubgraphJourney(
+            name="Strategic Research",
+            description="Research topic for strategic decision-making",
+            activation_conditions=[
+                "User needs to make strategic business decision",
+                "Asks to research market, technology, or strategy",
+            ],
+            typical_flow=[
+                "Clarify strategic question or decision",
+                "Research industry context and trends",
+                "Gather competitive intelligence",
+                "Consult internal capabilities/constraints",
+                "Analyze opportunities and risks",
+                "Synthesize strategic implications",
+                "Provide recommendations with rationale",
+            ],
+            prerequisites=["Clear strategic objective or decision"],
+        ),
+    ],
+    canonical_examples=[
+        {
+            "query": "Analyze cloud providers (AWS, Azure, GCP) and recommend best for our microservices architecture",
+            "rationale": "Multi-option comparison needing internal context + external research → Comparative Analysis",
+        },
+        {
+            "query": "Why did our conversion rate drop 15% last quarter? Investigate all possible causes.",
+            "rationale": "Root cause investigation across multiple data sources → Root Cause Investigation",
+        },
+        {
+            "query": "Research AI agent frameworks and their impact on our industry, recommend adoption strategy",
+            "rationale": "Strategic research for decision-making → Strategic Research",
+        },
+        {
+            "query": "Evaluate pricing models (freemium, tiered, usage-based) and recommend approach for our SaaS",
+            "rationale": "Strategic comparison with synthesis → Comparative Analysis + Strategic",
+        },
+    ],
+    executor="deep_research",
+    entry_state_type=ResearchState,
+    tags=["complex", "strategic", "multi-source"],
+)
+
+DEEP_RESEARCH_PROFILE.secondary_behaviors.append(
+    SubgraphBehavior(
+        condition=RoutingCondition(
+            trigger="User proposes hypothesis and wants it validated",
+            signals=["test hypothesis", "validate assumption", "is it true that"],
+        ),
+        action=RoutingAction(
+            capability="Test hypothesis against multiple information sources",
+            router_instruction="Use when user has specific hypothesis to validate",
+            expected_outcome="Evidence-based validation or refutation of hypothesis",
+        ),
+        priority=20,
+    )
+)
+
+DIRECT_RESPONSE_PROFILE = SubgraphProfile(
+    name="direct_response",
+    display_name="Direct Conversational Response",
+    primary_behavior=SubgraphBehavior(
+        condition=RoutingCondition(
+            trigger=(
+                "User message is social, trivial common knowledge, meta-question, "
+                "or follow-up that doesn't require information retrieval"
+            ),
+            signals=[
+                "hello",
+                "hi",
+                "hey",
+                "greetings",
+                "thanks",
+                "thank you",
+                "appreciate",
+                "bye",
+                "goodbye",
+                "see you",
+                "what can you do",
+                "who are you",
+                "help",
+                "repeat",
+                "clarify",
+                "explain again",
+                "rephrase",
+            ],
+        ),
+        action=RoutingAction(
+            capability=(
+                "Responds directly without retrieval for greetings, thanks, "
+                "basic knowledge, clarifications, and assistant capability questions"
+            ),
+            router_instruction=(
+                "This is the FALLBACK route. Use ONLY when:\n"
+                "• Social: greetings, thanks, goodbyes\n"
+                "• Trivial: basic facts everyone knows (capitals, simple math)\n"
+                "• Meta: questions about assistant capabilities\n"
+                "• Follow-up: clarification, repetition, elaboration of previous response\n"
+                "• All other subgraphs have been considered and are NOT suitable\n"
+                "\n"
+                "DO NOT route here if ANY other subgraph could handle it!\n"
+                "When uncertain, prefer more specific subgraph over this fallback."
+            ),
+            expected_outcome="Natural conversational response without external information",
+        ),
+        priority=-100,
+    ),
+    canonical_examples=[
+        {"query": "Hello! How are you?", "rationale": "Social greeting"},
+        {"query": "Thanks for your help!", "rationale": "Gratitude expression"},
+        {"query": "What is 2 + 2?", "rationale": "Trivial arithmetic"},
+        {
+            "query": "What is the capital of France?",
+            "rationale": "Basic common knowledge",
+        },
+        {
+            "query": "Can you explain that again?",
+            "rationale": "Follow-up clarification",
+        },
+        {
+            "query": "What can you help me with?",
+            "rationale": "Meta-question about capabilities",
+        },
+    ],
+    executor=None,
+    entry_state_type=None,
+    tags=["fallback", "conversational"],
+)
+
+DIRECT_RESPONSE_PROFILE.secondary_behaviors.append(
+    SubgraphBehavior(
+        condition=RoutingCondition(
+            trigger="User asks question that needs retrieval but phrases casually",
+            signals=["tell me about", "what about", "explain"],
+        ),
+        action=RoutingAction(
+            capability="Recognize when retrieval is needed and clarify",
+            router_instruction=(
+                "If query SEEMS casual but actually needs information, "
+                "clarify intent before routing to direct_response. "
+                "Example: 'Tell me about our product' → needs rag_search, not direct response"
+            ),
+            expected_outcome="Proper routing to information-retrieval subgraph",
+        ),
+        priority=-50,
+    )
+)
 
 
 def seed_base_subgraphs():
-    SubgraphRegistry.register(RAG_SEARCH_CONFIG)
-    SubgraphRegistry.register(WEB_SEARCH_CONFIG)
-    SubgraphRegistry.register(DEEP_RESEARCH_CONFIG)
-    SubgraphRegistry.register(DIRECT_RESPONSE_CONFIG)
+    """
+    Populate registry with all base subgraph profiles.
+    Call this on application startup.
+    """
+    SubgraphRegistry.register(RAG_SEARCH_PROFILE)
+    SubgraphRegistry.register(WEB_SEARCH_PROFILE)
+    SubgraphRegistry.register(SQL_QUERY_PROFILE)
+    SubgraphRegistry.register(DEEP_RESEARCH_PROFILE)
+    SubgraphRegistry.register(DIRECT_RESPONSE_PROFILE)
+    print(f"✅ Registered {len(SubgraphRegistry._profiles)} subgraph profiles")
 
 
 def enable_sql(db_url: str, allow_tables: list[str]):
-    sql_cfg = make_sql_subgraph(db_url, allow_tables)
-    return sql_cfg
-
-
-def make_sql_subgraph(db_url: str, allow_tables: list[str]) -> SubgraphConfig:
+    """
+    Enable SQL subgraph with database connection.
+    Returns the configured profile.
+    """
     from src.agents.executors.sql_query import SqlQueryExecutor
 
     sql_db = AsyncSQLDatabase.from_uri(
@@ -98,46 +829,10 @@ def make_sql_subgraph(db_url: str, allow_tables: list[str]) -> SubgraphConfig:
     )
     executor = SqlQueryExecutor(sql_db)
 
-    return SubgraphConfig(
-        name="sql_query",
-        description=(
-            "Executes SQL queries against structured databases. "
-            "For quantitative data, metrics, counts, and aggregations."
-        ),
-        when_to_use=(
-            "• Quantitative questions (how many, count, total, average)\n"
-            "• Database structure questions (tables, columns, schema)\n"
-            "• Data retrieval with filtering or conditions\n"
-            "• Aggregations, rankings, or grouped statistics"
-        ),
-        examples=[
-            "How many users signed up last month?",
-            "What tables exist in the database?",
-            "Show me all orders where status = 'pending'",
-            "Average revenue by region",
-            "Top 10 customers by purchase amount",
-        ],
-        query_indicators=[
-            "how many",
-            "count",
-            "total",
-            "average",
-            "sum",
-            "table",
-            "database",
-            "column",
-            "show",
-            "list",
-            "top",
-            "bottom",
-            "group by",
-            "where",
-        ],
-        not_suitable_for=[
-            "conceptual database questions",
-            "document searches",
-            "web information",
-        ],
-        entry_state_type=SqlState,
-        executor=executor,
-    )
+    sql_profile = SubgraphRegistry.get_profile("sql_query")
+    if sql_profile:
+        sql_profile.executor = executor
+        if hasattr(sql_db, "get_table_info"):
+            pass
+
+    return sql_profile

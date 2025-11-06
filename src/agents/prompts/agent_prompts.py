@@ -22,6 +22,7 @@ class PromptTemplates:
         - Multiple subgraphs if the query requires combining different information sources
         
         IMPORTANT: Only select from the subgraphs explicitly listed in the <available_subgraphs> section.
+        CRITICAL: DO NOT route to any subgraph that appears in the execution history with an error. These routes have already failed and should be avoided.
         </task>
 
         <thinking_requirement>

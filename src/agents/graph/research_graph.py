@@ -589,6 +589,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             retry_prompt="Please provide the verification result in correct JSON format.",
         )
 
+        logger.info(f"[Verification] Verification result: {verification_dict}")
         if not verification_dict:
             logger.error(
                 "[Verification] Failed to get a valid verification. Defaulting to insufficient."
@@ -861,13 +862,13 @@ def parse_planner_response(content: str) -> Optional[SearchPlanSchema]:
         parsed = parse_response(content)
         if not parsed:
             logger.warning("[Parser] Failed to parse planner response (null result).")
-            return None
+            return content
         response = SearchPlanSchema(**parsed)
         dumped = response.model_dump()
         return dumped
     except Exception as e:
         logger.error(f"[Parser] Error parsing planner response: {e}", exc_info=True)
-        return None
+        return content
 
 
 def parse_verification_response(content: str) -> Optional[VerificationSchema]:
@@ -878,7 +879,7 @@ def parse_verification_response(content: str) -> Optional[VerificationSchema]:
             logger.warning(
                 "[Parser] Failed to parse verification response (null result)."
             )
-            return None
+            return content
         response = VerificationSchema(**parsed)
         dumped = response.model_dump()
         return dumped
@@ -886,7 +887,7 @@ def parse_verification_response(content: str) -> Optional[VerificationSchema]:
         logger.error(
             f"[Parser] Error parsing verification response: {e}", exc_info=True
         )
-        return None
+        return content
 
 
 def parse_dynamic_query_generator_response(
@@ -899,7 +900,7 @@ def parse_dynamic_query_generator_response(
             logger.warning(
                 "[Parser] Failed to parse dynamic query generator response (null result)."
             )
-            return None
+            return content
         response = DynamicQueriesSchema(**parsed)
         dumped = response.model_dump()
         return dumped
@@ -908,7 +909,7 @@ def parse_dynamic_query_generator_response(
             f"[Parser] Error parsing dynamic query generator response: {e}",
             exc_info=True,
         )
-        return None
+        return content
 
 
 def parse_reflection_response(content: str) -> Optional[ReflectionSchema]:
@@ -919,10 +920,10 @@ def parse_reflection_response(content: str) -> Optional[ReflectionSchema]:
             logger.warning(
                 "[Parser] Failed to parse reflection response (null result)."
             )
-            return None
+            return content
         response = ReflectionSchema(**parsed)
         dumped = response.model_dump()
         return dumped
     except Exception as e:
         logger.error(f"[Parser] Error parsing reflection response: {e}", exc_info=True)
-        return None
+        return content

@@ -34,16 +34,9 @@ class RouterAgent(BaseAgent):
         )
 
         state["active_subgraphs"] = list(active_map.keys())
-        subgraph_definitions = SubgraphRegistry.definitions_from_map(active_map)
+        subgraph_definitions = SubgraphRegistry.generate_routing_prompt(active_map)
 
         execution_history = state.get("execution_history", [])
-
-        subgraph_context = "\n\n".join(
-            [
-                f"**{tool['name']}**:\n{tool['description']}"
-                for tool in subgraph_definitions
-            ]
-        )
 
         history_context = ""
         if execution_history:
@@ -55,14 +48,12 @@ class RouterAgent(BaseAgent):
             )
 
         max_iterations = 3
-        conversation_context = get_buffer_string(conversation)
+        conversation_context = get_buffer_string(conversation[:-1])
 
         system_prompt = SystemMessage(content=PromptTemplates.ROUTER_PROMPT)
         context_message = HumanMessage(
             content=textwrap.dedent(
-                f"""<available_subgraphs>
-                {subgraph_context}
-                </available_subgraphs>
+                f"""{subgraph_definitions}
 
                 <execution_history>
                 {history_context if history_context else "No previous attempts"}

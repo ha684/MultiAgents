@@ -121,7 +121,7 @@ async def main():
     orchestrator = OrchestratorGraph()
 
     human_message = HumanMessage(
-        content="what is the current growth rate of gold? and how it is in comparison with my company's profit increase rate in the last year",
+        content="Given the recent advancements in nanotechnology and AI-assisted mineral extraction, how would the projected market value and extraction yield of gold in Southeast Asia evolve over the next decade, considering current geopolitical trends, environmental constraints, and the financial strategies of major multinational mining corporations operating in the region?",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]

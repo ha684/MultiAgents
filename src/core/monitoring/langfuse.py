@@ -7,5 +7,4 @@ def setup_langfuse():
     Setup Langfuse
     """
     langfuse_handler = CallbackHandler()
-
     return langfuse_handler

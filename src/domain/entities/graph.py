@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from zoneinfo import ZoneInfo
-from typing import Dict, Optional, List, Type, Any, Protocol, Union
+from typing import Dict, Optional, List, Any, Protocol
 import asyncio
 from enum import Enum
 
@@ -34,21 +34,6 @@ class Execution:
     def update_partial_state(self, state: Dict):
         """Save current state to fallback when skip"""
         self.partial_state = state
-
-
-@dataclass
-class SubgraphConfig:
-    """Configuration for registering a subgraph as a tool"""
-
-    name: str
-    description: str
-    when_to_use: str
-    examples: List[str]
-    entry_state_type: Type
-    executor: Union[str, SubgraphExecutor]
-
-    query_indicators: Optional[List[str]] = None
-    not_suitable_for: Optional[List[str]] = None
 
 
 @dataclass
@@ -112,3 +97,95 @@ class GraphMetadata:
     def get_node_meta(self, node_name: str) -> Optional[NodeMetadata]:
         """Get metadata for a node"""
         return self.nodes.get(node_name)
+
+
+@dataclass
+class RoutingCondition:
+    """
+    Defines WHEN a subgraph should be activated.
+    Inspired by Parlant's Guideline conditions.
+    """
+
+    trigger: str
+
+    signals: List[str] = field(default_factory=list)
+
+    requires_context: Optional[Dict[str, any]] = None
+
+    exclude_when: List[str] = field(default_factory=list)
+
+
+@dataclass
+class RoutingAction:
+    """
+    Defines WHAT the subgraph does and HOW to route to it.
+    Inspired by Parlant's Guideline actions.
+    """
+
+    capability: str
+
+    router_instruction: str
+
+    expected_outcome: str
+
+    query_transformation: Optional[str] = None
+
+
+@dataclass
+class SubgraphBehavior:
+    """
+    A reusable behavioral pattern for subgraphs.
+    Similar to Parlant's Guidelines but for routing decisions.
+    """
+
+    condition: RoutingCondition
+    action: RoutingAction
+    priority: int = 0
+
+    def __str__(self):
+        return f"WHEN {self.condition.trigger} THEN {self.action.capability}"
+
+
+@dataclass
+class SubgraphJourney:
+    """
+    Multi-step interaction patterns within a subgraph.
+    Inspired by Parlant's Journeys but adapted for task delegation.
+    """
+
+    name: str
+    description: str
+
+    activation_conditions: List[str]
+
+    typical_flow: List[str]
+
+    digression_patterns: Dict[str, str] = field(default_factory=dict)
+
+    prerequisites: List[str] = field(default_factory=list)
+
+
+@dataclass
+class SubgraphProfile:
+    """
+    Complete profile of a subgraph's capabilities and behavior.
+    """
+
+    name: str
+    display_name: str
+
+    primary_behavior: SubgraphBehavior
+
+    secondary_behaviors: List[SubgraphBehavior] = field(default_factory=list)
+
+    journeys: List[SubgraphJourney] = field(default_factory=list)
+
+    glossary: Dict[str, str] = field(default_factory=dict)
+
+    canonical_examples: List[Dict[str, str]] = field(default_factory=list)
+
+    entry_state_type: Optional[type] = None
+    executor: any = None
+
+    tags: List[str] = field(default_factory=list)
+    confidence_threshold: float = 0.7
