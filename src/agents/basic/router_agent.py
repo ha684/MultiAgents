@@ -91,8 +91,8 @@ class RouterAgent(BaseAgent):
             max_iterations=max_iterations,
             parse_fn=parse_route_decision,
             retry_prompt=(
-                "Please provide the route decision in correct JSON format with 'route' key "
-                "matching one of the available subgraph names."
+                "Please provide the route decision in correct JSON format with 'routes' key "
+                "containing a list of available subgraph names."
             ),
         )
 

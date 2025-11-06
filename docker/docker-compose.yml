@@ -186,6 +186,50 @@ services:
       - prometheus
       - jaeger
 
+  langfuse:
+      image: langfuse/server:latest
+      container_name: langfuse
+      depends_on:
+        postgres:
+          condition: service_healthy
+        clickhouse:
+          condition: service_healthy
+      ports:
+        - "${LANGFUSE_PORT:-3001}:3000"
+      environment:
+
+        DATABASE_URL: "postgresql://${MINIO_ACCESS_KEY:-kms_user}:${MINIO_SECRET_KEY:-kms_password}@postgres:5432/langfuse_db?schema=public"
+
+        CLICKHOUSE_HOST: "clickhouse"
+        CLICKHOUSE_PORT: "8123"
+        CLICKHOUSE_DATABASE: "langfuse"
+        CLICKHOUSE_USERNAME: "default"
+        CLICKHOUSE_PASSWORD: ""
+
+
+        SALT: "${LANGFUSE_SALT}"
+        LANGFUSE_SECRET_KEY: "${LANGFUSE_SECRET_KEY}"
+        LANGFUSE_PUBLIC_KEY: "${LANGFUSE_PUBLIC_KEY}"
+        LANGFUSE_HOST: "${LANGFUSE_HOST:-http://localhost:3001}"
+
+        TELEMETRY_ENABLED: "false"
+      volumes:
+        - langfuse_data:/data
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: clickhouse
+    ports:
+      - "8123:8123"
+      - "9002:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
   redis_data:
@@ -193,3 +237,5 @@ volumes:
   minio_data:
   # neo4j_data:
   grafana_data:
+  langfuse_data:
+  clickhouse_data:

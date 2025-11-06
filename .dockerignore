@@ -1,0 +1,64 @@
+# VCS
+.git
+.gitignore
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.dist-info/
+
+# Environments
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+
+# Caches
+.cache/
+**/.cache/**
+.mypy_cache/
+.pytype/
+.pyre/
+pytest_cache/
+.nox/
+.tox/
+
+# Notebooks & checkpoints
+.ipynb_checkpoints/
+
+# Build / dist
+build/
+dist/
+site/
+htmlcov/
+coverage.xml
+.coverage*
+*.log
+
+# App-specific heavy dirs (adjust as needed)
+models/
+checkpoints/
+artifacts/
+data/
+datasets/
+media/
+downloads/
+tmp/
+logs/
+
+# Node / frontend
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml

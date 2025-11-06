@@ -74,6 +74,7 @@ dependencies = [
     "dotenv>=0.9.9",
     "parlant>=3.0",
     "langsmith>=0.4.28",
+    "langfuse>=3.9.0",
 ]
 
 [tool.ruff]

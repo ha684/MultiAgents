@@ -140,5 +140,4 @@ def make_sql_subgraph(db_url: str, allow_tables: list[str]) -> SubgraphConfig:
         ],
         entry_state_type=SqlState,
         executor=executor,
-        fallback_chain=["rag_search"],
     )
