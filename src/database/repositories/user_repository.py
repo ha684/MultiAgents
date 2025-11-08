@@ -153,9 +153,9 @@ class UserRepository:
                             UserPermission.permission
                         )
                     )
-                    .where(User.id == uuid.UUID(user_id))
+                    .where(User.id == user_id)
                 )
-            return result.scalar_one_or_none()
+                return result.scalar_one_or_none()
         except Exception as e:
             logger.error(f"Error getting user with permissions: {str(e)}")
             raise DatabaseException("Failed to retrieve user with permissions")

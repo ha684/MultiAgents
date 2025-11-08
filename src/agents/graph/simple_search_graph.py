@@ -7,11 +7,11 @@ from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 import tiktoken
 
-from src.agents.basic import citation_agent, filename_agent
+from src.agents.basic import citation_agent
 from src.agents.graph.base import GraphAgentBase
-from src.domain.entities.graph import RunConfig
-from src.agents.graph.state import SimpleSearchState
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search
+from src.domain.entities.graph import RunConfig
+from src.domain.entities.state import SimpleSearchState
 from src.utils.logger_conf import logger
 
 
@@ -36,18 +36,6 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
         return RunConfig(
             graph_name=self.graph_name, recursion_limit=10, timeout_seconds=180
         )
-
-    async def extract_filename_node(self, state: SimpleSearchState) -> Dict[str, Any]:
-        """Extract filename from query if mentioned"""
-        logger.info(f"Extracting filename from query: {state['contextualized_query']}")
-        requested_filename = await filename_agent.ainvoke(
-            query=state["contextualized_query"]
-        )
-        logger.info(f"Requested filename: {requested_filename}")
-        if requested_filename:
-            logger.info(f"Detected filename: {requested_filename}")
-
-        return {"response_metadata": {"requested_filename": requested_filename}}
 
     async def retrieve_documents_node(self, state: SimpleSearchState) -> Dict[str, Any]:
         """
@@ -113,26 +101,68 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
         for i, doc in enumerate(retrieved_docs):
             doc.metadata["original_index"] = i
 
+        seen_urls: set[str] = set(state.get("seen_urls", set()))
+        seen_doc_ids: set[str] = set(state.get("seen_doc_ids", set()))
+        dup_ratio_threshold: float = float(state.get("duplicate_skip_ratio", 0.8))
+
+        urls = [
+            (doc.metadata.get("original_filename") or "").strip()
+            for doc in retrieved_docs
+        ]
+        doc_ids = [
+            (doc.metadata.get("document_id") or "").strip() for doc in retrieved_docs
+        ]
+
+        if search_method == "web":
+            keys = urls
+            seen_keys = seen_urls
+        else:
+            keys = doc_ids
+            seen_keys = seen_doc_ids
+
+        non_empty_keys = [k for k in keys if k]
+        new_keys = [k for k in non_empty_keys if k not in seen_keys]
+        duplicates = len(non_empty_keys) - len(new_keys)
+        total_keyed = len(non_empty_keys)
+        dup_ratio = (duplicates / total_keyed) if total_keyed else 1.0
+
+        early_terminate = (dup_ratio >= dup_ratio_threshold) or (len(new_keys) == 0)
+
+        response_meta = {
+            **state.get("response_metadata", {}),
+            "search_method": search_method,
+            "favicons": [doc.metadata.get("favicon", "") for doc in retrieved_docs],
+            "urls": urls,
+            "doc_ids": doc_ids,
+            "sources_count": len(retrieved_docs),
+            "total_cited": 0,
+            "duplicate_ratio": dup_ratio,
+            "early_terminate": early_terminate,
+            "new_urls": [u for u in urls if u and u not in seen_urls],
+            "new_doc_ids": [d for d in doc_ids if d and d not in seen_doc_ids],
+        }
+
         return {
             "cited_documents": retrieved_docs,
-            "response_metadata": {
-                **state.get("response_metadata", {}),
-                "search_method": search_method,
-                "favicons": [doc.metadata.get("favicon", "") for doc in retrieved_docs],
-                "urls": [
-                    doc.metadata.get("original_filename", "") for doc in retrieved_docs
-                ],
-                "sources_count": len(retrieved_docs),
-                "total_cited": 0,
-            },
+            "response_metadata": response_meta,
+            "early_terminate": early_terminate,
         }
 
     async def filter_citations_node(self, state: SimpleSearchState) -> Dict[str, Any]:
-        """Filter relevant documents using citation agent"""
         logger.info("Simple Search - Filtering citations")
 
-        retrieved_docs = state["cited_documents"]
+        if state.get("early_terminate"):
+            logger.info("Early terminate is True -> skip citation filtering")
+            cited_docs = []
+            meta = {
+                **state.get("response_metadata", {}),
+                "sources_count": 0,
+                "total_cited": 0,
+                "filter_skipped": True,
+            }
+            return {"cited_documents": cited_docs, "response_metadata": meta}
 
+        retrieved_docs = state["cited_documents"]
         if not retrieved_docs:
             logger.warning("No documents to filter")
             return {}
@@ -156,11 +186,6 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
             "cited_documents": cited_docs,
             "response_metadata": {
                 **state.get("response_metadata", {}),
-                "search_method": state.get("search_method", "rag"),
-                "favicons": [doc.metadata.get("favicon", "") for doc in cited_docs],
-                "urls": [
-                    doc.metadata.get("original_filename", "") for doc in cited_docs
-                ],
                 "sources_count": len(cited_docs),
                 "total_cited": len(cited_docs),
             },
@@ -170,13 +195,11 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
         """Construct the simple search graph"""
         workflow = StateGraph(SimpleSearchState)
 
-        workflow.add_node("extract_filename", self.extract_filename_node)
         workflow.add_node("retrieve_documents", self.retrieve_documents_node)
         workflow.add_node("filter_citations", self.filter_citations_node)
 
-        workflow.set_entry_point("extract_filename")
+        workflow.set_entry_point("retrieve_documents")
 
-        workflow.add_edge("extract_filename", "retrieve_documents")
         workflow.add_edge("retrieve_documents", "filter_citations")
 
         workflow.set_finish_point("filter_citations")

@@ -5,7 +5,6 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 
 from src.agents.basic.base import BaseAgent
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.llm.factory import get_llm
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
@@ -127,9 +126,7 @@ Remember: You are reformulating queries for retrieval systems, NOT answering que
 @singleton
 class QueryContextAgent(BaseAgent):
     def __init__(self):
-        llm = get_llm("nxchat")
-        self.llm_with_tools = llm.bind_tools([think])
-        self.max_iterations = 5
+        super().__init__()
         logger.info("Query Context Agent initialized successfully.")
 
     async def ainvoke(self, history: List[BaseMessage]) -> AIMessage:
@@ -150,9 +147,9 @@ class QueryContextAgent(BaseAgent):
         try:
             response = await self.iterative_llm_call_text(
                 messages=messages,
-                llm_with_tools=self.llm_with_tools,
+                llm_with_tools=self.thinking_llm,
                 available_tools={"think": think},
-                max_iterations=self.max_iterations,
+                max_iterations=5,
                 retry_prompt="Please provide the reformulated query now.",
                 fallback_value=history[-1].content,
             )

@@ -1,14 +1,17 @@
 # src/agents/executors/deep_research.py
 import asyncio
+import contextvars
 
 from src.agents.graph import research_graph
-from src.agents.graph.state import OrchestratorState, ResearchState
 from src.agents.shared.manager import execution_manager
 from src.domain.entities.graph import SubgraphOutput
+from src.domain.entities.state import OrchestratorState, ResearchState
 from src.utils.logger_conf import logger
 
 
-async def _run_deep_research(state: OrchestratorState) -> SubgraphOutput:
+async def _run_deep_research(
+    state: OrchestratorState,
+) -> SubgraphOutput:
     """Execute research subgraph"""
     context_metadata = state["conversation"][-1].additional_kwargs.get(
         "message_metadata", {}
@@ -21,35 +24,55 @@ async def _run_deep_research(state: OrchestratorState) -> SubgraphOutput:
         state["conversation"][-1].additional_kwargs.get("conversation_id")
     )
 
-    research_task = asyncio.create_task(research_graph.ainvoke(state=research_state))
+    sub_coro = await research_graph.ainvoke(research_state)
+
+    ctx = contextvars.copy_context()
+    research_task = ctx.run(lambda: asyncio.create_task(sub_coro))
+    skip_task = ctx.run(lambda: asyncio.create_task(execution.skip_event.wait()))
 
     done, pending = await asyncio.wait(
-        [research_task, asyncio.create_task(execution.skip_event.wait())],
-        return_when=asyncio.FIRST_COMPLETED,
+        [research_task, skip_task], return_when=asyncio.FIRST_COMPLETED
     )
 
-    for task in pending:
-        task.cancel()
+    for t in pending:
+        t.cancel()
         try:
-            await task
+            await t
         except asyncio.CancelledError:
             pass
 
     if execution.should_skip():
         logger.warning("User requested skip during research")
-        result = execution.partial_state or {
+        if not research_task.done():
+            research_task.cancel()
+            try:
+                await research_task
+            except asyncio.CancelledError:
+                pass
+        result_state = execution.partial_state or {
             "accumulated_knowledge": "",
             "cited_documents": [],
+            "response_metadata": {},
         }
+        message = "Skipped by user."
     else:
-        result = await research_task
-        execution.update_partial_state(result)
+        result_state = await research_task
+        execution.update_partial_state(result_state)
+        message = None
+
+    if result_state.status != "success":
+        return SubgraphOutput(
+            main_context="",
+            cited_documents=[],
+            response_metadata={},
+            subgraph_error=(result_state.message or "DeepResearchGraph failed"),
+        )
 
     return SubgraphOutput(
-        main_context=result.state.get("accumulated_knowledge", ""),
-        cited_documents=result.state.get("cited_documents", []),
-        response_metadata=result.state.get("response_metadata", {}),
-        subgraph_error=result.message,
+        main_context=result_state.state.get("accumulated_knowledge", ""),
+        cited_documents=result_state.state.get("cited_documents", []),
+        response_metadata=result_state.state.get("response_metadata", {}),
+        subgraph_error=message,
     )
 
 

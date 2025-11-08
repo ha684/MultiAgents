@@ -1,9 +1,9 @@
 # src/agents/basic/filename_agent.py
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel
+import json
 
-from src.llm.factory import get_llm
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from src.agents.basic.base import BaseAgent
 from src.utils.logger_conf import logger
 
 EXTRACT_FILENAME_PROMPT = """
@@ -55,13 +55,9 @@ Example:
 """
 
 
-class Filename(BaseModel):
-    filename: str | None
-
-
-class FilenameAgent:
+class FileNameAgent(BaseAgent):
     def __init__(self):
-        self.llm = get_llm("nxchat")
+        super().__init__()
 
     async def ainvoke(self, query: str) -> str | None:
         """
@@ -77,17 +73,10 @@ class FilenameAgent:
         try:
             system_prompt = SystemMessage(content=EXTRACT_FILENAME_PROMPT)
             user_prompt = HumanMessage(content=query)
-            prompt = ChatPromptTemplate.from_messages([system_prompt, user_prompt])
-
-            structured_llm = self.llm.with_structured_output(Filename).with_retry()
-            chain = prompt | structured_llm
-
-            response: Filename = await chain.ainvoke({})
-            if not response.filename:
-                return None
-            filename = response.filename
-
-            return filename if filename else None
+            messages = [system_prompt, user_prompt]
+            response = await self.simple_llm_call(messages)
+            filename = json.loads(response.content)["filename"]
+            return filename
         except Exception as e:
             logger.exception(f"Error extracting filename: {str(e)}")
             return None

@@ -13,20 +13,18 @@ from langgraph.graph.state import CompiledStateGraph
 import pandas as pd
 
 from src.agents.graph.base import GraphAgentBase
+from src.agents.prompts.agent_prompts import PromptTemplates
+from src.agents.shared.sql_validator import SqlValidator
+from src.agents.tools.server.mcp_retrieve_tools import think
+from src.database.sql_database import AsyncSQLDatabase
 from src.domain.entities.graph import RunConfig
-from src.agents.graph.schemas import (
+from src.domain.entities.state import SqlState
+from src.domain.schemas.graph import (
     ChartGenerationSchema,
     RelevanceValidationSchema,
     SqlAnalysisSchema,
     SqlGenerationSchema,
 )
-from src.agents.graph.state import SqlState
-from src.agents.shared.prompts import PromptTemplates
-from src.agents.shared.sql_validator import SqlValidator
-from src.agents.tools.server.mcp_retrieve_tools import think
-from src.core.config.settings import settings
-from src.database.sql_database import AsyncSQLDatabase
-from src.llm.factory import get_llm
 from src.utils import parse_response
 from src.utils.logger_conf import logger
 
@@ -42,25 +40,10 @@ class SqlGraph(GraphAgentBase[SqlState]):
     - Security: Only SELECT queries allowed
     """
 
-    allow_tables: List[str] = [
-        "conversations",
-        "messages",
-        "knowledge_bases",
-        "documents",
-        "document_qa",
-    ]
-
-    def __init__(self):
-        self.llm = get_llm("nxchat")
-        self.thinking_llm = self.llm.bind_tools([think])
+    def __init__(self, sql_database: AsyncSQLDatabase):
+        super().__init__()
         self.validator = SqlValidator()
-
-        self.sql_database = AsyncSQLDatabase.from_uri(
-            database_uri=settings.database_url,
-            sample_rows_in_table_info=3,
-            include_tables=self.allow_tables,
-        )
-
+        self.sql_database = sql_database
         self.graph_name = "SqlGraph"
         self.compiled_graph = self._build_graph()
         logger.info("SqlGraph initialized successfully with LangChain SQLDatabase.")
@@ -87,7 +70,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         )
 
         schema_info = await self.sql_database.get_table_info()
-        available_tables = ", ".join(self.allow_tables)
+        available_tables = ", ".join(self.sql_database.get_usable_table_names())
 
         user_prompt = HumanMessage(
             content=PromptTemplates.RELEVANCE_VALIDATION_HUMAN_PROMPT.format(
@@ -140,7 +123,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
                     "route": "sql_query",
                     "query_successful": False,
                     "error": "query_not_relevant_to_database",
-                    "available_tables": self.allow_tables,
                     "suggested_rephrase": suggested_rephrase,
                 },
             }

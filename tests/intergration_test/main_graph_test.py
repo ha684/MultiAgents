@@ -1,7 +1,8 @@
+# tests/intergration_test/main_graph_test.py
 from src.agents.main_graph import OrchestratorGraph
-from src.models.chat import SearchProvider, WebSearchConfig
+from src.domain.schemas.chat import SearchProvider, WebSearchConfig
 from langchain_core.messages import HumanMessage
-from src.config.settings import settings
+from src.core.config.settings import settings
 from src.utils.logger_conf import logger
 from langchain_core.runnables.schema import StreamEvent
 import asyncio
@@ -54,31 +55,21 @@ class OrchestratorStreamer:
 
             if kind == "on_chain_start":
                 stats["nodes"].append(name)
-                if name in ["SimpleSearchGraph", "ResearchGraph", "MainOrchestrator"]:
-                    self._print_box(f"🔄 Graph: {name}", color="blue")
+                if name in ["SimpleSearchGraph", "ResearchGraph", "OrchestratorGraph"]:
+                    self._print_box(f"🔄 Graph: {name}", color="cyan")
                 else:
                     self._print_box(f"🔄 NODE: {name}", color="blue")
 
             elif kind == "on_chain_end":
                 output = event.get("data", {}).get("output")
 
-                if name == "MainOrchestrator" and not is_graph_completed:
+                if name == "OrchestratorGraph" and not is_graph_completed:
                     is_graph_completed = True
                     final_result = output
                     continue
 
-                if name in ["SimpleSearchGraph", "ResearchGraph"]:
-                    self._print_box(f"✅ Graph: {name} COMPLETED", color="green")
-                    continue
-
-                if output and name not in [
-                    "RunnableSequence",
-                    "RunnableLambda",
-                    "route_after_router",
-                ]:
-                    self._print_box(
-                        f"✅ NODE: {name}", content=str(output), color="green"
-                    )
+                self._print_box(f"✅ Graph: {name} COMPLETED", color="green")
+                continue
 
             elif kind == "on_chat_model_stream":
                 chunk = event["data"]["chunk"]
@@ -129,7 +120,7 @@ async def main():
     orchestrator = OrchestratorGraph()
 
     human_message = HumanMessage(
-        content="lấy tất cả các cuộc trò chuyện đang active qua cho tôi.",
+        content="Given the recent advancements in nanotechnology and AI-assisted mineral extraction, how would the projected market value and extraction yield of gold in Southeast Asia evolve over the next decade, considering current geopolitical trends, environmental constraints, and the financial strategies of major multinational mining corporations operating in the region?",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]

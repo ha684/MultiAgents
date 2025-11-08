@@ -2,16 +2,15 @@
 from typing import Any, AsyncGenerator, Dict, List, Union
 
 from langchain_core.documents import Document
-from langchain_core.messages import BaseMessage
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.agents.basic.base import BaseAgent
-from src.agents.shared.prompts import PromptTemplates
-from src.domain.entities.graph import ResponseMode
+from src.agents.prompts.agent_prompts import PromptTemplates
 from src.core.config.llm_config import SupportedLLMProviders
-from src.llm.factory import get_llm
+from src.domain.entities.graph import ResponseMode
 from src.utils.decorators import singleton
+from src.utils import format_context_for_response
 from src.utils.logger_conf import logger
 
 HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research assistant with access to a collection of documents. Your task is to provide accurate, well-cited answers based strictly on the information in the provided documents.
@@ -34,7 +33,13 @@ HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research as
    - If information is missing or insufficient, clearly state: "I don't have enough information in the provided documents to answer [specific aspect]"
    - Saying "I don't know" is preferred over guessing or hallucinating
 
-4. **Inline citation format**:
+4. **CRITICAL: NO CALCULATIONS OR DERIVATIONS**:
+   - **NEVER perform arithmetic operations** (addition, subtraction, multiplication, division, percentages)
+   - **NEVER derive new numbers** from existing data (e.g., calculating totals, averages, growth rates, differences)
+   - **NEVER infer numbers** that aren't explicitly written in the documents
+   - **ONLY report numbers exactly as they appear** in the source documents
+
+5. **Inline citation format**:
    - Use format: `([descriptive text][number])` immediately after each factual claim
    - The number MUST be the document index (1, 2, 3, etc.) from the <documents> section
    - The descriptive text should briefly describe the source content
@@ -48,7 +53,7 @@ HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research as
    - Multiple sources: "Sales grew across regions ([Q1 Report][1], [Market Analysis][3])"
    - CRITICAL: Numbers [1], [2], [3] must exactly match document indexes
 
-5. **Clear structure**:
+6. **Clear structure**:
    - Use markdown formatting for readability (## headers, lists, **bold**)
    - Break complex information into sections with ## headers when helpful
    - Use bullet points (*) or numbered lists for multiple items
@@ -180,32 +185,6 @@ Respond appropriately when no documents are available, while being honest and he
 </critical_reminders>
 
 Remember: Honesty and language matching are your top priorities. It's better to admit you don't have the information than to make something up, and you must always respond in the same language the user used.
-"""
-
-CONFIRMATION_REQUIRED_PROMPT = """You are a helpful assistant that needs user confirmation before performing intensive research operations.
-
-<context>
-The user's query: {query}
-Suggested operation: {pending_route}
-</context>
-
-<task>
-Politely inform the user that their question requires deep research, which will take more time and resources. Ask for their confirmation to proceed.
-</task>
-
-<guidelines>
-1. **Language matching**: ALWAYS respond in the SAME language as the user's query
-2. **Be specific**: Briefly explain what kind of research will be performed
-3. **Set expectations**: Mention that this will take a bit longer but provide more comprehensive results
-4. **Clear call-to-action**: Make it easy for them to approve (e.g., "Would you like me to proceed?")
-5. **Keep it concise**: 2-3 sentences maximum
-</guidelines>
-
-<tone>
-Professional but friendly. Show that you're being considerate of their time while offering value.
-</tone>
-
-Remember: Match the user's language and be concise but clear about what you're asking permission for.
 """
 
 ERROR_MODE_PROMPT = """You are a helpful assistant dealing with a technical issue that prevented retrieving information.
@@ -608,24 +587,8 @@ class ResponseAgent(BaseAgent):
     """Agent responsible for generating the final response based on mode and context."""
 
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):
+        super().__init__(provider)
         logger.info("Response Agent initialized successfully.")
-        self.llm = get_llm(provider)
-
-    def _format_context_for_response(self, documents: List[Document]) -> str:
-        """Formats documents for the response prompt."""
-        if not documents:
-            return ""
-
-        xml_output = "<documents>\n"
-        for i, doc in enumerate(documents):
-            xml_output += f'  <document index="{i + 1}">\n'
-            content = getattr(doc, "page_content", "")
-            xml_output += "    <document_content>\n"
-            xml_output += f"{content}\n"
-            xml_output += "    </document_content>\n"
-            xml_output += "  </document>\n"
-        xml_output += "</documents>"
-        return xml_output
 
     def _format_execution_history(self, execution_history: List[Dict]) -> str:
         """Format execution history for prompts."""
@@ -653,14 +616,7 @@ class ResponseAgent(BaseAgent):
         current_query = history[-1].content
         execution_history = execution_history or []
 
-        if mode == ResponseMode.CONFIRMATION_REQUIRED:
-            system_prompt = CONFIRMATION_REQUIRED_PROMPT.format(
-                query=current_query, pending_route=pending_route or "deep_research"
-            )
-            system_message = SystemMessage(content=system_prompt)
-            return [system_message] + history
-
-        elif mode == ResponseMode.ERROR:
+        if mode == ResponseMode.ERROR:
             system_prompt = ERROR_MODE_PROMPT.format(
                 route=execution_history[-1]["subgraph"]
                 if execution_history
@@ -693,7 +649,7 @@ class ResponseAgent(BaseAgent):
 
         elif mode == ResponseMode.FOLLOWUP:
             if contexts:
-                formatted_context = self._format_context_for_response(contexts)
+                formatted_context = format_context_for_response(contexts)
                 system_message = SystemMessage(
                     content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
                 )
@@ -732,12 +688,12 @@ class ResponseAgent(BaseAgent):
 
         else:  # ResponseMode.STANDARD
             if contexts:
-                formatted_context = self._format_context_for_response(contexts)
+                formatted_context = format_context_for_response(contexts)
                 system_message = SystemMessage(
                     content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
                 )
                 new_query = HumanMessage(
-                    content=f"{formatted_context}\n---\n{current_query}"
+                    content=f"CONTEXT: {formatted_context}\n---\n QUERY: {current_query}"
                 )
                 return [system_message] + history[:-1] + [new_query]
             else:
@@ -749,17 +705,16 @@ class ResponseAgent(BaseAgent):
                 )
                 return [system_message] + history[:-1] + [new_query]
 
-    async def ainvoke(
-        self,
-        contexts: List[Document],
-        history: List[BaseMessage],
-        mode: str = ResponseMode.STANDARD,
-        accumulated_knowledge: str = "",
-        execution_history: List[Dict] = None,
-        error_message: str = None,
-        pending_route: str = None,
-    ) -> AIMessage:
+    async def ainvoke(self, state: Dict) -> AIMessage:
         """Generates response based on mode and context."""
+        mode = state.get("response_mode", ResponseMode.STANDARD)
+        contexts = state.get("cited_documents", [])
+        history = state["conversation"]
+        accumulated_knowledge = state.get("accumulated_context", "")
+        execution_history = state.get("execution_history", [])
+        error_message = state.get("subgraph_error", "")
+        pending_route = state.get("pending_route", None)
+
         messages = self._prepare_messages_by_mode(
             mode=mode,
             contexts=contexts,
@@ -769,8 +724,7 @@ class ResponseAgent(BaseAgent):
             error_message=error_message,
             pending_route=pending_route,
         )
-
-        response = await self.simple_llm_call(messages, self.llm)
+        response = await self.simple_llm_call(messages)
         return response
 
     def _prepare_messages(
@@ -786,7 +740,7 @@ class ResponseAgent(BaseAgent):
             logger.info(
                 f'Response Agent: Preparing response for query: "{current_query}" with {len(contexts)} contexts.'
             )
-            formatted_context = self._format_context_for_response(contexts)
+            formatted_context = format_context_for_response(contexts)
             system_message = SystemMessage(
                 content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
             )

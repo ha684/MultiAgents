@@ -2,7 +2,6 @@
 from src.domain.entities.graph import GraphMetadata, NodeMetadata
 from src.domain.schemas.stream import StreamPhase
 
-
 GRAPH_CONFIGS = {
     "MainOrchestrator": GraphMetadata(
         name="MainOrchestrator",
@@ -29,11 +28,11 @@ GRAPH_CONFIGS = {
     "SimpleSearchGraph": GraphMetadata(
         name="SimpleSearchGraph",
         nodes={
-            "extract_filename": NodeMetadata(
-                display_message="Identifying sources...",
-                stream_phase=StreamPhase.RETRIEVAL,
-                show_in_ui=False,
-            ),
+            # "extract_filename": NodeMetadata(
+            #     display_message="Identifying sources...",
+            #     stream_phase=StreamPhase.RETRIEVAL,
+            #     show_in_ui=False,
+            # ),
             "retrieve_documents": NodeMetadata(
                 display_message="Searching knowledge base...",
                 stream_phase=StreamPhase.RETRIEVAL,

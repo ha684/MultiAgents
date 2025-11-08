@@ -1,15 +1,15 @@
 # src/services/chat_service.py
-from typing import Any, AsyncGenerator, Dict, Generator, List, Union, cast
 import uuid
+from typing import Any, AsyncGenerator, Dict, Generator, List, Union, cast
 
+import tiktoken
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from qdrant_client.models import Filter, models
-import tiktoken
 
 from src.agents import Agent
 from src.agents.basic import (
     citation_agent,
-    filename_agent,
+    file_name_agent,
     query_context_agent,
     response_agent,
     summary_agent,
@@ -17,9 +17,15 @@ from src.agents.basic import (
 from src.core.config.settings import settings
 from src.core.exceptions.chat_exceptions import ValidationError
 from src.core.monitoring.observability import tracer
-from src.domain.schemas.chat import Message, RetrievalContext, TextPart
-from src.domain.schemas.chat import ChatRequest, SearchProvider, WebSearchConfig
-from src.domain.schemas.chat import Conversation
+from src.domain.schemas.chat import (
+    ChatRequest,
+    Conversation,
+    Message,
+    RetrievalContext,
+    SearchProvider,
+    TextPart,
+    WebSearchConfig,
+)
 from src.domain.schemas.stream import StreamPhase
 from src.rag.vectorstores import vector_retrieval
 from src.services.conversation_service import ConversationService
@@ -108,10 +114,7 @@ class ChatService:
 
         if messages_to_summarize:
             try:
-                summary_obj = await summary_agent.summarize_conversation(
-                    messages_to_summarize
-                )
-                new_summary_text = summary_obj.summary
+                summary_text = await summary_agent.ainvoke(messages_to_summarize)
 
                 last_summarized_message_model = await self.conv_service.list_messages(
                     conversation_id=conversation_details.conversation_id,
@@ -122,21 +125,17 @@ class ChatService:
                     "message_order"
                 ]
 
-                conversation_obj = Conversation(
+                await self.conv_service.update_conversation_summary(
                     conversation_id=conversation_details.conversation_id,
-                    is_active=True,
-                    name=conversation_details.name,
-                    summary=new_summary_text,
-                    summarized_up_to_message_order=new_checkpoint_order,
-                )
-                await self.conv_service.update_conversation(
-                    conversation=conversation_obj,
+                    summary=summary_text,
+                    summarized_up_to=new_checkpoint_order,
                     user_id=user_id,
                 )
 
                 return [
-                    SystemMessage(content=f"Conversation Summary:\n{new_summary_text}")
+                    SystemMessage(content=f"Conversation Summary:\n{summary_text}")
                 ] + recent_messages
+
             except Exception as e:
                 logger.warning(f"Failed to summarize conversation: {e}")
                 return recent_messages
@@ -229,7 +228,7 @@ class ChatService:
                     search_method = "web"
             else:
                 with tracer.start_as_current_span("FilenameAgent.extract_filename"):
-                    requested_filename = await filename_agent.ainvoke(
+                    requested_filename = await file_name_agent.ainvoke(
                         query=original_query
                     )
 
@@ -388,7 +387,7 @@ class ChatService:
                 "Searching for relevant documents...",
                 progress=0.3,
             )
-            requested_filename = await filename_agent.ainvoke(query=original_query)
+            requested_filename = await file_name_agent.ainvoke(query=original_query)
 
             filters: Filter = Filter(must=[])
 

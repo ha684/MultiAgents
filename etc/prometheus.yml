@@ -1,5 +1,5 @@
 global:
-  scrape_interval: 900s
+  scrape_interval: 9000s
 
 scrape_configs:
   - job_name: 'kms-app-local'

@@ -1,5 +1,5 @@
 # src/agents/graph/state.py
-from typing import Any, Dict, List, Literal, Optional, TypedDict
+from typing import Any, Dict, List, Literal, Optional, Set, TypedDict
 
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
@@ -49,13 +49,38 @@ class ExecutionRecord(TypedDict):
     result_summary: Optional[str]
 
 
+class ReflectionResult(TypedDict):
+    """Result from reflection agent"""
+
+    is_sufficient: bool
+    missing_aspects: List[str]
+    reasoning: str
+    suggested_next_action: str  # "search_more" | "switch_strategy" | "respond"
+    refined_query: Optional[str]
+    subgraphs_to_retry: List[str]
+
+
+class SearchIteration(TypedDict):
+    """Record of a single search iteration"""
+
+    iteration: int
+    subgraph: str
+    query: str
+    result_summary: str
+    documents_count: int
+    timestamp: str
+    success: bool  # Whether this subgraph returned useful results
+    error: Optional[str]  # Error message if subgraph failed
+
+
 class OrchestratorState(TypedDict):
     """Enhanced state for agentic orchestrator"""
 
     conversation: List[BaseMessage]
     contextualized_query: Optional[str]
 
-    route_decision: Optional[str]
+    route_decisions: Optional[List[str]]
+    pending_routes: Optional[List[str]]
     response_mode: Optional[str]
     execution_history: List[ExecutionRecord]
 
@@ -65,8 +90,25 @@ class OrchestratorState(TypedDict):
     main_context: Optional[str]
     cited_documents: Optional[List[Document]]
 
+    subgraph_policy: Dict[str, Any]
+    active_subgraphs: List[str]
+
     final_answer: Optional[str]
     response_metadata: Optional[Dict[str, Any]]
+
+    search_iterations: List[SearchIteration]
+    current_iteration: int
+    max_iterations: int
+    accumulated_context: str
+    reflection_result: Optional[ReflectionResult]
+
+    subgraph_results: Dict[str, Dict[str, Any]]
+    failed_subgraphs: Set[str]
+
+    seen_urls: Set[str]
+    seen_doc_ids: Set[str]
+    duplicate_skip_ratio: float
+    duplication_high: bool
 
 
 class SimpleSearchState(TypedDict):
@@ -76,6 +118,11 @@ class SimpleSearchState(TypedDict):
     contextualized_query: str
     cited_documents: List[Document]
     response_metadata: Dict[str, Any]
+
+    seen_urls: Set[str]
+    seen_doc_ids: Set[str]
+    duplicate_skip_ratio: float
+    early_terminate: bool
 
 
 class ResearchState(TypedDict):
@@ -104,6 +151,7 @@ class ResearchState(TypedDict):
 
     should_retry_query: bool
     is_rag_source_relevant: bool
+    citation_map: List[Dict[str, Any]]
 
 
 class SqlState(TypedDict):

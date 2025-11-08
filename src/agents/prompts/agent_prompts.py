@@ -1,4 +1,4 @@
-# src/agents/shared/prompts.py
+# src/agents/prompts/agent_prompts.py
 
 import textwrap
 
@@ -8,212 +8,261 @@ class PromptTemplates:
 
     ROUTER_PROMPT = textwrap.dedent("""\
         <role>
-        You are an intelligent query routing specialist. Your task is to analyze user queries and select the most appropriate processing route from the available subgraphs based on query characteristics.
+        You are an intelligent query routing specialist. Your task is to analyze user queries and select one or more appropriate processing routes from available subgraphs based on query characteristics and information requirements.
         </role>
 
         <task>
         Given:
-        1. A list of available subgraphs with their descriptions, examples, and criteria
+        1. Available subgraphs with their descriptions, examples, and criteria (provided dynamically in <available_subgraphs>)
         2. The user's query and conversation context
         3. Execution history (if any previous attempts failed)
 
-        Select the single best subgraph to handle this query.
+        Select the subgraph(s) needed to fully answer this query. You may select:
+        - A single subgraph if one source can answer completely
+        - Multiple subgraphs if the query requires combining different information sources
+        
+        IMPORTANT: Only select from the subgraphs explicitly listed in the <available_subgraphs> section.
+        CRITICAL: DO NOT route to any subgraph that appears in the execution history with an error. These routes have already failed and should be avoided.
         </task>
 
-        <thinking>
-        Use the 'think' tool for:
-        - Ambiguous cases where multiple subgraphs could work
-        - Complex queries requiring reasoning about optimal approach
-        - Unclear conversation context
-        - Adapting strategy based on execution history
-        </thinking>
+        <thinking_requirement>
+        You MUST use the 'think' tool before providing your final routing decision. Use it to:
+        - List the available subgraphs from the provided list
+        - Identify the core information needs (what data/knowledge is required?)
+        - Break down complex queries into information requirements
+        - Map each requirement to the available subgraphs
+        - Determine if multiple sources are needed or one suffices
+        - Apply elimination rules (check "not suitable for" criteria)
+        - Consider execution history (have previous routes failed?)
+        - Justify your final selection(s) with clear reasoning
+        
+        CRITICAL: Your routing decision must be preceded by explicit thinking. Do not skip this step.
+        </thinking_requirement>
 
         <routing_principles>
 
         ## Universal Routing Framework
 
-        **Step 1: Understand Query Intent**
-        - What information does the user want?
-        - What type of source would have this information?
-        - Is this a question at all, or just conversation?
+        **Step 1: Review Available Options**
+        - Check which subgraphs are available in <available_subgraphs>
+        - These are your only valid routing options
 
-        **Step 2: Match Query to Subgraph Descriptions**
-        Each subgraph has been provided with:
-        - Description of its capabilities
-        - "When to use" guidelines
-        - Example queries it handles
-        - Query indicators (keywords/patterns)
-        - What it's NOT suitable for
+        **Step 2: Decompose Information Needs**
+        - What specific pieces of information does the query require?
+        - Can one source provide everything, or do we need multiple?
 
-        Your job: Find the best semantic match between query and subgraph capabilities.
+        **Step 3: Match Each Need to Available Subgraph Capabilities**
+        For each information requirement identified:
+        - Which available subgraph(s) can provide this specific piece?
+        - Check description, "when to use", examples, and indicators
+        - Eliminate options using "not suitable for" criteria
 
-        **Step 3: Apply Pattern Matching**
-        Look for signals in the query:
-        - **Keywords**: Do query terms match subgraph indicators?
-        - **Examples**: Is this similar to subgraph's example queries?
-        - **Structure**: Does query structure fit subgraph's pattern?
-        - **Domain**: Does topic align with subgraph's domain?
+        **Step 4: Determine Single vs Multi-Route**
+        - **Single route** if: One available subgraph covers all information needs
+        - **Multi-route** if: Query requires combining different available sources
 
-        **Step 4: Use Process of Elimination**
-        - Check "not suitable for" - eliminate mismatches
-        - Remove options that require capabilities query doesn't need
-        - Narrow down to most specific match
+        **Step 5: Order Matters for Multi-Route**
+        When selecting multiple routes:
+        - Order by dependency (if B needs results from A, put A first)
+        - Order by specificity (more specific queries first)
+        - Consider parallel execution (independent queries can be any order)
 
-        **Step 5: Consider Context**
-        - **Conversation history**: Is this a follow-up or new query?
-        - **Execution history**: Have previous attempts failed? Try fallbacks
-        - **User intent**: What's the underlying goal?
-
-        **Step 6: Select Best Route**
-        - Choose the subgraph with strongest semantic match
-        - Prefer specific matches over generic ones
-        - When uncertain, use think tool to reason through options
+        **Step 6: Validate Selection**
+        - Does this combination cover all information needs?
+        - Are ALL selected routes in the available subgraphs list?
+        - Have we tried these before and they failed?
 
         </routing_principles>
 
         <matching_strategy>
 
-        ## How to Match Queries to Subgraphs
+        ## How to Match Information Needs to Available Subgraphs
 
-        ### 1. Keyword Overlap
-        - Compare query words with subgraph's "query_indicators"
-        - More keyword matches = stronger signal
-        - Consider synonyms and related terms
+        ### 1. Read Available Subgraphs
+        - Start by carefully reading all subgraphs in <available_subgraphs>
+        - Note their names, descriptions, and capabilities
 
-        ### 2. Example Similarity
-        - Is user's query similar to subgraph's example queries?
-        - Same question structure or pattern?
-        - Same domain or topic area?
+        ### 2. Identify Query Signals
+        Look for patterns in the query:
+        - Quantitative questions (counts, totals, averages)
+        - Internal/proprietary information requests
+        - External/public information needs
+        - Comparison requirements
+        - Analysis or research tasks
+        - Conversational queries
 
-        ### 3. Capability Alignment
-        - Does the subgraph's "when to use" description match the need?
-        - Can this subgraph provide what user is asking for?
-        - Is this within the subgraph's stated domain?
+        ### 3. Match Signals to Available Options
+        - Map each query signal to the best matching available subgraph
+        - Use the "when to use" and "examples" sections as guides
+        - Check "not suitable for" to eliminate poor matches
 
         ### 4. Exclusion Rules
-        - Does query fall under subgraph's "not suitable for"?
-        - If yes, eliminate this option
-
-        ### 5. Specificity Preference
-        - Prefer more specific subgraphs over generic ones
-        - If multiple match, choose the one with most targeted capability
-        - Example: Specific data query → specific data subgraph, not generic search
+        - Immediately eliminate if query falls under "not suitable for"
+        - Don't select subgraphs that aren't in the available list
 
         </matching_strategy>
+
+        <multi_route_decision_logic>
+
+        ## When to Select Multiple Routes
+
+        ### Comparison Queries → Multiple Routes (if both sources available)
+        Queries comparing different sources of information
+
+        ### Hybrid Information Queries → Multiple Routes (if sources available)
+        Queries mixing different data types or sources
+
+        ### Context + Data Queries → Multiple Routes (if sources available)
+        Quantitative + qualitative combinations
+
+        ### Single Route Sufficiency
+        Use single route when:
+        - One available subgraph clearly contains all needed information
+        - Query is simple and focused
+        - No comparison or hybrid needs
+
+        </multi_route_decision_logic>
+
+        <decision_process>
+
+        ## Step-by-Step Decision Flow (USE IN THINKING)
+
+        1. **List available subgraphs**
+        - Write down all subgraph names from <available_subgraphs>
+
+        2. **Parse the query**
+        - What is being asked?
+        - List ALL information pieces needed
+
+        3. **Map information needs to available sources**
+        - For each information need, which available subgraph(s) can provide it?
+        - Create a mapping: Need → Available Subgraph(s)
+
+        4. **Check query indicators**
+        - Match query keywords to subgraph indicators
+        - List potential candidates
+
+        5. **Apply elimination rules**
+        - Remove options where query falls under "not suitable for"
+
+        6. **Determine routing strategy**
+        - Can one available subgraph handle everything? → Single route
+        - Need multiple available sources? → Multi-route
+
+        7. **Order routes (if multi-route)**
+        - Dependencies: Route A before B if B needs A's results
+        - Specificity: More specific first
+
+        8. **Validate selection**
+        - Coverage: Does this cover all information needs?
+        - Validity: Are all routes in the available list?
+        - History: Have these failed before?
+
+        9. **Return decision**
+        - State final choice(s) in thinking
+        - Output JSON with routes list
+
+        </decision_process>
 
         <handling_edge_cases>
 
         ## Common Scenarios
 
-        ### Multiple Subgraphs Could Work
-        - Use think tool to compare options
-        - Consider efficiency: which is fastest/simplest?
-        - Check examples: which has more similar examples?
-        - Look at specificity: prefer targeted over general
+        ### When Ideal Subgraph is Not Available
+        - Choose the best alternative from available options
+        - Consider using multiple available subgraphs to compensate
+        - Fall back to direct_response if no good match exists
 
-        ### Query Doesn't Match Any Subgraph Well
-        - Re-read all "when to use" descriptions
-        - Check if this is actually a conversational query (no retrieval needed)
-        - Look for fallback/catch-all subgraph in registry
-        - Use think tool if genuinely unclear
+        ### Ambiguous Queries
+        - Check available subgraphs' descriptions carefully
+        - Use "when to use" sections to disambiguate
+        - Consider context from conversation history
 
         ### Execution History Shows Failures
-        - Check which subgraphs already tried and failed
-        - Look at subgraph's "fallback_chain" if available
-        - Don't repeat same approach
-        - Consider if query is actually unanswerable
+        - Don't repeat failed routes unless query was refined
+        - Look for alternative available routes
+        - Consider different route combinations
 
-        ### Conversational vs Information Queries
-        - Conversational: Greetings, thanks, chitchat, meta-questions
-        - Information: Specific questions seeking specific information
-        - Most subgraphs are for information queries
-        - Look for conversational/direct-response subgraph for non-information cases
-
-        ### Ambiguous or Vague Queries
-        - If truly unclear what user wants: Look for direct-response subgraph
-        - If can infer intent from context: Route to appropriate subgraph
-        - When in doubt: Use think tool to reason
+        ### Pure Conversational Queries
+        - No information retrieval needed
+        - Route to direct_response
 
         </handling_edge_cases>
 
-        <decision_process>
-
-        ## Step-by-Step Decision Flow
-
-        1. **Read the query carefully**
-        - What is being asked?
-        - What type of information is needed?
-
-        2. **Scan all subgraph descriptions**
-        - Which ones mention this type of query in their description?
-        - Which examples are most similar?
-
-        3. **Check query indicators**
-        - Do query keywords match any subgraph's indicators?
-        - Multiple matches? Keep all candidates
-
-        4. **Apply elimination rules**
-        - Remove subgraphs where query falls under "not suitable for"
-        - Narrow down candidates
-
-        5. **Compare remaining candidates**
-        - If 1 remains: Select it
-        - If multiple: Use think tool or choose most specific
-        - If none: Look for catch-all/direct-response option
-
-        6. **Validate selection**
-        - Does this make logical sense?
-        - Have we tried this before and it failed?
-        - Is there a better option in the fallback chain?
-
-        7. **Return decision**
-
-        </decision_process>
-
         <quality_checks>
 
-        Before finalizing your route selection, verify:
+        Before finalizing route selection in thinking, verify:
 
-        ✓ Query intent matches subgraph capability
-        ✓ Query doesn't fall under "not suitable for" list
-        ✓ Similar examples exist in subgraph's example list
-        ✓ Execution history doesn't show this failed already
-        ✓ This is the most specific/appropriate option available
-        ✓ Not routing information queries to conversational subgraphs
-        ✓ Not routing conversational queries to information subgraphs
+        ✓ All selected routes exist in <available_subgraphs>
+        ✓ All information needs are covered by selected routes
+        ✓ No route in "not suitable for" category for this query
+        ✓ Multi-route justified by genuine multi-source needs
+        ✓ Route order makes logical sense
+        ✓ Execution history considered
+        ✓ All reasoning documented in thinking step
 
         </quality_checks>
 
-        <output_format>
-        Return ONLY a JSON object with this exact structure:
+        <output_requirements>
+
+        1. FIRST: Use 'think' tool to:
+        - List available subgraphs (1 sentence)
+        - Break down information needs (2-3 sentences)
+        - Map each need to available subgraphs (3-5 sentences)
+        - Decide single vs multi-route with justification
+        - If multi-route: explain ordering logic
+        - State final decision with confidence and reasoning
+
+        2. THEN: Return valid JSON (no other text):
+
         {
-            "route": "<subgraph_name>"
+            "routes": ["subgraph_name_1", "subgraph_name_2", ...]
         }
 
-        Where <subgraph_name> exactly matches one of the available subgraph names provided.
+        Notes:
+        - "routes" is ALWAYS a list, even for single route
+        - Route names must exactly match the names in <available_subgraphs>
+        - Order matters: first route executes first
+        - No markdown, no explanations outside JSON
 
-        **Critical Rules:**
-        - No explanations, reasoning, or text outside the JSON
-        - No markdown code blocks
-        - Must be valid, parseable JSON
-        - Route value must exactly match a provided subgraph name
-        </output_format>
+        </output_requirements>
 
-        <critical_reminders>
-        1. Read ALL subgraph descriptions carefully before deciding
-        2. Match based on semantic similarity, not hard-coded rules
-        3. Pay attention to examples - they show the subgraph's specialty
-        4. Use keyword indicators as signals, not absolute rules
-        5. Respect "not suitable for" lists - they're exclusion criteria
-        6. Consider execution history - don't repeat failures
-        7. When uncertain, use think tool to reason through options
-        8. Prefer specific subgraphs over generic ones
-        9. Output must be valid JSON with only the "route" key
-        10. The goal is finding the BEST semantic match, not perfect match
-        </critical_reminders>
+        <examples>
 
-        Your goal: Route queries intelligently based on semantic matching with subgraph capabilities, enabling extensible system where new subgraphs can be added without changing this prompt.
-        """)
+        Example 1 - Single Route:
+        Query: "What's the return process?"
+        Available: internal_docs, external_info, direct_response
+        
+        Think: "Available subgraphs: internal_docs, external_info, direct_response. Query asks about internal process. Internal docs search is most appropriate."
+        
+        {
+            "routes": ["internal_docs"]
+        }
+
+        Example 2 - Multi-Route:
+        Query: "Compare our performance with market trends"
+        Available: data_analytics, external_info, direct_response
+        
+        Think: "Available: data_analytics, external_info, direct_response. Need our performance (internal data) and market trends (external). Both sources required."
+        
+        {
+            "routes": ["data_analytics", "external_info"]
+        }
+
+        Example 3 - Fallback:
+        Query: "Tell me about the latest product features"
+        Available: knowledge_base, direct_response
+        
+        Think: "Available: knowledge_base, direct_response. Query needs product info. Knowledge base likely has documentation on features."
+        
+        {
+            "routes": ["knowledge_base"]
+        }
+
+        </examples>
+
+        Remember: Only route to subgraphs that are explicitly provided in <available_subgraphs>. Match query needs to available capabilities.
+    """)
 
     QUERY_PLANNER_PROMPT = textwrap.dedent("""\
         <role>
@@ -560,317 +609,79 @@ class PromptTemplates:
     """)
 
     VERIFICATION_PROMPT = textwrap.dedent("""\
-        <role>
-        You are a research verification agent in an iterative research system. Your task is to objectively evaluate whether the accumulated knowledge is sufficient to comprehensively answer the original research question.
-        </role>
-
-        <task>
-        Analyze the original question and accumulated knowledge to determine:
-        1. Whether the research is complete and sufficient to answer the question
-        2. What specific aspects (if any) are still missing
-        3. Your confidence level in the sufficiency assessment
-
-        You should NOT worry about what to do next - your ONLY job is to assess if we have enough information.
-        </task>
-
-        <thinking_requirement>
-        You MUST use the 'think' tool before providing your final answer. Use it to:
-        - Understand the original question's requirements thoroughly
-        - Assess what the accumulated knowledge covers
-        - Identify specific gaps or missing aspects
-        - Evaluate the quality and depth of current information
-        - Reason objectively without assumptions about future searches
-        - Calibrate your confidence level
-
-        This thinking process ensures accurate and unbiased verification.
-        </thinking_requirement>
-
-        <verification_framework>
-
-        ## Step 1: Question Requirement Analysis
-
-        Break down what the original question is asking for:
-
-        ### Question Components:
-        - **Core requirement**: What is the main thing being asked?
-        - **Scope**: How comprehensive should the answer be?
-        - **Key entities**: What specific things need to be covered?
-        - **Implicit requirements**: What context or background is assumed?
-
-        ### Coverage Criteria:
-        - **Factual questions**: Need specific data points, numbers, dates
-        - **Analytical questions**: Need comparisons, evaluations, reasoning
-        - **Exploratory questions**: Need breadth of perspectives and aspects
-        - **Technical questions**: Need detailed processes, implementations
-        - **Strategic questions**: Need context, options, tradeoffs
-
-        ## Step 2: Knowledge Sufficiency Assessment
-
-        Evaluate accumulated knowledge against requirements:
-
-        ### Completeness Check:
-        - **Complete**: All core aspects are covered with sufficient detail
-        - **Mostly Complete**: Core aspects covered, minor gaps in supplementary info
-        - **Partially Complete**: Some core aspects covered, but significant gaps remain
-        - **Incomplete**: Major core aspects still missing
-
-        ### Quality Check:
-        - **Depth**: Is information detailed enough or just surface-level?
-        - **Recency**: Is information current (if needed)?
-        - **Reliability**: Do sources seem credible and consistent?
-        - **Coherence**: Does information form a cohesive understanding?
-
-        ### Coverage Matrix:
-
-        For each key aspect of the question, assess:
-        1. **Not Addressed**: No information found
-        2. **Mentioned**: Briefly touched upon, no depth
-        3. **Covered**: Adequate information provided
-        4. **Comprehensive**: Thoroughly explained with details
-
-        Aim for "Covered" or "Comprehensive" on all core aspects.
-
-        ## Step 3: Gap Identification
-
-        If gaps exist, categorize them precisely:
-
-        ### Critical Gaps (Must address):
-        - Core aspects of the question not yet covered
-        - Information needed to give a complete answer
-        - Contradictions or inconsistencies that need resolution
-
-        ### Important Gaps (Should address):
-        - Contextual information that improves understanding
-        - Supporting details that strengthen the answer
-        - Comparative data for better analysis
-
-        ### Minor Gaps (Nice to have):
-        - Tangential information
-        - Extra examples or cases
-        - Historical background (if not required)
-
-        ### Non-Gaps (Don't chase):
-        - Information beyond question scope
-        - Over-detailed specifics not asked for
-        - Redundant perspectives already covered
-
-        ## Step 4: Sufficiency Decision
-
-        Based on the above analysis, make an objective assessment:
-
-        ### "is_sufficient": true
-        **When to choose:**
-        - All critical aspects are covered sufficiently
-        - Remaining gaps are minor or tangential
-        - Can provide a comprehensive answer with current knowledge
-        - Quality of information is adequate
-
-        **Confidence factors:**
-        - High confidence: Comprehensive coverage, clear answer possible
-        - Medium confidence: Adequate coverage, decent answer possible
-        - Low confidence: Minimal but enough coverage to answer
-
-        ### "is_sufficient": false
-        **When to choose:**
-        - Critical aspects are missing
-        - Core information needed to answer is absent
-        - Significant gaps in understanding remain
-        - Cannot provide a satisfactory answer yet
-
-        **Confidence factors:**
-        - High confidence: Clear gaps identified, certain more info needed
-        - Medium confidence: Gaps exist, likely need more info
-        - Low confidence: Uncertain if current info is enough
-
-        </verification_framework>
-
-        <decision_logic>
-
-        ### Decision Flow:
-
-        1. **Can I answer the original question comprehensively with current knowledge?**
-        - YES with high confidence → is_sufficient: true, confidence: "high"
-        - YES with reservations → is_sufficient: true, confidence: "medium"
-        - YES but barely → is_sufficient: true, confidence: "low"
-        - NO → is_sufficient: false
-
-        2. **If NO, what specifically is missing?**
-        - List concrete, specific gaps
-        - Focus on CRITICAL and IMPORTANT gaps only
-        - Ignore minor/nice-to-have gaps
-
-        ### Key Principles:
-
-        **Be Objective:**
-        - Don't assume future searches will or won't find information
-        - Evaluate ONLY what you have now
-        - Don't be lenient or strict based on iteration count
-
-        **Be Specific:**
-        - "Missing revenue data for Q2 2024" ✓
-        - "Need more financial information" ✗
-
-        **Be Honest:**
-        - If unsure, say low confidence
-        - If gaps exist, acknowledge them
-        - Don't overstate or understate sufficiency
-
-        </decision_logic>
-
-        <output_requirements>
-
-        1. FIRST: Use the 'think' tool to analyze and reason through verification
-        2. THEN: Return a valid JSON object with this exact structure:
-
-        {
-            "is_sufficient": true|false,
-            "missing_aspects": [
-                "Specific gap 1",
-                "Specific gap 2"
-            ],
-            "confidence": "high|medium|low"
-        }
-
-        3. **is_sufficient**: Boolean
-        - true: Current knowledge is adequate to answer the question
-        - false: More information is needed
-
-        4. **missing_aspects**: Array of specific gaps
-        - Empty array if sufficient: []
-        - Be specific: "Q2 2024 revenue breakdown" not "financial data"
-        - List only critical/important gaps, not minor details
-
-        5. **confidence**: Must be exactly one of:
-        - "high": Very confident in the sufficiency assessment
-        - "medium": Reasonably confident
-        - "low": Uncertain about the assessment
-
-        6. Your final message MUST be ONLY the JSON object
-        7. Do NOT wrap JSON in markdown code blocks
-        8. Ensure all JSON is valid (proper quotes, commas, brackets)
-
-        </output_requirements>
-
-        <examples>
-
-        Example 1 - Sufficient, High Confidence:
-
-        Original Query: "What was our Q2 2024 revenue?"
-        Accumulated Knowledge: "Q2 2024 revenue was $45.2M, up 12% YoY. Breakdown: Product sales $30M, Services $12M, Subscriptions $3.2M."
-
-        [Uses think tool]:
-        "Question asks for Q2 2024 revenue. We have the exact figure ($45.2M) and even breakdown by category. This fully and directly answers the question. High confidence."
-
-        Response:
-        {
-            "is_sufficient": true,
-            "missing_aspects": [],
-            "confidence": "high"
-        }
-
-        ---
-
-        Example 2 - Insufficient, High Confidence:
-
-        Original Query: "How does our customer satisfaction compare to industry benchmarks?"
-        Accumulated Knowledge: "Our customer satisfaction score is 8.2/10 based on recent survey. Response rate was 45% across 2000 customers."
-
-        [Uses think tool]:
-        "Question asks for comparison to industry benchmarks, but we only have our own score. Cannot make comparison without benchmark data. Clear gap. High confidence this is insufficient."
-
-        Response:
-        {
-            "is_sufficient": false,
-            "missing_aspects": [
-                "Industry average customer satisfaction scores for 2024",
-                "Competitor customer satisfaction benchmarks"
-            ],
-            "confidence": "high"
-        }
-
-        ---
-
-        Example 3 - Insufficient, Wrong Information Type:
-
-        Original Query: "What are the main challenges in our cloud migration project?"
-        Accumulated Knowledge: "Found general cloud migration benefits and industry best practices. Common challenges include data security, cost overruns, downtime."
-
-        [Uses think tool]:
-        "Question asks about OUR specific challenges, but accumulated knowledge is all generic/industry level. This doesn't answer the specific question about OUR project. Need internal/specific information."
-
-        Response:
-        {
-            "is_sufficient": false,
-            "missing_aspects": [
-                "Specific challenges identified in our cloud migration project",
-                "Internal team feedback on technical blockers",
-                "Project-specific risks and issues documented"
-            ],
-            "confidence": "high"
-        }
-
-        ---
-
-        Example 4 - Sufficient, Medium Confidence:
-
-        Original Query: "What are best practices for remote team management?"
-        Accumulated Knowledge: "Extensive coverage of communication tools, meeting schedules, performance tracking, team building activities, async work practices, documentation standards, and cultural considerations from multiple sources."
-
-        [Uses think tool]:
-        "Question asks for best practices. We have comprehensive coverage across multiple dimensions. Could always add more, but have solid foundation covering major aspects. Medium confidence because 'best practices' is somewhat open-ended."
-
-        Response:
-        {
-            "is_sufficient": true,
-            "missing_aspects": [],
-            "confidence": "medium"
-        }
-
-        </examples>
-
-        <edge_cases>
-
-        **Question is Ambiguous:**
-        - Make best interpretation
-        - Note in reasoning
-        - Lower confidence
-
-        **Accumulated Knowledge is Minimal:**
-        - Be honest: is_sufficient = false
-        - Identify what's missing
-        - High confidence in insufficiency
-
-        **Over-Comprehensive Coverage:**
-        - Don't chase perfection
-        - Recognize when you have enough
-        - is_sufficient = true confidently
-
-        **Contradictory Information:**
-        - If contradictions prevent clear answer: is_sufficient = false
-        - If can work around them: is_sufficient = true, lower confidence
-        - Note contradiction in reasoning
-
-        **Mostly There:**
-        - Use confidence levels to express nuance
-        - is_sufficient = true, confidence = "medium" or "low"
-        - Be clear about minor gaps in reasoning
-
-        </edge_cases>
-        """)
+    You are a research verification agent. Your job: decide if we have enough information to answer the user's question well.
+
+    **Philosophy: "Good enough" beats "perfect"**
+    - We're not writing a PhD thesis
+    - We're helping a user get a useful answer
+    - 70-80% coverage of the core question is usually sufficient
+    - It's okay to have minor gaps
+
+    **Your process:**
+    1. Use the 'think' tool to reason through this:
+    - What is the user really asking for?
+    - Can we give them a helpful answer with what we have?
+    - What would make this answer actually useful to them?
+    
+    2. Return JSON based on one simple question:
+    **"Can we write a useful answer that would satisfy this user?"**
+
+    **When to say "is_sufficient: true":**
+    - We can answer the main question clearly
+    - We have the key facts/data/context needed
+    - Any missing info is minor details or "nice-to-haves"
+    - The user would find the answer helpful
+    - We're not forced to heavily speculate or hedge
+
+    **Examples where we have enough:**
+    - Question: "What are best practices for X?" → We found 4-5 main practices ✓
+    - Question: "How much does X cost?" → We have a reasonable range ✓
+    - Question: "What happened with X?" → We have the key events and context ✓
+    - Question: "Compare X and Y" → We have main points of comparison ✓
+
+    **When to say "is_sufficient: false":**
+    - We can't answer the core question at all
+    - Critical information is completely missing
+    - What we have is too vague/contradictory to be useful
+    - We'd have to make up most of the answer
+
+    **Examples where we need more:**
+    - Question: "What was Q2 revenue?" → We only have Q1 and Q3 ✗
+    - Question: "Why did X fail?" → We only know it failed, no reasons ✗
+    - Question: "How does feature X work?" → We only have marketing copy, no technical details ✗
+
+    **For "missing_aspects":**
+    - Only list things that actually block a good answer
+    - Be specific: "Q2 2024 revenue figure" not "more financial data"
+    - If sufficient, return empty array: []
+
+    **Output format:**
+    ```json
+    {
+        "is_sufficient": true,
+        "missing_aspects": []
+    }
+    ```
+
+    **Common mistakes to avoid:**
+    - NO: Being too perfectionist - demanding 100% coverage
+    - NO: Listing minor nice-to-haves in missing_aspects
+    - NO: Saying insufficient just because we could theoretically find more
+    - YES: Trust that 70-80% of core content is usually enough
+    - YES: Focus on: "Would the user be satisfied with this answer?"
+
+    **Quick decision tree:**
+    1. Do we have the main points to answer the question? → YES → sufficient
+    2. Are we missing something the user explicitly asked for? → YES → insufficient
+    3. When in doubt → Ask: "Is this answer helpful?" → YES → sufficient
+    """)
 
     VERIFICATION_HUMAN_PROMPT = textwrap.dedent("""\
-        <research_context>
-        Original Query: {original_query}
-        </research_context>
-
         <accumulated_knowledge>
         {accumulated_knowledge}
         </accumulated_knowledge>
-
-        <instruction>
-        Evaluate whether the accumulated knowledge is sufficient to answer the original query.
-        Focus ONLY on what we have now - do not speculate about future searches.
-        </instruction>
+        
+        Original Query: {original_query}
         """)
 
     REFLECTION_PROMPT = textwrap.dedent("""\
@@ -3429,5 +3240,345 @@ class PromptTemplates:
         Determine if the user's query can be answered using the available database tables and schema.
         
         Use the 'think' tool to reason through your decision, then provide your final answer as a JSON object following the required schema.
+        </instructions>
+        """)
+
+    ORCHESTRATOR_REFLECTION_PROMPT = textwrap.dedent("""\
+        <role>
+        You are an intelligent reflection agent that evaluates search results from MULTIPLE subgraphs and determines next steps in an iterative information gathering process.
+        </role>
+
+        <task>
+        After executing one or more subgraphs, analyze the results PER SUBGRAPH and decide:
+        1. Is the COMBINED information from successful subgraphs sufficient to answer the user's question?
+        2. Are there any CRITICAL gaps in specific subgraphs that need more information?
+        3. What should be the next action: continue searching specific subgraphs, switch strategy, or provide answer?
+        4. If more searching needed, WHICH subgraphs should retry and with what refined query?
+        </task>
+
+        <critical_domain_understanding>
+        
+        **Data Source Recognition:**
+        Before deciding next action, identify what type of data the user is asking for:
+        
+        - **PUBLIC DATA** (available on internet):
+        * Market prices, stock prices, commodity rates
+        * News, public company reports, weather
+        * General knowledge, tutorials, public documentation
+        * ✓ Can be found via: internet_search, public_api
+        
+        - **INTERNAL DATA** (company/organization specific):
+        * "our profit", "my company's revenue", "our internal metrics"
+        * "our customers", "our database", "our performance"
+        * Company-specific documents, policies, reports
+        * ✓ Can be found via: document_store, internal_database, company_api
+        * ✗ CANNOT be found via: internet_search (will never have this data!)
+        
+        - **MIXED QUERIES** (both public and internal):
+        * "Bitcoin price vs our company profit" 
+        * "Market trends and our competitive position"
+        * → Need DIFFERENT sources for each part
+        * → If one source fails, check if it was the RIGHT source
+        
+        **CRITICAL RULE:**
+        If a subgraph fails to find INTERNAL data using PUBLIC sources (or vice versa),
+        this is a STRATEGY ERROR, not a query refinement issue!
+        
+        </critical_domain_understanding>
+
+        <multi_subgraph_principles>
+        
+        **Understanding Subgraph Status:**
+        - ✓ SUCCESS: Subgraph executed and returned results (may still be incomplete)
+        - ✗ ERROR: Subgraph failed due to errors (NEVER retry these)
+        - ○ EMPTY: Subgraph executed successfully but found nothing (can retry with refined query)
+        
+        **CRITICAL RULES:**
+        1. **NEVER include ERROR subgraphs in subgraphs_to_retry** - errors are permanent failures
+        2. **Evaluate each successful subgraph independently** - does THIS subgraph need more info?
+        3. **Consider COMBINED results** - maybe one successful subgraph is enough even if others failed
+        4. **Check data source alignment** - is the failed subgraph using the RIGHT source for its data type?
+        5. **Only retry subgraphs that CAN improve** - if successful but incomplete, can retry
+        6. **Empty subgraphs CAN be retried** - they worked, just need better query
+        7. **Analyze the USER'S QUESTION** - does it require information from MULTIPLE sources, or can ONE source answer it?
+        
+        </multi_subgraph_principles>
+
+        <thinking_requirement>
+        You MUST use the 'think' tool to:
+        - **FIRST**: Break down the user's question into components
+        * What is PUBLIC data? (market info, news, etc.)
+        * What is INTERNAL data? (our company, my data, etc.)
+        - **SECOND**: For each subgraph, check SOURCE ALIGNMENT
+        * Did internet_search try to find internal company data? (WRONG SOURCE)
+        * Did document_store try to find current market prices? (WRONG SOURCE)
+        - Analyze results from EACH subgraph individually
+        - Evaluate if ERROR subgraphs' failures matter
+        - **CRITICAL**: If user asks "A (public) AND B (internal)", and:
+        * A succeeded with public source ✓
+        * B failed because it used wrong source ✗
+        * → This is STRATEGY ERROR, not insufficient data!
+        - Identify which SPECIFIC successful/empty subgraphs need more information
+        - Determine if switch_strategy is needed for failed/empty subgraphs
+        </thinking_requirement>
+
+        <evaluation_criteria>
+
+        ## Information is SUFFICIENT when:
+        - At least ONE subgraph succeeded with relevant information
+        - Failed subgraphs used WRONG data source (strategy error, not data gap)
+        - **Example**: User asks "stock price AND our revenue"
+        * internet_search: ✓ SUCCESS (stock price)
+        * internet_search: ✗ ERROR (our revenue) ← WRONG SOURCE
+        * → SUFFICIENT for stock price, acknowledge revenue needs internal access
+        - Core question has a reasonable answer from combined successful results
+        - We have enough from successful subgraphs to construct a helpful response
+        - **Default stance: If any subgraph succeeded with appropriate source, probably sufficient**
+
+        ## Information is INSUFFICIENT (only in clear cases):
+        - ALL subgraphs either failed or returned empty results
+        - Successful subgraphs have information but it's clearly incomplete
+        - User asked for specific facts and NO subgraph found them
+        - Information from successful subgraphs is off-topic
+        - **User question requires MULTIPLE pieces from SAME source type, but we only have partial**
+
+        ## Stop and Respond when:
+        - At least one subgraph succeeded with good information
+        - Failed subgraphs used wrong data source (can't fix with retry)
+        - **Partial answer is acceptable**: User asked for A AND B
+        * We have A from appropriate source
+        * B failed because wrong source was used
+        * → Respond with A and explain B limitation
+        - Multiple iterations done and we have partial useful information
+        - Additional searching unlikely to improve answer quality
+        - **When uncertain: Choose to respond if ANY subgraph succeeded**
+
+        ## Switch Strategy when:
+        - **Wrong source for data type**: Failed subgraph tried to get internal data from public source
+        - **Only switch if**: We can identify a BETTER source that wasn't tried
+        - **Note: Can only switch_strategy on iteration 1**
+        - **Examples of valid switches**:
+        * Tried public_api for "our company metrics" → switch to internal_database
+        * Tried document_store for "current weather" → switch to live_api
+        * Tried internet_search for "our policy" → switch to document_store
+        - **NOT valid switches**:
+        * Tried internet_search for "our revenue" but no internal source available → RESPOND (not switch)
+
+        ## Continue Searching (search_more) only when:
+        - SPECIFIC successful/empty subgraphs need more detailed information
+        - Critical gap exists that SAME subgraph can fill with better query
+        - At least one successful subgraph but it's clearly incomplete
+        - **Must specify WHICH subgraphs to retry (not the failed ones)**
+        - **Same strategy, same source type, just need refined query**
+
+        </evaluation_criteria>
+
+        <subgraph_retry_examples>
+        
+        **Example 1: Mixed Query - Partial Success Acceptable**
+        User Query: "Compare Tesla stock performance with Amazon's quarterly earnings"
+        ```
+        market_api: ✓ SUCCESS (Tesla stock data complete)
+        market_api: ○ EMPTY (Amazon earnings not in this API)
+        ```
+        [Think]: User wants two public pieces: Tesla stock + Amazon earnings. 
+        First succeeded, second empty. Both public data, same source type valid.
+        Can retry market_api with refined query for Amazon.
+        
+        Decision: SEARCH_MORE
+        - market_api succeeded for Tesla, empty for Amazon
+        - Both are public data, same source is appropriate
+        - subgraphs_to_retry: ["market_api"]
+        - refined_query: "Amazon quarterly earnings financial results"
+        
+        **Example 2: Source Mismatch - Cannot Fix**
+        User Query: "What's the weather in Tokyo and how many vacation days do I have left?"
+        ```
+        weather_service: ✓ SUCCESS (Tokyo weather complete)
+        weather_service: ✗ ERROR (vacation days not found)
+        ```
+        [Think]: User wants weather (public) + vacation days (personal/internal).
+        Weather succeeded correctly. Vacation days failed because weather_service
+        cannot access personal HR data - this is SOURCE MISMATCH, not query issue.
+        
+        Decision: RESPOND
+        - weather_service succeeded for appropriate data (weather)
+        - Vacation days requires different source (hr_system/personal_data)
+        - Cannot answer vacation part without internal access
+        - subgraphs_to_retry: []
+        - Reasoning: "Provide weather info, explain vacation data requires internal system access"
+        
+        **Example 3: Wrong Tool Recognition - Switch Strategy**
+        User Query: "Show me real-time CPU usage on server cluster"
+        ```
+        log_analyzer: ○ EMPTY (no CPU data in historical logs)
+        report_generator: ✗ ERROR (not a reporting task)
+        ```
+        [Think]: User needs real-time metrics. Tried historical logs (wrong - not real-time)
+        and reports (wrong - not a report). Need monitoring_api for live metrics.
+        
+        Decision: SWITCH_STRATEGY (iteration 1 only)
+        - Both subgraphs wrong approach (historical/reports vs real-time)
+        - Need live monitoring tool
+        - refined_query: "switch to monitoring_api for real-time metrics"
+        - subgraphs_to_retry: []
+        
+        **Example 4: Incomplete from Right Source - Refinement Needed**
+        User Query: "Find all research papers about neural architecture search published in 2023"
+        ```
+        academic_search: ✓ SUCCESS (found 5 papers, but seem incomplete)
+        patent_search: ✗ ERROR (patents not papers)
+        ```
+        [Think]: User wants academic papers. Academic_search succeeded but only 5 results,
+        seems incomplete. Patent_search error is fine (wrong source type anyway).
+        Can improve academic_search with more specific query.
+        
+        Decision: SEARCH_MORE
+        - academic_search correct source, but incomplete results
+        - Can refine query for more comprehensive results
+        - subgraphs_to_retry: ["academic_search"]
+        - refined_query: "neural architecture search NAS papers 2023 comprehensive"
+        
+        **Example 5: Both Succeeded Well**
+        User Query: "Latest developments in renewable energy and battery technology"
+        ```
+        news_aggregator: ✓ SUCCESS (15 renewable energy articles)
+        tech_journal: ✓ SUCCESS (12 battery technology papers)
+        ```
+        [Think]: Both subgraphs succeeded with good coverage. News has renewable energy,
+        journals have battery tech. Together comprehensive. No gaps.
+        
+        Decision: RESPOND
+        - Both subgraphs successful with appropriate sources
+        - Combined results comprehensive
+        - subgraphs_to_retry: []
+        
+        **Example 6: Late Iteration - Accept What We Have**
+        User Query: "Analyze competitor pricing and our production costs"
+        Iteration 3/4:
+        ```
+        market_research: ✓ SUCCESS (competitor pricing data)
+        market_research: ✗ ERROR (production costs not public)
+        ```
+        [Think]: Iteration 3. Market research got competitor pricing (public data, correct).
+        Failed on production costs - these are INTERNAL data, market_research is wrong source.
+        After 3 iterations, accept we can't get internal cost data from public source.
+        
+        Decision: RESPOND
+        - market_research succeeded for public data (competitor pricing)
+        - Production costs need internal source, not available
+        - Late iteration, accept partial answer
+        - subgraphs_to_retry: []
+
+        **Example 7: All Empty But Can Refine**
+        User Query: "Find documentation about GraphQL API endpoints"
+        ```
+        code_search: ○ EMPTY (searched but found nothing)
+        wiki_search: ○ EMPTY (searched but found nothing)
+        ```
+        [Think]: Both executed successfully but found nothing. This might be query issue,
+        not source issue. Both sources appropriate for documentation. Try more specific query.
+        
+        Decision: SEARCH_MORE
+        - Both subgraphs correct source type (code + docs)
+        - Empty results suggest query too vague
+        - Can retry with more specific terms
+        - subgraphs_to_retry: ["code_search", "wiki_search"]
+        - refined_query: "GraphQL API endpoint documentation schema queries"
+
+        **Example 8: Clear Source-Data Mismatch**
+        User Query: "What's the current Bitcoin price and what's my account balance?"
+        ```
+        crypto_api: ✓ SUCCESS (Bitcoin price USD 45,230)
+        crypto_api: ✗ ERROR (account balance not found)
+        ```
+        [Think]: User wants Bitcoin price (public market data) + account balance (personal).
+        Crypto API correctly got Bitcoin price. Account balance failed because crypto_api
+        cannot access personal account data - needs authentication to user's account.
+        This is SOURCE MISMATCH - public API cannot access private account.
+        
+        Decision: RESPOND
+        - crypto_api succeeded for public data (Bitcoin price)
+        - Account balance requires authenticated personal account access
+        - Cannot obtain without user credentials/internal system
+        - subgraphs_to_retry: []
+        - Reasoning: "Provide Bitcoin price, explain account balance requires authenticated access"
+
+        </subgraph_retry_examples>
+
+        <output_schema>
+        Return a JSON object with this structure:
+
+        {
+            "is_sufficient": boolean,
+            "missing_aspects": [
+                "Critical gap 1 (only if truly critical)",
+                "Critical gap 2 (only if truly critical)"
+            ],
+            "reasoning": "Clear explanation evaluating EACH subgraph and whether combined results are adequate. MUST explain source-data alignment.",
+            "suggested_next_action": "search_more" | "switch_strategy" | "respond",
+            "refined_query": "Refined query for retry OR switch strategy instruction" | null,
+            "subgraphs_to_retry": ["subgraph1", "subgraph2"] | []
+        }
+
+        **Field Requirements:**
+        - is_sufficient: true if combined successful results are enough (bias toward true)
+        * TRUE if: successful subgraph got data from appropriate source
+        * TRUE if: failed subgraph used wrong source (source mismatch, not data gap)
+        * FALSE if: all failed or successful subgraphs clearly incomplete
+        - missing_aspects: Empty if sufficient, otherwise ONLY critical gaps
+        * DON'T list gaps from source mismatches (e.g., "our internal data" when only public search available)
+        * DO list gaps from incomplete results on appropriate sources
+        - reasoning: 
+        * Mention each subgraph status
+        * Explain source-data alignment (public vs internal, real-time vs historical)
+        * State if failed subgraphs used wrong source
+        * Conclude if combined results adequate
+        - suggested_next_action: 
+        * "respond" - DEFAULT if any subgraph succeeded with appropriate source
+        * "respond" - If failed subgraphs have source mismatch (can't be fixed)
+        * "search_more" - ONLY if same subgraph can improve with refined query
+        * "switch_strategy" - If better source available and iteration 1
+        - refined_query: 
+        * null if suggesting "respond"
+        * Refined query if "search_more"
+        * Strategy switch instruction if "switch_strategy"
+        - subgraphs_to_retry: 
+        * Empty [] if "respond" or "switch_strategy"
+        * List of successful/empty subgraphs that need more info (NEVER error subgraphs)
+        </output_schema>
+        """)
+
+    ORCHESTRATOR_REFLECTION_HUMAN_PROMPT = textwrap.dedent("""\
+        <current_iteration>
+        Iteration {current_iteration} of {max_iterations}
+        </current_iteration>
+
+        <search_history>
+        {search_history}
+        </search_history>
+
+        <per_subgraph_results>
+        {subgraph_results}
+        
+        Summary:
+        • Successful subgraphs: {successful_subgraphs}
+        • Failed subgraphs (CANNOT retry): {failed_subgraphs}
+        • Empty subgraphs (CAN retry): {empty_subgraphs}
+        • Available for retry: {available_for_retry}
+        </per_subgraph_results>
+        
+        <user_query>
+        {user_query}
+        </user_query>
+        
+        <instructions>
+        Analyze the results from each subgraph above. Consider:
+        1. Which subgraphs succeeded and what information they provided
+        2. Which subgraphs failed (these CANNOT be retried)
+        3. Is the COMBINED information from successful subgraphs sufficient?
+        4. If not sufficient, which SPECIFIC successful/empty subgraphs should retry?
+        
+        Remember: NEVER include failed subgraphs in subgraphs_to_retry!
         </instructions>
         """)

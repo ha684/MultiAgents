@@ -35,7 +35,7 @@ async def upload_document(
     """
     Upload a document to a knowledge base.
     """
-    MAX_FILE_SIZE = 100 * 1024 * 1024
+    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
     content_length = request.headers.get("content-length")
     if content_length and int(content_length) > MAX_FILE_SIZE:

@@ -1,0 +1,136 @@
+version: '3.8'
+
+services:
+  # Test PostgreSQL Database
+  postgres-test:
+    image: postgres:16-alpine
+    container_name: kms-postgres-test
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: test_kms_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # Test Redis Cache
+  redis-test:
+    image: redis:7-alpine
+    container_name: kms-redis-test
+    ports:
+      - "6380:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-test-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # Test Qdrant Vector Database
+  qdrant-test:
+    image: qdrant/qdrant:latest
+    container_name: kms-qdrant-test
+    ports:
+      - "6334:6333"
+      - "6335:6334"
+    volumes:
+      - qdrant-test-data:/qdrant/storage
+    environment:
+      - QDRANT_ALLOW_RECOVERY=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # Test MinIO Object Storage (Optional)
+  minio-test:
+    image: minio/minio:latest
+    container_name: kms-minio-test
+    ports:
+      - "9001:9000"
+      - "9091:9090"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9090"
+    volumes:
+      - minio-test-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  # Test Application (Optional - for E2E tests)
+  app-test:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: kms-app-test
+    environment:
+      - ENVIRONMENT=test
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres-test:5432/test_kms_db
+      - REDIS_HOST=redis-test
+      - REDIS_PORT=6379
+      - QDRANT_HOST=qdrant-test
+      - QDRANT_PORT=6333
+      - MINIO_ENDPOINT=minio-test:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - JWT_SECRET_KEY=test_secret_key_for_testing
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres-test:
+        condition: service_healthy
+      redis-test:
+        condition: service_healthy
+      qdrant-test:
+        condition: service_healthy
+      minio-test:
+        condition: service_healthy
+    networks:
+      - test-network
+    command: >
+      sh -c "
+        echo 'Waiting for services to be ready...' &&
+        sleep 5 &&
+        pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=html
+      "
+    volumes:
+      - ./tests:/app/tests
+      - ./src:/app/src
+      - ./htmlcov:/app/htmlcov
+
+volumes:
+  postgres-test-data:
+    driver: local
+  redis-test-data:
+    driver: local
+  qdrant-test-data:
+    driver: local
+  minio-test-data:
+    driver: local
+
+networks:
+  test-network:
+    driver: bridge
+    name: kms-test-network
+

@@ -65,8 +65,6 @@ class ConversationRepository:
                 conv_model = result.scalar_one_or_none()
                 if not conv_model:
                     return None
-                await session.flush()
-                await session.refresh(conv_model)
                 result = Conversation(
                     conversation_id=str(conv_model.id),
                     is_active=conv_model.is_active,
@@ -80,37 +78,77 @@ class ConversationRepository:
             logger.error("Error getting conversation")
             raise e
 
-    async def update_conversation(
-        self, conversation: Conversation, user_id: str
+    async def update_conversation_metadata(
+        self,
+        conversation_id: uuid.UUID,
+        name: str,
+        is_active: bool,
+        user_id: str,
     ) -> Conversation:
-        """Update a conversation"""
+        """Update user-controllable fields only"""
         try:
             async with DatabaseSession() as session:
                 query = select(ConversationModel).filter_by(
-                    id=conversation.conversation_id, user_id=user_id
+                    id=conversation_id, user_id=user_id
                 )
-
                 result = await session.execute(query)
                 conv_model = result.scalar_one_or_none()
-                if conv_model:
-                    conv_model.is_active = conversation.is_active
-                    conv_model.name = conversation.name
-                    conv_model.summary = conversation.summary
-                    conv_model.summarized_up_to_message_order = (
-                        conversation.summarized_up_to_message_order
-                    )
-                    conv_model.updated_at = datetime.now()
-                await session.flush()
+
+                if not conv_model:
+                    raise ValueError(f"Conversation {conversation_id} not found")
+
+                conv_model.name = name
+                conv_model.is_active = is_active
+                conv_model.updated_at = datetime.now()
+
                 await session.refresh(conv_model)
-                result = Conversation(
+
+                return Conversation(
                     conversation_id=str(conv_model.id),
                     is_active=conv_model.is_active,
                     name=conv_model.name,
+                    summary=conv_model.summary,
+                    summarized_up_to_message_order=conv_model.summarized_up_to_message_order,
                 )
-            return result
         except SQLAlchemyError as e:
-            logger.error(f"Error updating conversation: {e.args[0]}")
-            raise e
+            logger.error(f"Error updating conversation metadata: {e}")
+            raise
+
+    async def update_conversation_summary(
+        self,
+        conversation_id: uuid.UUID,
+        summary: str,
+        summarized_up_to: int,
+        user_id: str,
+    ) -> Conversation:
+        """Update summary fields only"""
+        try:
+            async with DatabaseSession() as session:
+                query = select(ConversationModel).filter_by(
+                    id=conversation_id, user_id=user_id
+                )
+                result = await session.execute(query)
+                conv_model = result.scalar_one_or_none()
+
+                if not conv_model:
+                    raise ValueError(f"Conversation {conversation_id} not found")
+
+                conv_model.summary = summary
+                conv_model.summarized_up_to_message_order = summarized_up_to
+                conv_model.updated_at = datetime.now()
+
+                await session.refresh(conv_model)
+
+                return Conversation(
+                    conversation_id=str(conv_model.id),
+                    is_active=conv_model.is_active,
+                    name=conv_model.name,
+                    summary=conv_model.summary,
+                    summarized_up_to_message_order=conv_model.summarized_up_to_message_order,
+                )
+        except SQLAlchemyError as e:
+            logger.error(f"Error updating conversation summary: {e}")
+            raise
 
     async def list_conversations(self, user_id: str) -> List[Conversation]:
         """List all conversations, optionally filtered by app_name and user"""
