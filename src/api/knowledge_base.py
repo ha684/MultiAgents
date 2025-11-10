@@ -2,7 +2,7 @@
 from typing import List, Sequence
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from langchain_core.documents import Document
 
 from src.database.models.user import User
@@ -142,27 +142,21 @@ async def get_qa_pairs_by_kb_id(
         raise e
 
 
-@router.put("/{kb_id}/update")
+@router.patch("/{kb_id}")
 async def update_knowledge_base(
+    kb_id: UUID,
     knowledge_base: KnowledgeBaseUpdateRequest,
     current_user: User = Depends(get_current_user),
 ) -> KnowledgeBaseResponse:
-    """
-    Update a knowledge base.
+    result = await kb_service.update_knowledge_base(
+        kb_id=kb_id,
+        name=knowledge_base.name,
+        description=knowledge_base.description,
+        is_active=knowledge_base.is_active,
+        user_id=current_user.id,
+    )
 
-    Args:
-        knowledge_base: The knowledge base to update.
+    if not result:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
 
-    Returns:
-        The updated knowledge base.
-    """
-    try:
-        return await kb_service.update_knowledge_base(
-            kb_id=knowledge_base.kb_id,
-            name=knowledge_base.name,
-            description=knowledge_base.description,
-            is_active=knowledge_base.is_active,
-            user_id=current_user.id,
-        )
-    except Exception as e:
-        raise e
+    return result

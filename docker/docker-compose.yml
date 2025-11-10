@@ -25,7 +25,7 @@ services:
       ports:
         - "${REDIS_PORT:-6379}:6379"
       volumes:
-        - redis_data:/data
+        - redis_data:/data  
       environment:
         - REDIS_ARGS=--requirepass ${REDIS_AUTH:-myredissecret}
       healthcheck:
@@ -136,8 +136,6 @@ services:
       - ../etc/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
-    # depends_on:
-    #   - worker
 
   jaeger:
     image: jaegertracing/all-in-one:1.50

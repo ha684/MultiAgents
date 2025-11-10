@@ -300,7 +300,9 @@ async def _publish_status_event(
                 processed_at=getattr(document, "processed_at", None),
             ).model_dump(mode="json"),
         )
+        await event_publisher.disconnect()
     except Exception as e:
+        await event_publisher.disconnect()
         logger.error(f"Failed to publish status event: {e}")
 
 

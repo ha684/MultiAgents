@@ -12,13 +12,6 @@ class BaseEventPublisher(abc.ABC):
     """
 
     @abc.abstractmethod
-    def connect(self):
-        """Establishes a connection to the event broker."""
-        raise NotImplementedError(
-            "Connect method must be implemented by concrete classes."
-        )
-
-    @abc.abstractmethod
     def disconnect(self):
         """Closes the connection to the event broker."""
         raise NotImplementedError(

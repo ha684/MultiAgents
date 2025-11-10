@@ -31,19 +31,14 @@ from src.api import ROUTERS
 async def lifespan(app: FastAPI):
     """Lifespan event handler for FastAPI application"""
     logger.info("Starting up application...")
-    app.state.redis = redis_client.get()
     try:
+        await redis_client.connect()
         setup_tracing(app)
         await database_connector.initialize()
-        logger.info("Database connection initialized successfully")
         await vector_storage_migration.run_migrations()
-        logger.info("Vector storage migration completed successfully")
         set_llm_cache(redis_client)
-        logger.info("LLM cache initialized successfully")
     except Exception as e:
-        raise ConnectionError(
-            f"Failed to initialize database: {e}, Run docker compose first"
-        )
+        raise ConnectionError(f"Failed to initialize: {e}")
 
     yield
 
@@ -54,9 +49,8 @@ async def lifespan(app: FastAPI):
         await redis_client.clear("llm_cache")
         await redis_client.clear("rate_limit")
         await redis_client.close()
-        logger.info("Database connection closed successfully")
     except Exception as e:
-        logger.error(f"Error closing database connection: {e}")
+        raise Exception(f"Failed to close: {e}")
 
 
 app = FastAPI(
