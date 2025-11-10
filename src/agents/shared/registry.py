@@ -101,7 +101,6 @@ class SubgraphRegistry:
             sections.append(f"\n## {profile.display_name}")
             sections.append(f"**Route Name:** `{profile.name}`\n")
 
-            # Primary behavior
             behavior = profile.primary_behavior
             sections.append("**Core Capability:**")
             sections.append(f"{behavior.action.capability}\n")
@@ -119,17 +118,14 @@ class SubgraphRegistry:
                     f"\n**Do NOT route here if:** {' | '.join(behavior.condition.exclude_when)}"
                 )
 
-            # Routing instruction
             sections.append("\n**Routing Guidance:**")
             sections.append(f"{behavior.action.router_instruction}")
 
-            # Journeys (if any)
             if profile.journeys:
                 sections.append("\n**Typical User Flows:**")
                 for journey in profile.journeys:
                     sections.append(f"- {journey.name}: {journey.description}")
 
-            # Examples
             if profile.canonical_examples:
                 sections.append("\n**Example Queries:**")
                 for ex in profile.canonical_examples[:3]:

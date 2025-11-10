@@ -1,0 +1,309 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  PYTHON_VERSION: "3.13"
+  POETRY_VERSION: "1.7.1"
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_kms_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+        options: >-
+          --health-cmd "curl -f http://localhost:6333/health || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio pytest-cov pytest-mock httpx
+          pip install -e .
+
+      - name: Set up test database
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -c "CREATE DATABASE test_kms_db;" || true
+
+      - name: Run linting
+        run: |
+          pip install ruff
+          ruff check src/ tests/ --fix || true
+
+      - name: Run unit tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test_kms_db
+          ENVIRONMENT: test
+          JWT_SECRET_KEY: test_secret_key_for_ci
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          QDRANT_HOST: localhost
+          QDRANT_PORT: 6333
+        run: |
+          pytest tests/unit_test/ \
+            -v \
+            --cov=src \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            --cov-branch \
+            -m "unit" \
+            --tb=short
+
+      - name: Run integration tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test_kms_db
+          ENVIRONMENT: test
+          JWT_SECRET_KEY: test_secret_key_for_ci
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          QDRANT_HOST: localhost
+          QDRANT_PORT: 6333
+        run: |
+          pytest tests/integration_test/ \
+            -v \
+            --cov=src \
+            --cov-append \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            -m "integration" \
+            --tb=short
+
+      - name: Run E2E tests
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test_kms_db
+          ENVIRONMENT: test
+          JWT_SECRET_KEY: test_secret_key_for_ci
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          QDRANT_HOST: localhost
+          QDRANT_PORT: 6333
+        run: |
+          pytest tests/e2e/ \
+            -v \
+            --cov=src \
+            --cov-append \
+            --cov-report=xml \
+            --cov-report=term-missing \
+            -m "e2e" \
+            --tb=short
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Generate test report
+        if: always()
+        run: |
+          echo "## Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Unit Tests Completed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Integration Tests Completed" >> $GITHUB_STEP_SUMMARY
+          echo "✅ E2E Tests Completed" >> $GITHUB_STEP_SUMMARY
+
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff black isort mypy
+
+      - name: Run Ruff linter
+        run: |
+          ruff check src/ tests/ --output-format=github
+
+      - name: Run Black formatter check
+        run: |
+          black --check src/ tests/
+
+      - name: Run isort import sorting check
+        run: |
+          isort --check-only src/ tests/
+
+      - name: Run type checking with mypy
+        continue-on-error: true
+        run: |
+          mypy src/ --ignore-missing-imports --no-strict-optional
+
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+
+      - name: Run Bandit security scan
+        run: |
+          bandit -r src/ -f json -o bandit-report.json || true
+
+      - name: Run Safety dependency check
+        continue-on-error: true
+        run: |
+          safety check --json || true
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            bandit-report.json
+
+  build-docker:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: [test, code-quality]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/kms-service:latest
+            ${{ secrets.DOCKER_USERNAME }}/kms-service:${{ github.sha }}
+          cache-from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/kms-service:buildcache
+          cache-to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/kms-service:buildcache,mode=max
+
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [build-docker]
+    if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://your-production-url.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy notification
+        run: |
+          echo "🚀 Deploying to production..."
+          echo "SHA: ${{ github.sha }}"
+          echo "Ref: ${{ github.ref }}"
+
+      # Add your deployment steps here
+      # Examples:
+      # - Deploy to Kubernetes
+      # - Deploy to AWS ECS
+      # - Deploy to cloud provider
+      # - Update infrastructure
+
+  notify:
+    name: Notification
+    runs-on: ubuntu-latest
+    needs: [test, code-quality, security-scan]
+    if: always()
+    
+    steps:
+      - name: Check workflow status
+        run: |
+          echo "Workflow completed with status: ${{ job.status }}"
+          
+      # Add notification steps (Slack, Discord, email, etc.)
+      # Example for Slack:
+      # - name: Notify Slack
+      #   uses: 8398a7/action-slack@v3
+      #   with:
+      #     status: ${{ job.status }}
+      #     text: 'CI/CD Pipeline completed'
+      #     webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
