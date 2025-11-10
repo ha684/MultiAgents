@@ -1,6 +1,6 @@
 # src/agents/basic/router_agent.py
 import json
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
@@ -9,7 +9,6 @@ from src.agents.prompts.agent_prompts import PromptTemplates
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.core.config.llm_config import SupportedLLMProviders
 from src.domain.entities.state import OrchestratorState, ReflectionResult, ResearchState
-from src.domain.schemas.graph import ReflectionSchema
 from src.utils import parse_response
 from src.utils.logger_conf import logger
 
@@ -21,7 +20,7 @@ class ReflectionAgent(BaseAgent):
     async def ainvoke(
         self, state: OrchestratorState | ResearchState
     ) -> Optional[ReflectionResult]:
-        if isinstance(state, OrchestratorState):
+        if "subgraph_results" in state:  # OrchestratorState
             current_iteration = state.get("current_iteration", 1)
             max_iterations = state.get("max_iterations")
             search_iterations = state.get("search_iterations", [])
@@ -126,8 +125,6 @@ class ReflectionAgent(BaseAgent):
                 ),
             )
 
-            return reflection_result
-
         else:
             all_search_history = state.get("all_search_history", [])
             search_history = [
@@ -158,35 +155,19 @@ class ReflectionAgent(BaseAgent):
                 llm_with_tools=self.thinking_llm,
                 available_tools={"think": think},
                 max_iterations=3,
-                parse_fn=parse_reflection_response,
+                parse_fn=parse_reflection_result,
                 retry_prompt="Please provide the reflection in the correct JSON format.",
             )
+        return reflection_result
 
 
-def parse_reflection_result(content: str) -> Optional[ReflectionResult]:
+def parse_reflection_result(content: str) -> Optional[Dict[str, Any]]:
     """Parse reflection result from content"""
     try:
         parsed = parse_response(content)
         if parsed is None:
             return None
-        return ReflectionResult(**parsed)
+        return parsed
     except Exception as e:
         logger.error(f"Error parsing reflection result: {e}")
         return None
-
-
-def parse_reflection_response(content: str) -> Optional[ReflectionSchema]:
-    """Parse reflection response"""
-    try:
-        parsed = parse_response(content)
-        if not parsed:
-            logger.warning(
-                "[Parser] Failed to parse reflection response (null result)."
-            )
-            return content
-        response = ReflectionSchema(**parsed)
-        dumped = response.model_dump()
-        return dumped
-    except Exception as e:
-        logger.error(f"[Parser] Error parsing reflection response: {e}", exc_info=True)
-        return content

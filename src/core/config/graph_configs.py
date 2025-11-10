@@ -19,6 +19,10 @@ GRAPH_CONFIGS = {
                 stream_phase=StreamPhase.PROCESSING,
                 show_in_ui=False,
             ),
+            "reflection": NodeMetadata(
+                display_message="Reflecting on findings...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
             "final_response": NodeMetadata(
                 display_message="Generating response...",
                 stream_phase=StreamPhase.SYNTHESIS,
@@ -63,6 +67,10 @@ GRAPH_CONFIGS = {
             ),
             "process_results": NodeMetadata(
                 display_message="Processing findings...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+            "apply_retry": NodeMetadata(
+                display_message="Applying retry...",
                 stream_phase=StreamPhase.PROCESSING,
             ),
             "verification_agent": NodeMetadata(
