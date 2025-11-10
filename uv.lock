@@ -2328,6 +2328,7 @@ dependencies = [
     { name = "unstructured", extra = ["md", "rst", "xlsx"] },
     { name = "uuid7" },
     { name = "uvicorn" },
+    { name = "websockets" },
 ]
 
 [package.optional-dependencies]
@@ -2446,6 +2447,7 @@ requires-dist = [
     { name = "unstructured", extras = ["rst", "md", "xlsx"], specifier = ">=0.18.1" },
     { name = "uuid7", specifier = ">=0.1.0" },
     { name = "uvicorn", specifier = ">=0.34.3" },
+    { name = "websockets", specifier = ">=15.0.1" },
 ]
 provides-extras = ["test", "dev"]
 
