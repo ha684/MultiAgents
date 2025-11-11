@@ -18,11 +18,9 @@ from src.agents.executors import EXECUTORS
 from src.agents.graph.base import GraphAgentBase
 from src.agents.shared.manager import execution_manager
 from src.agents.shared.registry import SubgraphRegistry, enable_sql, seed_base_subgraphs
-from src.agents.tools.server.mcp_retrieve_tools import think
 from src.domain.entities.graph import ResponseMode, RunConfig, SubgraphOutput
 from src.domain.entities.state import OrchestratorState
 from src.domain.schemas.chat import Message, RetrievalContext, TextPart
-from src.llm.factory import get_llm
 from src.services.conversation_service import ConversationService
 from src.utils import format_context_for_response
 from src.utils.logger_conf import logger
@@ -42,8 +40,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
 
     def __init__(self):
         """Initialize LLMs, conversation service, build the graph, and seed subgraphs."""
-        self.llm = get_llm(provider="nxchat")
-        self.thinking_llm = self.llm.bind_tools([think])
+        super().__init__()
         self.conv_service = ConversationService()
         self.graph_name = "OrchestratorGraph"
         self.compiled_graph = self._build_graph()
@@ -387,7 +384,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "reflection_result": {
                     "is_sufficient": True,
                     "missing_aspects": [],
-                    "reasoning": "High duplication detected and no subgraphs failed. Responding.",
                     "suggested_next_action": "respond",
                     "refined_query": None,
                     "subgraphs_to_retry": [],
@@ -399,7 +395,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "reflection_result": {
                     "is_sufficient": True,
                     "missing_aspects": [],
-                    "reasoning": f"No reflection needed for {', '.join(routes)}",
                     "suggested_next_action": "respond",
                     "refined_query": None,
                     "subgraphs_to_retry": [],
@@ -411,7 +406,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 "reflection_result": {
                     "is_sufficient": True,
                     "missing_aspects": [],
-                    "reasoning": f"No reflection needed for {', '.join(routes)}",
                     "suggested_next_action": "respond",
                     "refined_query": None,
                     "subgraphs_to_retry": [],
@@ -423,7 +417,6 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             reflection_result = {
                 "is_sufficient": True,
                 "missing_aspects": [],
-                "reasoning": "Failed to get reflection, proceeding to respond",
                 "suggested_next_action": "respond",
                 "refined_query": None,
                 "subgraphs_to_retry": [],

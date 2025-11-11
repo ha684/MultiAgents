@@ -2440,7 +2440,6 @@ class PromptTemplates:
                 "Critical gap 1 (only if truly critical)",
                 "Critical gap 2 (only if truly critical)"
             ],
-            "reasoning": "Clear explanation evaluating EACH subgraph and whether combined results are adequate. MUST explain source-data alignment.",
             "suggested_next_action": "search_more" | "switch_strategy" | "respond",
             "refined_query": "Refined query for retry OR switch strategy instruction" | null,
             "subgraphs_to_retry": ["subgraph1", "subgraph2"] | []
@@ -2454,11 +2453,6 @@ class PromptTemplates:
         - missing_aspects: Empty if sufficient, otherwise ONLY critical gaps
         * DON'T list gaps from source mismatches (e.g., "our internal data" when only public search available)
         * DO list gaps from incomplete results on appropriate sources
-        - reasoning: 
-        * Mention each subgraph status
-        * Explain source-data alignment (public vs internal, real-time vs historical)
-        * State if failed subgraphs used wrong source
-        * Conclude if combined results adequate
         - suggested_next_action: 
         * "respond" - DEFAULT if any subgraph succeeded with appropriate source
         * "respond" - If failed subgraphs have source mismatch (can't be fixed)
