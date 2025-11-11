@@ -324,6 +324,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
             state, routes, subgraph_results
         )
 
+        logger.info(f"Accumulated context: {accumulated_context}")
         had_error = any(data.get("status") == "error" for _, data in results)
         had_success = any(data.get("status") == "success" for _, data in results)
 

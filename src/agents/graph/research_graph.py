@@ -76,7 +76,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
 
     def default_run_config(self) -> RunConfig:
         return RunConfig(
-            graph_name=self.graph_name, recursion_limit=50, timeout_seconds=300
+            graph_name=self.graph_name, recursion_limit=10, timeout_seconds=300
         )
 
     async def initialize_node(self, state: ResearchState) -> ResearchState:
@@ -335,6 +335,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
         """
         knowledge = state.get("accumulated_knowledge", "")
         iteration = state.get("current_depth_level", 0)
+        learnings = state.get("learnings", [])
 
         if iteration >= self.max_iterations:
             logger.warning(
@@ -353,11 +354,18 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             is_sufficient = resp.get("is_sufficient", False)
             missing = resp.get("missing_aspects", [])
 
-            logger.info(f"[Evaluate] Sufficient: {is_sufficient}")
             if missing:
+                top_missing = missing[:3]
                 logger.info(f"[Evaluate] Missing: {', '.join(missing[:3])}")
+                gaps_line = "; ".join(top_missing)
+                learnings.append(
+                    f"[Depth {iteration}] Verification gaps, here what are the missing parts that we need to fill: {gaps_line}"
+                )
+
+            logger.info(f"[Evaluate] Sufficient: {is_sufficient}")
 
             return {
+                "learnings": learnings,
                 "_should_continue": not is_sufficient,
                 "_evaluation_result": {
                     "is_sufficient": is_sufficient,
