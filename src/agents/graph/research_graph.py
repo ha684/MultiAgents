@@ -76,7 +76,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
 
     def default_run_config(self) -> RunConfig:
         return RunConfig(
-            graph_name=self.graph_name, recursion_limit=40, timeout_seconds=300
+            graph_name=self.graph_name, recursion_limit=50, timeout_seconds=300
         )
 
     async def initialize_node(self, state: ResearchState) -> ResearchState:

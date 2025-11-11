@@ -296,7 +296,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
                 }
             )
 
-            if status == "success" and main_context:
+            if main_context:
                 if accumulated_context:
                     accumulated_context += (
                         f"\n\n--- Search {current_iteration} ({route_name}) ---\n"
