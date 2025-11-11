@@ -1,6 +1,8 @@
 # src/database/repositories/knowledge_base_repository.py
-import uuid
+from datetime import datetime
 from typing import List, Optional
+import uuid
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -69,7 +71,7 @@ class KnowledgeBaseRepository:
             logger.error(f"Error counting documents: {e.args[0]}")
             raise e
 
-    async def update(
+    async def update_knowledge_base(
         self,
         kb_id: uuid.UUID,
         name: Optional[str],
@@ -77,11 +79,10 @@ class KnowledgeBaseRepository:
         is_active: Optional[bool],
         user_id: str,
     ) -> Optional[KnowledgeBaseResponse]:
-        """Update a knowledge base"""
         try:
             async with DatabaseSession() as session:
                 stmt = select(KnowledgeBase).where(
-                    (KnowledgeBase.id == kb_id) & (KnowledgeBase.user_id == user_id)
+                    KnowledgeBase.id == kb_id, KnowledgeBase.user_id == user_id
                 )
                 result = await session.execute(stmt)
                 kb = result.scalar_one_or_none()
@@ -89,26 +90,23 @@ class KnowledgeBaseRepository:
                 if not kb:
                     return None
 
-                update_data = {
-                    "name": name,
-                    "description": description,
-                    "is_active": is_active,
-                }
+                if name is not None:
+                    kb.name = name
+                if description is not None:
+                    kb.description = description
+                if is_active is not None:
+                    kb.is_active = is_active
 
-                if "name" in update_data:
-                    kb.name = update_data["name"]
-                if "description" in update_data:
-                    kb.description = update_data["description"]
-                if "is_active" in update_data:
-                    kb.is_active = update_data["is_active"]
+                kb.updated_at = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
 
-                await session.flush()
+                await session.commit()
                 await session.refresh(kb)
 
             return KnowledgeBaseResponse.model_validate(kb)
+
         except SQLAlchemyError as e:
-            logger.error(f"Error updating knowledge base: {e.args[0]}")
-            raise e
+            logger.error(f"Error updating KB {kb_id}: {str(e)}")
+            raise
 
     async def delete(self, kb_id: uuid.UUID) -> None:
         """Delete a knowledge base using ORM to trigger cascades"""

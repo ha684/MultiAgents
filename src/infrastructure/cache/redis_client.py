@@ -7,11 +7,12 @@ import time
 from typing import Any, Dict, Optional, Tuple
 from zoneinfo import ZoneInfo
 
+from langchain_core.caches import BaseCache, RETURN_VAL_TYPE
 from langchain_core.load.dump import dumps
-from langchain_core.caches import RETURN_VAL_TYPE, BaseCache
-
 import redis.asyncio as aioredis
 from redis.commands.json.path import Path as JSONPath
+
+from src.utils.logger_conf import logger
 
 
 class Redis(BaseCache):
@@ -29,6 +30,16 @@ class Redis(BaseCache):
         """Get the Redis client."""
         assert self._client is not None, "Redis not initialized"
         return self._client
+
+    async def connect(self):
+        """
+        Establishes a connection to the Redis server.
+        """
+        try:
+            await self._client.ping()
+            logger.info("Redis: Successfully connected to Redis.")
+        except Exception as e:
+            raise ConnectionError(f"Failed to connect to Redis: {e}")
 
     async def close(self):
         """Close the Redis client."""

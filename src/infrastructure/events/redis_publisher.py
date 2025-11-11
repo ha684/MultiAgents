@@ -17,18 +17,6 @@ class RedisEventPublisher(BaseEventPublisher):
     def __init__(self):
         self.redis_client = redis_client.get()
 
-    async def connect(self):
-        """
-        Establishes a connection to the Redis server.
-        """
-        try:
-            await self.redis_client.ping()
-            logger.info("RedisEventPublisher: Successfully connected to Redis.")
-        except Exception:
-            raise ConnectionError(
-                "Could not connect to Redis. Run docker compose first"
-            )
-
     async def disconnect(self):
         """
         Closes the connection to the Redis server.

@@ -84,7 +84,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _should_skip_rate_limiting(self, request: Request) -> bool:
         """Check if rate limiting should be skipped for this request"""
-        if request.url.path == "/health":
+        if request.url.path == "/health" or request.url.path == "/metrics":
             return True
 
         if (

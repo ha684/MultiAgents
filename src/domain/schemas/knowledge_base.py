@@ -12,7 +12,8 @@ class KnowledgeBaseCreateRequest(BaseModel):
 
 
 class KnowledgeBaseUpdateRequest(BaseModel):
-    kb_id: uuid.UUID
+    """Partial update request - all fields are optional"""
+
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     is_active: Optional[bool] = None

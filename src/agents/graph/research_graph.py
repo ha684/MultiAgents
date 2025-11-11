@@ -706,7 +706,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                     else "search_executor"
                 )
 
-        # Fallback usable -> go to apply_retry node which will mutate pending safely
         return "apply_retry"
 
     async def apply_retry_node(self, state: ResearchState) -> Dict[str, Any]:
@@ -796,7 +795,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             logger.warning("[DynamicQueryGenerator] Agent returned empty queries.")
             return {"pending_queries": [], **_base_state_fragment(state)}
 
-        # normalize to dict
         pending = [_as_dict_query(q) for q in new_queries]
         return {"pending_queries": pending, **_base_state_fragment(state)}
 
@@ -815,7 +813,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
 
     def route_after_verification(self, state: ResearchState) -> str:
         """Smart routing based on verification + pending queries analysis + hard stop."""
-        # Hard stop or too many failures -> END
         if (
             state.get("hard_stop")
             or state.get("consecutive_search_failures", 0)
@@ -841,7 +838,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             logger.info("[Router] Knowledge is sufficient. Ending.")
             return "__end__"
 
-        # If both channels are unavailable now, no point continuing
         if state.get("rag_is_unavailable") and state.get("web_is_unavailable"):
             logger.error("[Router] Both RAG and Web unavailable → END")
             return "__end__"
@@ -853,10 +849,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             return "search_executor"
 
         return "reflection_node"
-
-    # ------------------------------------------------------------------------------------
-    # GRAPH WIRING
-    # ------------------------------------------------------------------------------------
 
     def _build_graph(self) -> CompiledStateGraph:
         """Build research graph"""
@@ -887,7 +879,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
         workflow.add_edge("handle_no_plan", "dynamic_query_generator")
         workflow.add_edge("search_executor", "process_results")
 
-        # process_results → (apply_retry | verification_agent | search_executor)
         workflow.add_conditional_edges(
             "process_results",
             self.decide_after_processing,
@@ -897,7 +888,6 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
                 "apply_retry": "apply_retry",
             },
         )
-        # after apply_retry, go back to search
         workflow.add_edge("apply_retry", "search_executor")
 
         workflow.add_edge("reflection_node", "dynamic_query_generator")

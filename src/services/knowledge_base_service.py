@@ -122,7 +122,7 @@ class KnowledgeBaseService:
         user_id: str,
     ):
         """Update a knowledge base."""
-        return await self.kb_repository.update(
+        return await self.kb_repository.update_knowledge_base(
             kb_id=kb_id,
             name=name,
             description=description,

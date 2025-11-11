@@ -11,5 +11,4 @@ async def get_event_publisher():
     Returns:
         The event publisher instance.
     """
-    await publisher.connect()
     return publisher
