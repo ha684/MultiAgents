@@ -1136,146 +1136,125 @@ class PromptTemplates:
         """)
 
     FINAL_SYNTHESIZER_PROMPT = textwrap.dedent("""\
-        <user_message>
-        {user_message}
-        </user_message>
+        Your task is to synthesize the accumulated knowledge into a comprehensive response that directly addresses the user's query.
 
-        <accumulated_knowledge>
-        {accumulated_knowledge}
-        </accumulated_knowledge>
-
-        Your task is to synthesize the accumulated knowledge into a thorough, coherent research report that directly addresses the user's query. You must write in the SAME LANGUAGE as the user's message and provide complete citations for all claims.
-
-        PART 1: LANGUAGE & TONE
+        PART 1: LANGUAGE DETECTION
 
         CRITICAL: Detect the language of the user's message and respond in THAT EXACT LANGUAGE.
-        - If user writes in Vietnamese → Respond entirely in Vietnamese
-        - If user writes in English → Respond entirely in English
-        - If user writes in Chinese → Respond entirely in Chinese
-        - Apply this to ALL parts: main text, section headers, citations, everything
+        - Vietnamese query → Vietnamese response
+        - English query → English response  
+        - Chinese query → Chinese response
+        - Apply to ALL content: text, headers, everything
 
-        TONE & STYLE:
-        - Professional yet accessible research report style
-        - Academic rigor without unnecessary jargon
-        - Comprehensive and thorough (this is deep research, not a quick answer)
-        - Clear, logical flow with smooth transitions
-        - Appropriate formality for research communication
-
-        PART 2: CITATION REQUIREMENTS (CRITICAL)
-
-        The accumulated knowledge contains inline citations in the format: ([descriptive text][N])
-
-        YOU MUST:
-        1. **Preserve ALL citations** from the accumulated knowledge in your response
-        2. **Every factual claim** in your report must include the citation from the source
-        3. **Never remove citations** when paraphrasing or synthesizing information
-        4. **Maintain citation format exactly**: ([descriptive text][N])
+        PART 2: CITATION FORMAT
 
         CITATION RULES:
-        - Place citations at the END of sentences, before the period
-        - When combining information from multiple sources, include all citations: ([Source A][1], [Source B][5])
-        - If you mention a fact multiple times, cite it every time (or at first mention in each section)
-        - Do NOT add citations that don't exist in the accumulated knowledge
-        - Do NOT modify citation numbers or format
-        - Do NOT cite in section headers - only in body text
+        1. **Every factual claim** must include its citation number [N]
+        2. **Place citations immediately after the claim**: The economy grew 5% [3].
+        3. **Multiple sources**: Use comma-separated numbers [1,5,7]
+        4. **Position**: After the claim, before punctuation when possible
+        5. **Preservation**: Do NOT modify or skip any citation numbers
+        6. **No invention**: Do NOT add citations that don't exist in accumulated knowledge
 
-        EXAMPLE (Vietnamese):
-        Accumulated knowledge: "Doanh thu quý 2 đạt 50 triệu USD ([Báo cáo Q2][5])"
-        Your synthesis: "Công ty đã ghi nhận doanh thu ấn tượng 50 triệu USD trong quý 2 ([Báo cáo Q2][5]), cho thấy tăng trưởng mạnh mẽ..."
+        PART 3: RESPONSE STYLE & PRESENTATION
 
-        EXAMPLE (English):
-        Accumulated knowledge: "Feature A supports real-time processing ([Product Spec][3])"
-        Your synthesis: "The platform's Feature A enables real-time data processing ([Product Spec][3]), providing users with immediate insights..."
+        RESPOND NATURALLY:
+        - Answer directly as if someone asked you a question
+        - Do NOT use rigid structures like "Introduction", "Body", "Conclusion"
+        - Do NOT announce sections ("First, I will...", "In this report...")
+        - Do NOT say "Based on the research..." or "This report will cover..."
+        - Just start answering naturally
 
-        PART 3: GROUNDING IN EVIDENCE
+        ORGANIZE BY CONTENT:
+        - Let the information guide your structure
+        - Use headers when they help (not because you "should")
+        - Flow logically from one point to another
+        - Think: "How would I explain this clearly?" not "What structure should I follow?"
 
-        STRICT EVIDENCE BOUNDARIES:
-        - Base your response ONLY on information in the accumulated knowledge
-        - Every claim must be supported by cited evidence
-        - If information is missing, explicitly state this gap
+        PART 4: MARKDOWN FORMATTING
+
+        FORMAT YOUR RESPONSE IN MARKDOWN:
+
+        **Headers:**
+        ```markdown
+        ## Main Section
+        ### Subsection
+        #### Detail Level
+        ```
+
+        **Text Formatting:**
+        - **Bold** for key terms or emphasis (use sparingly)
+        - *Italic* for subtle emphasis or terms
+        - `code` for technical terms, commands, or variables
+
+        **Lists:**
+        ```markdown
+        - Bullet point
+        - Another point
+        
+        1. Numbered item
+        2. Next item
+        ```
+
+        **Other Elements:**
+        - Tables for comparing data
+        - > Blockquotes for important callouts
+        - Horizontal rules (---) to separate major sections if needed
+
+        Write naturally using markdown syntax throughout your entire response.
+
+        PART 5: EVIDENCE GROUNDING
+
+        STRICT BOUNDARIES:
+        - Base your response ONLY on information in accumulated knowledge
+        - Every factual claim must have a citation
+        - If information is missing, state it clearly
         - Never invent, assume, or extrapolate beyond the evidence
-        - If conflicting information exists, present both sides with their citations
+        - Present conflicting information objectively with all citations
 
         HANDLING INCOMPLETE INFORMATION:
-        - If accumulated knowledge lacks key information:
-        * State clearly what information is available (with citations)
-        * Explicitly note what information is missing
-        * Do NOT speculate or fill gaps with general knowledge
+        - Be honest about gaps in available information
+        - State clearly what IS known (with citations)
+        - State clearly what is NOT found in sources
+        - Don't fill gaps with general knowledge or speculation
 
-        - Format for gaps (adjust language accordingly):
-        * English: "Based on the available research, [known fact] ([Citation][N]). However, information about [missing aspect] was not found in the sources."
-        * Vietnamese: "Dựa trên nghiên cứu hiện có, [thông tin đã biết] ([Nguồn][N]). Tuy nhiên, thông tin về [khía cạnh còn thiếu] không được tìm thấy trong các nguồn."
+        Example:
+        - "The platform supports feature X [3] and feature Y [7]. However, information about feature Z was not found in the available sources."
 
-        DISTINGUISHING CERTAINTY LEVELS:
-        - Strong evidence (multiple sources): "Nghiên cứu xác nhận..." / "Research confirms..."
-        - Single source: "Theo như..." / "According to..."
-        - Preliminary findings: "Bằng chứng sơ bộ cho thấy..." / "Preliminary evidence suggests..."
-        - Conflicting info: "Nguồn A chỉ ra... trong khi Nguồn B cho rằng..." / "Source A indicates... while Source B suggests..."
+        PART 6: WRITING QUALITY
 
-        PART 4: REPORT STRUCTURE & ORGANIZATION
+        BE COMPREHENSIVE:
+        - Provide thorough answers with appropriate depth
+        - Include relevant details, context, and examples
+        - Explain technical terms naturally when first mentioned
+        - Be specific with numbers, dates, and facts (always cited)
 
-        OVERALL STRUCTURE:
-        1. **Opening**: Direct answer to the main question (1-2 paragraphs with citations)
-        2. **Body**: Detailed exploration organized by themes/aspects (with citations throughout)
-        3. **Conclusion** (if appropriate): Synthesis of key insights or implications (with citations)
-
-        FORMATTING GUIDELINES:
-        - Use clear section structure with **bold headers** (not markdown # headers)
-        - Write in flowing paragraphs with smooth transitions
-        - Use bullet points ONLY when listing multiple distinct items is genuinely more clear
-        - Avoid over-formatting: minimize bold/italic except for section headers
-        - Build logical flow: foundational concepts → detailed analysis → implications
-
-        SECTION ORGANIZATION:
-        - Group related information together
-        - Start sections with topic sentences
-        - Use transitions between sections for coherence
-        - Progress from general to specific within sections
-        - Connect ideas to show relationships
-
-        PART 5: WRITING QUALITY
-
-        CLARITY & PRECISION:
+        BE CLEAR & PRECISE:
         - Use precise language that reflects the evidence
-        - Explain technical terms when first introduced
         - Maintain consistent terminology throughout
-        - Be specific with numbers, dates, and details (with citations)
-        - Avoid vague statements like "many studies" without citation
+        - Show relationships and connections between ideas
+        - Use qualifiers appropriately (may, likely, appears to, suggests)
 
-        DEPTH & THOROUGHNESS:
-        - This is a research report, not a brief answer - be comprehensive
-        - Include relevant details, mechanisms, examples, context
-        - Explore multiple dimensions of the topic
-        - Show the full picture from the accumulated knowledge
-        - Don't oversimplify complex information
+        BE NATURAL:
+        - Write as if explaining to someone who asked you directly
+        - Vary sentence structure and length for readability
+        - Use transitions that flow naturally
+        - Let the information speak through clear explanation
 
-        ACADEMIC RIGOR:
-        - Cite all factual claims
-        - Acknowledge nuances and limitations
-        - Present conflicting evidence objectively
-        - Use appropriate qualifiers (may, likely, appears to, etc.)
-        - Maintain scholarly tone while being accessible
-
-        PART 6: RESPONSE CHECKLIST
-
-        Before finalizing, verify:
-        - Responded in the SAME LANGUAGE as the user's message
-        - Directly answered the user's main question in opening
-        - ALL factual claims have citations from accumulated knowledge
-        - Citations preserved in format ([descriptive text][N])
-        - No information added beyond the accumulated knowledge
-        - Gaps in knowledge explicitly stated
-        - Report has clear structure with smooth flow
-        - Writing is thorough and comprehensive
-        - Technical terms explained when necessary
-        - Professional, accessible tone maintained throughout
-
-
-        Now synthesize the accumulated knowledge into a comprehensive research report that follows ALL the requirements above. Remember:
-        1. Write in the USER'S LANGUAGE
-        2. Cite EVERY factual claim
-        3. Stay within evidence boundaries
-        4. Create professional report structure
+        FINAL CHECKLIST:
+        - [ ] Responded in user's language
+        - [ ] All citations transformed to [N] format only
+        - [ ] Every factual claim has citation
+        - [ ] Natural, direct response (no "Introduction/Body/Conclusion" announcements)
+        - [ ] Proper markdown formatting throughout
+        - [ ] Only information from accumulated knowledge
+        - [ ] Gaps in knowledge explicitly stated
+        - [ ] Comprehensive and clear explanation
+        
+        Context: {accumulated_knowledge}
+        User Query: {user_query}
+        
+        Now synthesize the accumulated knowledge into a well-formatted markdown response that naturally and completely answers the user's query.
     """)
 
     SQL_ANALYSIS_SYSTEM_PROMPT = textwrap.dedent("""\
