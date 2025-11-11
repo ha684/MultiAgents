@@ -1,21 +1,15 @@
 # src/agents/graph/research_graph.py
 from __future__ import annotations
-from typing import Any, Dict, List, Optional
+
+from typing import Any, Dict
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
+import tiktoken
 from langchain_core.messages import HumanMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-import tiktoken
 
-from src.agents.basic import (
-    citation_agent,
-    compress_agent,
-    dynamic_query_agent,
-    planner_agent,
-    reflection_agent,
-    verification_agent,
-)
+from src.agents.basic import citation_agent, compress_agent
 from src.agents.graph.base import GraphAgentBase
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search
 from src.domain.entities.graph import RunConfig
@@ -23,21 +17,9 @@ from src.domain.entities.state import ResearchState
 from src.utils.logger_conf import logger
 
 
-def _base_state_fragment(state: ResearchState) -> Dict[str, Any]:
-    """Small helper to avoid repeating common returns."""
-    return {
-        "cited_documents": state.get("cited_documents", []),
-        "accumulated_knowledge": state.get("accumulated_knowledge", ""),
-    }
-
-
-def _normalize_url_from_meta(meta: Dict[str, Any]) -> str:
-    """
-    Try to extract a stable URL-ish identifier for web docs and normalize it:
-    - prefer 'url' -> 'source' -> 'resolved_url' -> 'original_filename'
-    - strip utm_* params and fragments
-    """
-    cand = (
+def _normalize_url(meta: Dict[str, Any]) -> str:
+    """Normalize URL by removing tracking params and fragments."""
+    url = (
         meta.get("url")
         or meta.get("source")
         or meta.get("resolved_url")
@@ -45,11 +27,9 @@ def _normalize_url_from_meta(meta: Dict[str, Any]) -> str:
         or ""
     )
     try:
-        p = urlparse(cand)
+        p = urlparse(url)
         if not p.scheme or not p.netloc:
-            # not a real URL, return as-is (could be a filename)
-            return cand
-        # strip tracking params
+            return url
         q = [
             (k, v)
             for k, v in parse_qsl(p.query, keep_blank_values=True)
@@ -58,132 +38,66 @@ def _normalize_url_from_meta(meta: Dict[str, Any]) -> str:
         new_query = urlencode(q, doseq=True)
         return urlunparse(
             (p.scheme.lower(), p.netloc.lower(), p.path, "", new_query, "")
-        )  # drop fragment
+        )
     except Exception:
-        return cand
+        return url
 
 
-def _as_dict_query(q: Any) -> Dict[str, Any]:
-    """Coerce SearchQuery-like object to dict with minimal required keys."""
-    if isinstance(q, dict):
-        return q
-    # best-effort attribute access
-    out = {
-        "query": getattr(q, "query", None),
-        "search_type": getattr(q, "search_type", None),
-        "priority": getattr(q, "priority", 0),
-    }
-    # filter None keys
-    return {k: v for k, v in out.items() if v is not None}
-
-
-def _ensure_search_type(
-    st: Optional[str], rag_unavailable: bool, web_unavailable: bool
-) -> Optional[str]:
-    """Validate/repair search_type; return None if nothing is usable."""
-    st = (st or "").lower()
-    if st not in {"rag", "web"}:
-        # choose a workable default
-        if not web_unavailable:
-            return "web"
-        if not rag_unavailable:
-            return "rag"
-        return None
-    # repair if selected type is unavailable
-    if st == "web" and web_unavailable:
-        return None if rag_unavailable else "rag"
-    if st == "rag" and rag_unavailable:
-        return None if web_unavailable else "web"
-    return st
-
-
-def distribute_documents_by_tokens(
-    documents: list, encoded_batches: list, max_tokens: int, min_chunk_tokens: int = 100
-) -> list:
-    """
-    Distribute token budget proportionally across all documents.
-
-    Args:
-        documents: List of documents to distribute
-        encoded_batches: List of token lists for each document
-        max_tokens: Maximum total tokens allowed
-        min_chunk_tokens: Minimum tokens to include from a document (skip if can't meet this)
-
-    Returns:
-        List of truncated documents
-    """
+def _truncate_docs_by_tokens(documents: list, max_tokens: int, tokenizer) -> list:
+    """Truncate documents to fit within token budget."""
     if not documents:
         return []
 
-    total_tokens = sum(len(tokens) for tokens in encoded_batches)
+    texts = [doc.page_content for doc in documents]
+    encoded = tokenizer.encode_batch(text=texts, num_threads=4)
+    total_tokens = sum(len(tokens) for tokens in encoded)
 
-    # If under budget, return all documents as-is
     if total_tokens <= max_tokens:
         return documents
 
-    # Calculate proportion of tokens each document should get
-    doc_token_counts = [len(tokens) for tokens in encoded_batches]
-
-    # Allocate tokens proportionally
-    allocated_tokens = []
-    for doc_tokens in doc_token_counts:
-        proportion = doc_tokens / total_tokens
-        allocated = int(max_tokens * proportion)
-        # Ensure minimum viable chunk or skip
-        allocated_tokens.append(
-            max(allocated, min_chunk_tokens) if allocated >= min_chunk_tokens else 0
-        )
-
-    # If we over-allocated due to minimums, scale down proportionally
-    total_allocated = sum(allocated_tokens)
-    if total_allocated > max_tokens:
-        scale_factor = max_tokens / total_allocated
-        allocated_tokens = [int(t * scale_factor) for t in allocated_tokens]
-
-    # Create truncated documents
+    # Proportional allocation
     final_docs = []
+    doc_tokens = [len(tokens) for tokens in encoded]
+    allocated = [int(max_tokens * (dt / total_tokens)) for dt in doc_tokens]
+
     for i, doc in enumerate(documents):
-        if allocated_tokens[i] == 0:
+        if allocated[i] < 50:  # Skip very small allocations
             continue
-
-        tokens_for_doc = allocated_tokens[i]
-        actual_tokens = len(encoded_batches[i])
-
-        if actual_tokens <= tokens_for_doc:
-            # Keep entire document
+        if doc_tokens[i] <= allocated[i]:
             final_docs.append(doc)
         else:
-            # Truncate document content proportionally
-            truncate_ratio = tokens_for_doc / actual_tokens
-            original_content = doc.page_content
-            truncate_pos = int(len(original_content) * truncate_ratio)
-
-            # Create truncated document
-            truncated_doc = type(doc)(
-                page_content=original_content[:truncate_pos] + "...",
+            ratio = allocated[i] / doc_tokens[i]
+            content = doc.page_content
+            truncated = type(doc)(
+                page_content=content[: int(len(content) * ratio)] + "...",
                 metadata=doc.metadata,
             )
-            final_docs.append(truncated_doc)
+            final_docs.append(truncated)
 
     logger.info(
-        f"Token distribution: {total_tokens} -> {sum(allocated_tokens)} tokens "
-        f"across {len(final_docs)}/{len(documents)} documents"
+        f"Truncated {len(documents)} docs ({total_tokens} tokens) to {len(final_docs)} docs (~{max_tokens} tokens)"
     )
-
     return final_docs
 
 
 class ResearchGraph(GraphAgentBase[ResearchState]):
-    """Research Subgraph - Deep research with iterative search loop (refactored)."""
+    """
+    Simplified Research Graph - Efficient depth-based search like ChatGPT.
+
+    Flow:
+    1. Initialize → Generate Direction → Execute Searches → Extract Learnings
+    2. Check Depth: if depth > 0, generate next direction and repeat
+    3. If depth = 0, finalize and return
+    """
 
     def __init__(self):
         super().__init__()
         self.graph_name = "ResearchGraph"
         self.compiled_graph = self._build_graph()
-        self.max_searches = 20
-        self.max_consecutive_failures = 3
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
-        logger.info("ResearchGraph initialized successfully (refactored).")
+        self.default_breadth = 2  # Searches per depth level
+        self.default_depth = 2  # Depth iterations
+        logger.info("ResearchGraph initialized (refactored for efficiency).")
 
     @property
     def graph(self) -> CompiledStateGraph:
@@ -191,724 +105,392 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
 
     def default_run_config(self) -> RunConfig:
         return RunConfig(
-            graph_name=self.graph_name, recursion_limit=50, timeout_seconds=600
+            graph_name=self.graph_name, recursion_limit=30, timeout_seconds=300
         )
 
-    async def query_planner_node(self, state: ResearchState) -> ResearchState:
-        """Create research plan"""
-        planner_response = await planner_agent.ainvoke(state)
+    async def initialize_node(self, state: ResearchState) -> ResearchState:
+        """Initialize research parameters and check source availability."""
+        breadth = state.get("breadth", self.default_breadth)
+        depth = state.get("depth", self.default_depth)
 
-        if not planner_response or not planner_response.get("queries"):
-            logger.error("[QueryPlanner] Failed to generate plan or plan is empty.")
-            return {
-                "pending_queries": [],
-                "completed_queries": [],
-                "max_searches": self.max_searches,
-                "iteration_count": 0,
-                "all_search_history": [],
-                "used_rag_ids": [],
-                "used_web_urls": [],
-                "has_tried_rag": False,
-                "has_tried_web": False,
-                "consecutive_search_failures": 0,
-                "citation_counter": 0,
-                "cited_documents": state.get("cited_documents", []),
-                "rag_is_unavailable": False,
-                "web_is_unavailable": False,
-                "is_rag_source_relevant": True,
-                "should_retry_query": False,
-                "hard_stop": False,
-                "citation_map": state.get("citation_map", []),
-                "accumulated_knowledge": state.get("accumulated_knowledge", ""),
-            }
+        # Quick check for source availability
+        rag_available = True
+        web_available = True
 
-        raw_queries = planner_response.get("queries", [])
-        all_queries: List[Dict[str, Any]] = [_as_dict_query(q) for q in raw_queries]
-        # sort by priority desc
-        all_queries.sort(key=lambda x: x.get("priority", 0), reverse=True)
+        try:
+            test_docs = await rag_search(
+                query=state["contextualized_query"],
+                context_metadata=state["context_metadata"],
+            )
+            if not test_docs:
+                rag_available = False
+        except Exception as e:
+            logger.warning(f"RAG unavailable: {e}")
+            rag_available = False
 
         return {
-            "pending_queries": all_queries,
-            "completed_queries": [],
-            "max_searches": self.max_searches,
-            "iteration_count": 0,
-            "all_search_history": [],
-            "used_rag_ids": [],
-            "used_web_urls": [],
-            "has_tried_rag": False,
-            "has_tried_web": False,
-            "consecutive_search_failures": 0,
+            "breadth": breadth,
+            "depth": depth,
+            "current_depth_level": 0,
+            "current_direction": state["contextualized_query"],
+            "thinking_notes": f"Starting research on: {state['contextualized_query']}",
+            "accumulated_knowledge": "",
+            "learnings": [],
+            "search_count": 0,
+            "search_history": [],
             "citation_counter": 0,
             "cited_documents": state.get("cited_documents", []),
-            "rag_is_unavailable": False,
-            "web_is_unavailable": False,
-            "is_rag_source_relevant": True,
-            "should_retry_query": False,
-            "hard_stop": False,
             "citation_map": state.get("citation_map", []),
-            "accumulated_knowledge": state.get("accumulated_knowledge", ""),
+            "used_rag_ids": [],
+            "used_web_urls": [],
+            "rag_available": rag_available,
+            "web_available": web_available,
         }
 
-    def decide_after_planner(self, state: ResearchState) -> str:
-        """Decides where to go after the query planner."""
-        if state.get("pending_queries"):
-            logger.info("[Router] Plan generated. Proceeding to pre_flight_rag_check.")
-            return "pre_flight_rag_check"
+    async def generate_direction_node(self, state: ResearchState) -> Dict[str, Any]:
+        """
+        Generate focused research direction for current depth level.
+        Similar to ChatGPT's progressive thinking.
+        """
+        depth_level = state.get("current_depth_level", 0)
+        query = state["contextualized_query"]
+        learnings = state.get("learnings", [])
+        knowledge = state.get("accumulated_knowledge", "")
+
+        if depth_level == 0:
+            # First iteration - start with main query
+            direction = query
+            thinking = f"Investigating: {query}"
         else:
-            logger.warning("[Router] No plan generated. Proceeding to handle_no_plan.")
-            return "handle_no_plan"
+            # Subsequent iterations - analyze what we've learned and what's missing
+            from langchain_core.prompts import ChatPromptTemplate
 
-    async def pre_flight_rag_check_node(self, state: ResearchState) -> Dict[str, Any]:
-        """
-        Performs a single RAG check with the main query to determine if the
-        entire RAG source is relevant for this session using the citation agent.
-        """
-        original_query = state["contextualized_query"]
-        context_metadata = state["context_metadata"]
+            from src.core.config.llm_config import get_llm
 
-        have_rag_search_type = any(
-            (pq.get("search_type") == "rag") for pq in state["pending_queries"]
-        )
-        if not have_rag_search_type:
-            return {"is_rag_source_relevant": True, **_base_state_fragment(state)}
+            llm = get_llm("llm")
 
-        try:
-            documents = await rag_search(
-                query=original_query, context_metadata=context_metadata
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    (
+                        "system",
+                        """You are a research assistant helping to direct deep research.
+
+Based on what we've learned so far, identify the MOST IMPORTANT next direction to explore.
+
+Guidelines:
+- Focus on ONE specific aspect or question
+- Build on previous learnings
+- Address gaps in understanding
+- Be concrete and specific
+
+Return a JSON with:
+- "direction": A focused question or topic to explore next
+- "thinking": Brief note about why this direction (like "Looking into..." or "Considering...")
+""",
+                    ),
+                    (
+                        "human",
+                        """Original Query: {query}
+
+Previous Learnings:
+{learnings}
+
+Current Knowledge:
+{knowledge}
+
+What should we explore next?""",
+                    ),
+                ]
             )
 
-            if not documents:
-                logger.warning(
-                    "[PreFlightCheck] RAG returned no docs. Mark irrelevant."
-                )
-                return {
-                    "is_rag_source_relevant": False,
-                    "rag_is_unavailable": True,
-                    **_base_state_fragment(state),
-                }
-
-            relevant_indices = await citation_agent.ainvoke(
-                history=[HumanMessage(content=original_query)], reference=documents
-            )
-
-            if not relevant_indices or not getattr(relevant_indices, "indexes", None):
-                logger.warning(
-                    "[PreFlightCheck] Citation agent found no relevant RAG docs. Mark RAG irrelevant."
-                )
-                return {
-                    "is_rag_source_relevant": False,
-                    "rag_is_unavailable": True,
-                    **_base_state_fragment(state),
-                }
-
-        except Exception as e:
-            logger.error(f"[PreFlightCheck] RAG pre-flight failed: {e}. Disabling RAG.")
-            return {
-                "is_rag_source_relevant": False,
-                "rag_is_unavailable": True,
-                **_base_state_fragment(state),
-            }
-
-        return {"is_rag_source_relevant": True, **_base_state_fragment(state)}
-
-    async def handle_no_plan_node(self, state: ResearchState) -> Dict[str, Any]:
-        """Go directly to dynamic query generator if planner fails."""
-        verification_result = {
-            "is_sufficient": False,
-            "missing_aspects": [state["contextualized_query"]],
-        }
-        return {
-            "verification_result": verification_result,
-            **_base_state_fragment(state),
-        }
-
-    async def search_executor_node(self, state: ResearchState) -> Dict[str, Any]:
-        """Execute search query with robust failure handling. Always bumps iteration when consuming a query."""
-        if not state.get("pending_queries"):
-            logger.warning("[SearchExecutor] No pending queries. Skipping execution.")
-            return {**_base_state_fragment(state)}
-
-        current_query = dict(state["pending_queries"][0])  # do not mutate original
-        remaining_queries = list(state["pending_queries"][1:])
-
-        requested_type = current_query.get("search_type")
-        query_text = current_query.get("query")
-        context_metadata = state["context_metadata"]
-
-        rag_unavailable = bool(state.get("rag_is_unavailable", False))
-        web_unavailable = bool(state.get("web_is_unavailable", False))
-        is_rag_relevant = bool(state.get("is_rag_source_relevant", True))
-
-        # Repair/validate search_type
-        search_type = _ensure_search_type(
-            requested_type, rag_unavailable, web_unavailable
-        )
-
-        # If RAG requested but deemed irrelevant, try switch to web
-        if search_type == "rag" and not is_rag_relevant:
-            logger.warning(
-                f"[SearchExecutor] RAG deemed irrelevant. Switching query '{query_text}' to Web if possible."
-            )
-            if not web_unavailable:
-                search_type = "web"
-                current_query["search_type"] = "web"
-            else:
-                # both paths unusable -> consume this query and trigger hard stop
-                logger.error(
-                    "[SearchExecutor] RAG irrelevant and Web unavailable. Hard stop."
-                )
-                return {
-                    "completed_queries": state.get("completed_queries", [])
-                    + [current_query],
-                    "pending_queries": remaining_queries,
-                    "iteration_count": state.get("iteration_count", 0) + 1,
-                    "consecutive_search_failures": state.get(
-                        "consecutive_search_failures", 0
+            try:
+                response = await llm.bind(
+                    response_format={"type": "json_object"}
+                ).ainvoke(
+                    prompt.format_messages(
+                        query=query,
+                        learnings="\n".join(
+                            f"- {learning}" for learning in learnings[-3:]
+                        )
+                        if learnings
+                        else "None yet",
+                        knowledge=knowledge[-2000:] if knowledge else "None yet",
                     )
-                    + 1,
-                    "hard_stop": True,
-                    **_base_state_fragment(state),
-                }
-
-        # If after repair still nothing usable -> both unavailable
-        if search_type is None:
-            logger.error(
-                "[SearchExecutor] Both Web and RAG are unavailable. Hard stop."
-            )
-            return {
-                "completed_queries": state.get("completed_queries", [])
-                + [current_query],
-                "pending_queries": remaining_queries,
-                "iteration_count": state.get("iteration_count", 0) + 1,
-                "consecutive_search_failures": self.max_consecutive_failures,
-                "hard_stop": True,
-                **_base_state_fragment(state),
-            }
-
-        documents = []
-        consecutive_search_failures = state.get("consecutive_search_failures", 0)
-
-        try:
-            if search_type == "rag":
-                documents = await rag_search(
-                    query=query_text, context_metadata=context_metadata
                 )
-            else:  # web
-                documents = await web_search(query=query_text)
 
-            max_tokens = 8192
-            texts_list = [doc.page_content for doc in documents]
-            encoded_batches = self.tokenizer.encode_batch(
-                text=texts_list, num_threads=4
-            )
-            total_tokens = sum(len(tokens) for tokens in encoded_batches)
+                import json
 
-            logger.info(f"Total tokens: {total_tokens} / {max_tokens}")
+                result = json.loads(response.content)
+                direction = result.get("direction", query)
+                thinking = result.get("thinking", f"Exploring next aspect of: {query}")
+            except Exception as e:
+                logger.error(f"Failed to generate direction: {e}")
+                direction = query
+                thinking = f"Continuing research on: {query}"
 
-            if total_tokens > max_tokens:
-                documents = distribute_documents_by_tokens(
-                    documents=documents,
-                    encoded_batches=encoded_batches,
-                    max_tokens=max_tokens,
-                    min_chunk_tokens=100,
-                )
-            consecutive_search_failures = 0
-        except Exception as e:
-            logger.error(
-                f"[SearchExecutor] HARD FAILURE in {search_type.upper()} search for '{query_text}'. Error: {e}"
-            )
-            new_rag_unavail = rag_unavailable
-            new_web_unavail = web_unavailable
-            fallback_type = ""
-
-            if search_type == "rag":
-                new_rag_unavail = True
-                if not web_unavailable:
-                    fallback_type = "web"
-            else:
-                new_web_unavail = True
-                if not rag_unavailable:
-                    fallback_type = "rag"
-
-            new_pending_queries = list(remaining_queries)
-            if fallback_type:
-                logger.warning(
-                    f"[SearchExecutor] Switching all future '{search_type}' queries to '{fallback_type}'."
-                )
-                for i in range(len(new_pending_queries)):
-                    if new_pending_queries[i].get("search_type") == search_type:
-                        new_pending_queries[i]["search_type"] = fallback_type
-
-            hard_stop = new_rag_unavail and new_web_unavail
-
-            return {
-                "completed_queries": state.get("completed_queries", [])
-                + [current_query],
-                "pending_queries": new_pending_queries,
-                "iteration_count": state.get("iteration_count", 0) + 1,
-                "consecutive_search_failures": consecutive_search_failures + 1,
-                "rag_is_unavailable": new_rag_unavail,
-                "web_is_unavailable": new_web_unavail,
-                "hard_stop": hard_stop,
-                **_base_state_fragment(state),
-            }
-
-        search_result: Dict[str, Any] = {
-            "query": query_text,
-            "documents": documents,
-            "search_type": search_type,
-            "processed": False,
-        }
+        logger.info(f"[Depth {depth_level}] {thinking}")
+        logger.info(f"[Direction] {direction}")
 
         return {
-            "search_results": search_result,
-            "completed_queries": state.get("completed_queries", []) + [current_query],
-            "pending_queries": remaining_queries,
-            "all_search_history": state.get("all_search_history", []) + [search_result],
-            "iteration_count": state.get("iteration_count", 0) + 1,
-            "has_tried_rag": bool(
-                state.get("has_tried_rag", False) or search_type == "rag"
-            ),
-            "has_tried_web": bool(
-                state.get("has_tried_web", False) or search_type == "web"
-            ),
-            "consecutive_search_failures": consecutive_search_failures,
-            **_base_state_fragment(state),
+            "current_direction": direction,
+            "thinking_notes": thinking,
         }
 
-    async def process_results_node(self, state: ResearchState) -> Dict[str, Any]:
-        """Filter, compress, merge results with hybrid strategy + dedup improvements."""
-        sr = state.get("search_results") or {}
-        docs = sr.get("documents") or []
-        if not docs:
-            logger.warning("[ProcessResults] No documents found in search result.")
+    async def execute_searches_node(self, state: ResearchState) -> Dict[str, Any]:
+        """
+        Execute focused searches based on current direction.
+        Performs 'breadth' number of searches with smart source selection.
+        """
+        direction = state["current_direction"]
+        breadth = state.get("breadth", self.default_breadth)
+        context_metadata = state["context_metadata"]
+
+        rag_available = state.get("rag_available", True)
+        web_available = state.get("web_available", True)
+
+        if not rag_available and not web_available:
+            logger.error("Both RAG and Web unavailable!")
+            return {}
+
+        # Determine search strategy: alternate between RAG and Web for diversity
+        searches_to_perform = []
+        search_count = state.get("search_count", 0)
+
+        for i in range(breadth):
+            # Alternate: even indices use RAG (if available), odd use Web
+            if i % 2 == 0 and rag_available:
+                searches_to_perform.append("rag")
+            elif web_available:
+                searches_to_perform.append("web")
+            elif rag_available:
+                searches_to_perform.append("rag")
+
+        all_documents = []
+        search_history = list(state.get("search_history", []))
+
+        for search_type in searches_to_perform:
+            try:
+                if search_type == "rag":
+                    docs = await rag_search(
+                        query=direction, context_metadata=context_metadata
+                    )
+                else:
+                    docs = await web_search(query=direction)
+
+                if docs:
+                    all_documents.extend(docs)
+                    search_history.append(
+                        {
+                            "search_type": search_type,
+                            "query": direction,
+                            "doc_count": len(docs),
+                            "depth_level": state.get("current_depth_level", 0),
+                        }
+                    )
+                    logger.info(
+                        f"[Search] {search_type.upper()}: {len(docs)} documents for '{direction}'"
+                    )
+                else:
+                    logger.warning(
+                        f"[Search] {search_type.upper()}: No results for '{direction}'"
+                    )
+
+            except Exception as e:
+                logger.error(f"[Search] {search_type.upper()} failed: {e}")
+                continue
+
+        if not all_documents:
+            logger.warning("No documents retrieved from any source!")
             return {
-                "should_retry_query": True,
-                "search_results": {},
-                **_base_state_fragment(state),
+                "search_count": search_count + breadth,
+                "search_history": search_history,
             }
 
-        search_type = sr.get("search_type")
-        current_query = sr.get("query")
+        # Deduplicate
+        used_rag_ids = set(state.get("used_rag_ids", []))
+        used_web_urls = set(state.get("used_web_urls", []))
 
-        overlap_threshold = 0.5
+        new_docs = []
+        for doc in all_documents:
+            meta = doc.metadata
+            doc_id = meta.get("document_id")
+            url = _normalize_url(meta)
 
-        if search_type == "web":
-            source_ids_all = [
-                _normalize_url_from_meta(getattr(d, "metadata", {}) or d.metadata)
-                for d in docs
-            ]
-            used_web_urls: List[str] = state.get("used_web_urls", [])
-            new_documents = [
-                d
-                for d, sid in zip(docs, source_ids_all)
-                if sid and sid not in set(used_web_urls)
-            ]
-            overlap = set(source_ids_all) & set(used_web_urls)
-            denom = max(len(set(source_ids_all) | set(used_web_urls)), 1)
-            ratio = len(overlap) / denom
-            if ratio > overlap_threshold:
-                logger.warning(
-                    f"[ProcessResults] High web source overlap ({ratio:.1%}). Suggest retry with RAG."
-                )
-                return {
-                    "should_retry_query": True,
-                    "retry_fallback": "rag",
-                    **_base_state_fragment(state),
-                }
-        else:
-            source_ids_all = [
-                (getattr(d, "metadata", {}) or d.metadata).get("document_id", "")
-                for d in docs
-            ]
-            used_rag_ids: List[str] = state.get("used_rag_ids", [])
-            new_documents = [
-                d
-                for d, sid in zip(docs, source_ids_all)
-                if sid and sid not in set(used_rag_ids)
-            ]
-            overlap = set(source_ids_all) & set(used_rag_ids)
-            denom = max(len(set(source_ids_all) | set(used_rag_ids)), 1)
-            ratio = len(overlap) / denom
-            if ratio > overlap_threshold:
-                logger.warning(
-                    f"[ProcessResults] High RAG source overlap ({ratio:.1%}). Suggest retry with Web."
-                )
-                return {
-                    "should_retry_query": True,
-                    "retry_fallback": "web",
-                    **_base_state_fragment(state),
-                }
+            if doc_id and doc_id in used_rag_ids:
+                continue
+            if url and url in used_web_urls:
+                continue
 
-        if not new_documents:
-            logger.warning(
-                "[ProcessResults] All documents already used. Suggest switching search type."
+            new_docs.append(doc)
+            if doc_id:
+                used_rag_ids.add(doc_id)
+            if url:
+                used_web_urls.add(url)
+
+        if not new_docs:
+            logger.warning("All documents were duplicates!")
+            new_docs = all_documents[:breadth]  # Use some anyway
+
+        logger.info(f"After dedup: {len(new_docs)}/{len(all_documents)} documents")
+
+        # Filter by relevance using citation agent
+        try:
+            relevant_indices = await citation_agent.ainvoke(
+                history=[HumanMessage(content=direction)], reference=new_docs
             )
-            return {"should_retry_query": True, **_base_state_fragment(state)}
 
-        relevant_indices = await citation_agent.ainvoke(
-            history=[HumanMessage(content=current_query)], reference=new_documents
+            if relevant_indices and getattr(relevant_indices, "indexes", None):
+                idxs = [i for i in relevant_indices.indexes if 0 < i <= len(new_docs)]
+                if idxs:
+                    new_docs = [new_docs[i - 1] for i in idxs]
+                    logger.info(f"Filtered to {len(new_docs)} relevant documents")
+        except Exception as e:
+            logger.warning(f"Citation filtering failed: {e}, using all docs")
+
+        # Truncate if too long
+        new_docs = _truncate_docs_by_tokens(
+            new_docs, max_tokens=6000, tokenizer=self.tokenizer
         )
-        if not relevant_indices or not getattr(relevant_indices, "indexes", None):
-            logger.warning(
-                "[ProcessResults] Citation agent found no relevant documents (soft fail)."
-            )
-            return {"should_retry_query": True, **_base_state_fragment(state)}
 
-        idxs = [
-            i
-            for i in getattr(relevant_indices, "indexes")
-            if 0 < i <= len(new_documents)
-        ]
-        cited_docs = [new_documents[i - 1] for i in idxs]
+        return {
+            "search_count": search_count + breadth,
+            "search_history": search_history,
+            "used_rag_ids": list(used_rag_ids),
+            "used_web_urls": list(used_web_urls),
+            "_temp_documents": new_docs,  # Pass to next node
+        }
 
-        citation_start_index = state.get("citation_counter", 0)
-        all_cited_docs_so_far = list(state.get("cited_documents", []))
+    async def extract_learnings_node(self, state: ResearchState) -> Dict[str, Any]:
+        """
+        Process search results to extract learnings.
+        Add citations and compress into accumulated knowledge.
+        """
+        docs = state.get("_temp_documents", [])
+        if not docs:
+            logger.warning("No documents to process")
+            return {}
+
+        direction = state["current_direction"]
+
+        # Add citation markers
+        citation_start = state.get("citation_counter", 0)
+        cited_documents = list(state.get("cited_documents", []))
         citation_map = list(state.get("citation_map", []))
 
-        docs_with_markers = []
-        current_citation_index = citation_start_index
+        docs_with_citations = []
+        current_citation = citation_start
 
-        for doc in cited_docs:
-            meta = getattr(doc, "metadata", {}) or doc.metadata
+        for doc in docs:
             doc_copy = doc.model_copy(deep=True) if hasattr(doc, "model_copy") else doc
+            content = doc_copy.page_content
+            doc_copy.page_content = f"[CITATION: {current_citation}] {content}"
 
-            page = getattr(doc_copy, "page_content", None)
-            if page is None:
-                page = getattr(doc_copy, "content", "")
-                setattr(
-                    doc_copy,
-                    "content",
-                    f"[CITATION: {current_citation_index}] {page}",
-                )
-            else:
-                doc_copy.page_content = f"[CITATION: {current_citation_index}] {page}"
-
-            docs_with_markers.append(doc_copy)
-            all_cited_docs_so_far.append(doc)
+            docs_with_citations.append(doc_copy)
+            cited_documents.append(doc)
             citation_map.append(
                 {
-                    "index": current_citation_index,
-                    "metadata": meta,
+                    "index": current_citation,
+                    "metadata": doc.metadata,
                 }
             )
-            current_citation_index += 1
+            current_citation += 1
 
-        accumulated_len = len(state.get("accumulated_knowledge", ""))
-        iteration_count = state.get("iteration_count", 0)
-
-        should_consolidate = (
-            accumulated_len > 20000 and iteration_count > 1 and iteration_count % 3 == 0
-        )
-
-        if should_consolidate and state.get("accumulated_knowledge"):
-            new_merged = await compress_agent.ainvoke_with_merge(
-                query=current_query,
-                new_documents=docs_with_markers,
-                existing_knowledge=state["accumulated_knowledge"],
-            )
-            merged = new_merged if new_merged else state["accumulated_knowledge"]
-        else:
+        # Compress/summarize the findings
+        try:
             compressed = await compress_agent.ainvoke(
-                query=current_query, reference=docs_with_markers
+                query=direction, reference=docs_with_citations
             )
-            if state.get("accumulated_knowledge"):
-                merged = f"{state['accumulated_knowledge']}\n\n## {current_query}\n\n{compressed}"
-            else:
-                merged = compressed
+        except Exception as e:
+            logger.error(f"Compression failed: {e}")
+            compressed = "\n\n".join([d.page_content for d in docs_with_citations[:3]])
 
-        new_rag_ids = list(state.get("used_rag_ids", []))
-        new_web_urls = list(state.get("used_web_urls", []))
-        if search_type == "rag":
-            to_add = [sid for sid in source_ids_all if sid]
-            new_rag_ids = list(set(new_rag_ids + to_add))
+        # Extract key learning point
+        learning_point = f"[Depth {state.get('current_depth_level', 0)}] {state.get('thinking_notes', '')}: {compressed[:200]}..."
+
+        # Merge into accumulated knowledge
+        existing = state.get("accumulated_knowledge", "")
+        if existing:
+            accumulated = f"{existing}\n\n## {direction}\n\n{compressed}"
         else:
-            to_add = [
-                _normalize_url_from_meta(getattr(d, "metadata", {}) or d.metadata)
-                for d in docs
-            ]
-            to_add = [sid for sid in to_add if sid]
-            new_web_urls = list(set(new_web_urls + to_add))
+            accumulated = f"## {direction}\n\n{compressed}"
 
-        last_history = list(state.get("all_search_history", []))
-        if last_history:
-            last_history[-1] = {**last_history[-1], "processed": True}
+        learnings = list(state.get("learnings", []))
+        learnings.append(learning_point)
+
+        logger.info(f"[Learnings] Extracted learning from {len(docs)} documents")
 
         return {
-            "accumulated_knowledge": merged,
-            "used_rag_ids": new_rag_ids,
-            "used_web_urls": new_web_urls,
-            "search_results": {**sr, "processed": True},
-            "all_search_history": last_history,
-            "should_retry_query": False,
-            "citation_counter": current_citation_index,
-            "cited_documents": all_cited_docs_so_far,
+            "accumulated_knowledge": accumulated,
+            "learnings": learnings,
+            "citation_counter": current_citation,
+            "cited_documents": cited_documents,
             "citation_map": citation_map,
         }
 
-    def decide_after_processing(self, state: ResearchState) -> str:
+    def check_depth_node(self, state: ResearchState) -> str:
         """
-        Decide next step after processing:
-        - If success and not at verify cadence -> continue searching
-        - If should verify -> verification
-        - If soft failure -> try to enqueue a retry with fallback (in apply_retry node)
+        Decide if we should continue to next depth level or finish.
         """
-        iteration = state.get("iteration_count", 0)
-        max_searches = state.get("max_searches", self.max_searches)
+        remaining_depth = state.get("depth", 0)
+        current_level = state.get("current_depth_level", 0)
 
-        should_verify_this_iteration = (
-            iteration % 3 == 0
-            or iteration >= max_searches - 2
-            or not state.get("pending_queries")
-        )
-
-        # If not retry and not forced to verify and still have pending -> continue searching
-        if (
-            not state.get("should_retry_query")
-            and state.get("pending_queries")
-            and not should_verify_this_iteration
-        ):
-            logger.info(
-                f"[Router] Skip verification at iteration {iteration}. Continue search."
-            )
-            return "search_executor"
-
-        # If success (no retry needed) -> verify now
-        if not state.get("should_retry_query"):
-            return "verification_agent"
-
-        # Soft failure path: prepare fallback retry if usable
-        logger.warning(
-            "[Router] Soft failure detected. Evaluating retry for the last query."
-        )
-        last_query = state.get("completed_queries", [])[-1]
-        last_type = last_query.get("search_type")
-        fallback_type = "web" if last_type == "rag" else "rag"
-
-        # Check usability of fallback
-        if fallback_type == "rag":
-            if state.get("rag_is_unavailable") or not state.get(
-                "is_rag_source_relevant", True
-            ):
-                logger.warning("[Router] Fallback RAG not usable.")
-                # If we still have pending, decide based on cadence
-                return (
-                    "verification_agent"
-                    if should_verify_this_iteration
-                    else "search_executor"
-                )
+        if remaining_depth > 0:
+            logger.info(f"[Depth Check] Continuing to depth level {current_level + 1}")
+            return "continue"
         else:
-            if state.get("web_is_unavailable"):
-                logger.warning("[Router] Fallback Web not usable.")
-                return (
-                    "verification_agent"
-                    if should_verify_this_iteration
-                    else "search_executor"
-                )
+            logger.info("[Depth Check] Research complete, finalizing")
+            return "finalize"
 
-        return "apply_retry"
-
-    async def apply_retry_node(self, state: ResearchState) -> Dict[str, Any]:
-        """Insert a fallback retry query at the front of pending queries. No mutation in router."""
-        if not state.get("completed_queries"):
-            return {}
-        last_query = dict(state["completed_queries"][-1])
-        last_type = last_query.get("search_type")
-        fallback_type = "web" if last_type == "rag" else "rag"
-        pending = list(state.get("pending_queries", []))
-        retry_query = {**last_query, "search_type": fallback_type}
-        pending.insert(0, retry_query)
-        logger.info(
-            f"[ApplyRetry] Enqueued retry with {fallback_type.upper()} for '{last_query.get('query')}'."
-        )
-        return {"pending_queries": pending, "should_retry_query": False}
-
-    async def verification_agent_node(self, state: ResearchState) -> Dict[str, Any]:
-        """Verify sufficiency."""
-        if state.get("hard_stop"):
-            logger.error(
-                "[Verification] Hard stop flagged. Skipping verification details."
-            )
-            return {
-                "verification_result": {
-                    "is_sufficient": False,
-                    "missing_aspects": [state["contextualized_query"]],
-                },
-                **_base_state_fragment(state),
-            }
-
-        if not state.get("accumulated_knowledge"):
-            logger.warning(
-                "[Verification] No accumulated knowledge to verify. Default insufficient."
-            )
-            return {
-                "verification_result": {
-                    "is_sufficient": False,
-                    "missing_aspects": [state["contextualized_query"]],
-                },
-                **_base_state_fragment(state),
-            }
-
-        verification_dict = await verification_agent.ainvoke(state)
-        logger.info(f"[Verification] Result: {verification_dict}")
-
-        if not verification_dict:
-            logger.error(
-                "[Verification] Invalid verification response. Default insufficient."
-            )
-            return {
-                "verification_result": {"is_sufficient": False, "missing_aspects": []},
-                **_base_state_fragment(state),
-            }
-
-        return {"verification_result": verification_dict, **_base_state_fragment(state)}
-
-    async def reflection_node(self, state: ResearchState) -> Dict[str, Any]:
-        """Critique current research state and suggest next steps."""
-        reflection_result = await reflection_agent.ainvoke(state)
-        if not reflection_result:
-            logger.error("[Reflection] Failed to generate a valid reflection.")
-            return {
-                "reflection_result": {"critique": "N/A", "next_steps": "N/A"},
-                **_base_state_fragment(state),
-            }
-
+    async def continue_depth_node(self, state: ResearchState) -> Dict[str, Any]:
+        """Prepare for next depth iteration."""
         return {
-            "reflection_result": reflection_result,
-            **_base_state_fragment(state),
+            "depth": state.get("depth", 0) - 1,
+            "current_depth_level": state.get("current_depth_level", 0) + 1,
         }
 
-    async def dynamic_query_generator_node(
-        self, state: ResearchState
-    ) -> Dict[str, Any]:
-        """Generate dynamic queries with search history awareness."""
-        dynamic_query_generator_dict = await dynamic_query_agent.ainvoke(state)
+    async def finalize_node(self, state: ResearchState) -> Dict[str, Any]:
+        """Final preparation of research results."""
+        logger.info("[Finalize] Research complete")
+        logger.info(f"Total searches: {state.get('search_count', 0)}")
+        logger.info(f"Total citations: {state.get('citation_counter', 0)}")
+        logger.info(f"Depth levels completed: {state.get('current_depth_level', 0)}")
 
-        if not dynamic_query_generator_dict:
-            logger.error(
-                "[DynamicQueryGenerator] Failed to generate valid dynamic queries."
-            )
-            return {"pending_queries": [], **_base_state_fragment(state)}
-
-        new_queries = dynamic_query_generator_dict.get("queries", [])
-        if not new_queries:
-            logger.warning("[DynamicQueryGenerator] Agent returned empty queries.")
-            return {"pending_queries": [], **_base_state_fragment(state)}
-
-        pending = [_as_dict_query(q) for q in new_queries]
-        return {"pending_queries": pending, **_base_state_fragment(state)}
-
-    def route_after_dynamic_generation(self, state: ResearchState) -> str:
-        """Decides where to go after attempting to generate new queries."""
-        if state.get("pending_queries"):
-            logger.info(
-                "[Router] New queries generated. Proceeding to search_executor."
-            )
-            return "search_executor"
-        else:
-            logger.error(
-                "[Router] Failed to generate new queries. Terminating process."
-            )
-            return "__end__"
-
-    def route_after_verification(self, state: ResearchState) -> str:
-        """Smart routing based on verification + pending queries analysis + hard stop."""
-        if (
-            state.get("hard_stop")
-            or state.get("consecutive_search_failures", 0)
-            >= self.max_consecutive_failures
-        ):
-            logger.error(
-                "[Router] Hard stop or exceeded max consecutive search failures → END"
-            )
-            return "__end__"
-
-        iteration = state.get("iteration_count", 0)
-        max_searches = state.get("max_searches", self.max_searches)
-        if iteration >= max_searches:
-            logger.info("[Router] Max iterations reached → END")
-            return "__end__"
-
-        verification = state.get("verification_result")
-        if not verification:
-            logger.warning("[Router] No verification result → END")
-            return "__end__"
-
-        if verification.get("is_sufficient"):
-            logger.info("[Router] Knowledge is sufficient. Ending.")
-            return "__end__"
-
-        if state.get("rag_is_unavailable") and state.get("web_is_unavailable"):
-            logger.error("[Router] Both RAG and Web unavailable → END")
-            return "__end__"
-
-        if state.get("pending_queries"):
-            logger.info(
-                "[Router] Pending queries exist. Continuing with planned search."
-            )
-            return "search_executor"
-
-        return "reflection_node"
+        return {}
 
     def _build_graph(self) -> CompiledStateGraph:
-        """Build research graph"""
+        """Build the simplified research graph."""
         workflow = StateGraph(ResearchState)
 
-        workflow.add_node("query_planner", self.query_planner_node)
-        workflow.add_node("pre_flight_rag_check", self.pre_flight_rag_check_node)
-        workflow.add_node("search_executor", self.search_executor_node)
-        workflow.add_node("process_results", self.process_results_node)
-        workflow.add_node("apply_retry", self.apply_retry_node)
-        workflow.add_node("verification_agent", self.verification_agent_node)
-        workflow.add_node("dynamic_query_generator", self.dynamic_query_generator_node)
-        workflow.add_node("handle_no_plan", self.handle_no_plan_node)
-        workflow.add_node("reflection_node", self.reflection_node)
+        # Add nodes
+        workflow.add_node("initialize", self.initialize_node)
+        workflow.add_node("generate_direction", self.generate_direction_node)
+        workflow.add_node("execute_searches", self.execute_searches_node)
+        workflow.add_node("extract_learnings", self.extract_learnings_node)
+        workflow.add_node("continue_depth", self.continue_depth_node)
+        workflow.add_node("finalize", self.finalize_node)
 
-        workflow.set_entry_point("query_planner")
+        # Set entry point
+        workflow.set_entry_point("initialize")
 
+        # Linear flow for main loop
+        workflow.add_edge("initialize", "generate_direction")
+        workflow.add_edge("generate_direction", "execute_searches")
+        workflow.add_edge("execute_searches", "extract_learnings")
+
+        # Conditional: check if we should continue or finish
         workflow.add_conditional_edges(
-            "query_planner",
-            self.decide_after_planner,
+            "extract_learnings",
+            self.check_depth_node,
             {
-                "pre_flight_rag_check": "pre_flight_rag_check",
-                "handle_no_plan": "handle_no_plan",
+                "continue": "continue_depth",
+                "finalize": "finalize",
             },
         )
 
-        workflow.add_edge("pre_flight_rag_check", "search_executor")
-        workflow.add_edge("handle_no_plan", "dynamic_query_generator")
-        workflow.add_edge("search_executor", "process_results")
+        # Loop back for next depth iteration
+        workflow.add_edge("continue_depth", "generate_direction")
 
-        workflow.add_conditional_edges(
-            "process_results",
-            self.decide_after_processing,
-            {
-                "search_executor": "search_executor",
-                "verification_agent": "verification_agent",
-                "apply_retry": "apply_retry",
-            },
-        )
-        workflow.add_edge("apply_retry", "search_executor")
-
-        workflow.add_edge("reflection_node", "dynamic_query_generator")
-
-        workflow.add_conditional_edges(
-            "dynamic_query_generator",
-            self.route_after_dynamic_generation,
-            {
-                "search_executor": "search_executor",
-                "__end__": END,
-            },
-        )
-
-        workflow.add_conditional_edges(
-            "verification_agent",
-            self.route_after_verification,
-            {
-                "search_executor": "search_executor",
-                "reflection_node": "reflection_node",
-                "__end__": END,
-            },
-        )
+        # End
+        workflow.add_edge("finalize", END)
 
         return workflow.compile(name=self.graph_name)

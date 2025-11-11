@@ -586,7 +586,7 @@ Remember: Transform database query results into clear, actionable answers that n
 class ResponseAgent(BaseAgent):
     """Agent responsible for generating the final response based on mode and context."""
 
-    def __init__(self, provider: SupportedLLMProviders = "nxchat"):
+    def __init__(self, provider: SupportedLLMProviders = "openai"):
         super().__init__(provider)
         logger.info("Response Agent initialized successfully.")
 

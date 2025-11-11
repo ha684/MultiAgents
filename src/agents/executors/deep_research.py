@@ -24,7 +24,7 @@ async def _run_deep_research(
         state["conversation"][-1].additional_kwargs.get("conversation_id")
     )
 
-    sub_coro = await research_graph.ainvoke(research_state)
+    sub_coro = research_graph.ainvoke(research_state)
 
     ctx = contextvars.copy_context()
     research_task = ctx.run(lambda: asyncio.create_task(sub_coro))

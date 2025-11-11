@@ -125,33 +125,47 @@ class SimpleSearchState(TypedDict):
     early_terminate: bool
 
 
-class ResearchState(TypedDict):
-    """State for research operations"""
+class ResearchState(TypedDict, total=False):
+    """State for research operations (simplified for efficiency)"""
 
+    # Core query and context (required)
     contextualized_query: str
     context_metadata: Dict[str, Any]
-    pending_queries: List[SearchQuery]
-    completed_queries: List[SearchQuery]
+
+    # Breadth and Depth control (like ChatGPT)
+    breadth: int  # Number of searches per depth level (default: 2-3)
+    depth: int  # Remaining depth iterations (default: 2-3)
+    current_depth_level: int  # Track which depth level we're at
+
+    # Current search direction and thinking
+    current_direction: str  # The focused question/direction for this iteration
+    thinking_notes: (
+        str  # Visible thinking like ChatGPT ("Investigating...", "Looking into...")
+    )
+
+    # Accumulated learnings
     accumulated_knowledge: str
-    search_results: SearchResult
-    all_search_history: List[SearchResult]
-    iteration_count: int
-    max_searches: int
-    used_rag_ids: List[str]
-    used_web_urls: List[str]
-    verification_result: Optional[VerificationResult]
-    has_tried_rag: bool
-    has_tried_web: bool
-    consecutive_search_failures: int
+    learnings: List[str]  # Key learnings from each iteration
+
+    # Search tracking (simplified)
+    search_count: int  # Total searches performed
+    search_history: List[Dict[str, Any]]  # Simple history
+
+    # Citations
     citation_counter: int
     cited_documents: List[Document]
-
-    rag_is_unavailable: bool
-    web_is_unavailable: bool
-
-    should_retry_query: bool
-    is_rag_source_relevant: bool
     citation_map: List[Dict[str, Any]]
+
+    # Deduplication
+    used_rag_ids: List[str]
+    used_web_urls: List[str]
+
+    # Source availability
+    rag_available: bool
+    web_available: bool
+
+    # Internal temporary fields
+    _temp_documents: List[Document]  # Temporary storage between nodes
 
 
 class SqlState(TypedDict):
