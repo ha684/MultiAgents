@@ -2,10 +2,11 @@
 """Quick test for refactored ResearchGraph"""
 
 import asyncio
+
 from src.agents.graph.research_graph import ResearchGraph
+from src.core.config.settings import settings
 from src.domain.entities.state import ResearchState
 from src.domain.schemas.chat import SearchProvider, WebSearchConfig
-from src.core.config.settings import settings
 from src.utils.logger_conf import logger
 
 
@@ -26,16 +27,15 @@ async def test_research_graph():
     research_state = ResearchState(
         contextualized_query="What are the main features of Python programming language?",
         context_metadata=context_metadata,
-        breadth=2,  # 2 searches per depth level
-        depth=2,  # 2 depth iterations
+        breadth=2,  # 2 searches per iteration
     )
 
     logger.info("=" * 70)
-    logger.info("Testing Refactored ResearchGraph")
+    logger.info("Testing Adaptive ResearchGraph (Agent Mode)")
     logger.info("=" * 70)
     logger.info(f"Query: {research_state['contextualized_query']}")
-    logger.info("Breadth: 2 searches per depth")
-    logger.info("Depth: 2 iterations")
+    logger.info("Breadth: 2 searches per iteration")
+    logger.info("Mode: Agent will decide when to stop based on sufficiency")
     logger.info("=" * 70)
 
     # Run research graph
@@ -49,7 +49,7 @@ async def test_research_graph():
         logger.info("=" * 70)
         logger.info(f"Total Searches: {state.get('search_count', 0)}")
         logger.info(f"Total Citations: {state.get('citation_counter', 0)}")
-        logger.info(f"Depth Levels Completed: {state.get('current_depth_level', 0)}")
+        logger.info(f"Iterations Completed: {state.get('current_depth_level', 0)}")
         logger.info(f"Learnings Count: {len(state.get('learnings', []))}")
         logger.info("=" * 70)
 

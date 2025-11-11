@@ -19,7 +19,7 @@ async def rag_search(query: str, context_metadata: Dict[str, Any]) -> List[Docum
     if not query:
         raise ValueError("user query is required")
     top_k = 50
-    top_n = 5
+    top_n = 10
     kb_id = context_metadata["kb_id"]
     filters = None
     try:
@@ -42,7 +42,7 @@ async def web_search(query: str) -> List[Document]:
     retrieved_docs = await web_search_service.search(
         query=query,
         provider=settings.websearch_provider,
-        max_results=5,
+        max_results=10,
     )
     return retrieved_docs
 

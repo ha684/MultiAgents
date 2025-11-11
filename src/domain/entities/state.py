@@ -128,44 +128,31 @@ class SimpleSearchState(TypedDict):
 class ResearchState(TypedDict, total=False):
     """State for research operations (simplified for efficiency)"""
 
-    # Core query and context (required)
     contextualized_query: str
     context_metadata: Dict[str, Any]
 
-    # Breadth and Depth control (like ChatGPT)
-    breadth: int  # Number of searches per depth level (default: 2-3)
-    depth: int  # Remaining depth iterations (default: 2-3)
-    current_depth_level: int  # Track which depth level we're at
-
-    # Current search direction and thinking
-    current_direction: str  # The focused question/direction for this iteration
-    thinking_notes: (
-        str  # Visible thinking like ChatGPT ("Investigating...", "Looking into...")
-    )
-
-    # Accumulated learnings
+    breadth: int
+    current_depth_level: int
+    current_direction: str
+    thinking_notes: str
     accumulated_knowledge: str
-    learnings: List[str]  # Key learnings from each iteration
+    learnings: List[str]
+    search_count: int
+    search_history: List[Dict[str, Any]]
 
-    # Search tracking (simplified)
-    search_count: int  # Total searches performed
-    search_history: List[Dict[str, Any]]  # Simple history
-
-    # Citations
     citation_counter: int
     cited_documents: List[Document]
     citation_map: List[Dict[str, Any]]
 
-    # Deduplication
     used_rag_ids: List[str]
     used_web_urls: List[str]
 
-    # Source availability
     rag_available: bool
     web_available: bool
 
-    # Internal temporary fields
-    _temp_documents: List[Document]  # Temporary storage between nodes
+    _temp_documents: List[Document]
+    _should_continue: bool
+    _evaluation_result: Dict[str, Any]
 
 
 class SqlState(TypedDict):

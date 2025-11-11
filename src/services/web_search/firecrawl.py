@@ -22,7 +22,7 @@ class FireCrawlService(BaseSearchService):
     ) -> Optional[List[Document]]:
         """Searches using Firecrawl API with an optional provided key."""
         if not self.api_base_url:
-            raise ValueError("FILECRAWL_API_URL not found in environment variables")
+            raise ValueError("FIRECRAWL_API_URL not found in environment variables")
 
         try:
             logger.info(

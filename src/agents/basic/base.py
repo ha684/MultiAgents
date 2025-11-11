@@ -1,7 +1,7 @@
 # src/agents/basic/base.py
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
@@ -41,15 +41,25 @@ class BaseAgent(ABC):
         retry_prompt: str,
         fallback_value: str = "",
         error_context: str = "Agent",
-    ) -> AIMessage:
+        return_thinking: bool = False,
+    ) -> Union[str, Tuple[str, Optional[str]]]:
         iteration = 0
+        thinking_content = None
+
         while iteration < max_iterations:
             iteration += 1
             prompt = ChatPromptTemplate.from_messages(messages)
             response: AIMessage = await (prompt | llm_with_tools).ainvoke({})
             messages.append(response)
 
+            if response.tool_calls:
+                for tc in response.tool_calls:
+                    if tc["name"] == "think":
+                        thinking_content = tc["args"].get("thought", "")
+
             if response.content:
+                if return_thinking:
+                    return response.content, thinking_content
                 return response
 
             if response.tool_calls:
@@ -76,7 +86,9 @@ class BaseAgent(ABC):
         logger.error(
             f"{error_context}: Failed after {iteration} iterations. Returning fallback."
         )
-        return AIMessage(content=fallback_value)
+        if return_thinking:
+            return fallback_value, thinking_content
+        return fallback_value
 
     async def iterative_llm_call_structured(
         self,

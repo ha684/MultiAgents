@@ -51,17 +51,24 @@ async def _run_simple_search(
 
     result = await simple_search_graph.ainvoke(state=simple_search_state)
 
-    if getattr(result, "status", None) != "success":
+    if result.status != "success":
+        error_msg = (
+            getattr(result, "message", None)
+            or f"SimpleSearchGraph failed with status: {result.status}"
+        )
         return SubgraphOutput(
             main_context="",
             cited_documents=[],
-            response_metadata={},
-            subgraph_error=(
-                getattr(result, "message", None) or "SimpleSearchGraph failed"
-            ),
+            response_metadata={"error": error_msg, "status": result.status},
+            subgraph_error=error_msg,
         )
 
-    res_state = result.state if isinstance(result.state, dict) else {}
+    res_state = (
+        result.state
+        if hasattr(result, "state") and isinstance(result.state, dict)
+        else {}
+    )
+
     return SubgraphOutput(
         main_context="",
         cited_documents=res_state.get("cited_documents", []),

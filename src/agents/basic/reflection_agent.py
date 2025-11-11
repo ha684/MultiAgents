@@ -1,6 +1,5 @@
 # src/agents/basic/router_agent.py
-import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
@@ -19,7 +18,7 @@ class ReflectionAgent(BaseAgent):
 
     async def ainvoke(
         self, state: OrchestratorState | ResearchState
-    ) -> Optional[ReflectionResult]:
+    ) -> Union[ReflectionResult, Tuple[str, Optional[str]]]:
         if "subgraph_results" in state:  # OrchestratorState
             current_iteration = state.get("current_iteration", 1)
             max_iterations = state.get("max_iterations")
@@ -124,25 +123,17 @@ class ReflectionAgent(BaseAgent):
                     "Please provide the reflection result in correct JSON format with all required fields including 'subgraphs_to_retry'."
                 ),
             )
-
+            return reflection_result
         else:
-            all_search_history = state.get("all_search_history", [])
-            search_history = [
-                {
-                    "query": search_result["query"],
-                    "search_type": search_result["search_type"],
-                }
-                for search_result in all_search_history
-            ]
+            learnings = state.get("learnings", [])
+            knowledge = state.get("accumulated_knowledge", "")
 
             prompt_input = PromptTemplates.REFLECTION_HUMAN_PROMPT.format(
                 original_query=state["contextualized_query"],
-                accumulated_knowledge=state["accumulated_knowledge"],
-                missing_aspects=json.dumps(
-                    state["verification_result"]["missing_aspects"],
-                    ensure_ascii=False,
-                ),
-                search_history=json.dumps(search_history, ensure_ascii=False),
+                learnings="\n".join(f"- {learning}" for learning in learnings[-3:])
+                if learnings
+                else "None yet",
+                knowledge=knowledge[-3000:] if knowledge else "None yet",
             )
 
             messages: List[BaseMessage] = [
@@ -150,15 +141,15 @@ class ReflectionAgent(BaseAgent):
                 HumanMessage(content=prompt_input),
             ]
 
-            reflection_result = await self.iterative_llm_call_structured(
+            reflection_result, thinking_content = await self.iterative_llm_call_text(
                 messages=messages,
                 llm_with_tools=self.thinking_llm,
                 available_tools={"think": think},
                 max_iterations=3,
-                parse_fn=parse_reflection_result,
                 retry_prompt="Please provide the reflection in the correct JSON format.",
+                return_thinking=True,
             )
-        return reflection_result
+            return reflection_result, thinking_content
 
 
 def parse_reflection_result(content: str) -> Optional[Dict[str, Any]]:

@@ -91,3 +91,48 @@ def format_context_for_response(documents: List[Document]) -> str:
         xml_output += "  </document>\n"
     xml_output += "</documents>"
     return xml_output
+
+
+def truncate_docs_by_tokens(
+    documents, max_tokens, tokenizer, min_tokens_per_doc=0, add_ellipsis=True
+):
+    if not documents:
+        return []
+
+    texts = [doc.page_content for doc in documents]
+    encoded = tokenizer.encode_batch(text=texts, num_threads=4)  # list[list[int]]
+    lens = [len(toks) for toks in encoded]
+    total = sum(lens)
+    if total <= max_tokens:
+        return documents
+
+    quotas = [max(min_tokens_per_doc, max_tokens * (L / total)) for L in lens]
+    floors = [int(q) for q in quotas]
+    floors = [min(f, L) for f, L in zip(floors, lens)]
+    allocated = floors[:]
+    leftover = max_tokens - sum(allocated)
+
+    if leftover > 0:
+        remainders = [(q - int(q), i) for i, q in enumerate(quotas)]
+        remainders.sort(reverse=True)
+        j = 0
+        while leftover > 0 and j < len(remainders):
+            frac, i = remainders[j]
+            if allocated[i] < lens[i]:
+                take = min(leftover, lens[i] - allocated[i])
+                allocated[i] += take
+                leftover -= take
+            j += 1
+
+    final_docs = []
+    for i, doc in enumerate(documents):
+        k = allocated[i]
+        if k <= 0:
+            continue
+        toks = encoded[i][:k]
+        truncated_text = tokenizer.decode(toks)
+        if add_ellipsis and k < lens[i]:
+            truncated_text += "…"
+        final_docs.append(type(doc)(page_content=truncated_text, metadata=doc.metadata))
+
+    return final_docs

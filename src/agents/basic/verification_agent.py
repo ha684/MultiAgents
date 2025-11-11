@@ -1,5 +1,5 @@
 # src/agents/basic/verification_agent.py
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
@@ -22,7 +22,7 @@ class VerificationAgent(BaseAgent):
         super().__init__(provider)
         logger.info("Verification Agent initialized successfully.")
 
-    async def ainvoke(self, state: OrchestratorState) -> str:
+    async def ainvoke(self, state: OrchestratorState) -> Dict[str, Any]:
         """
         Verifies information from relevant documents.
         """

@@ -1,17 +1,19 @@
 # src/agents/graph/simple_search_graph.py
 from __future__ import annotations
+
 from typing import Any, Dict, List
 
+import tiktoken
 from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
-import tiktoken
 
 from src.agents.basic import citation_agent
 from src.agents.graph.base import GraphAgentBase
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search
 from src.domain.entities.graph import RunConfig
 from src.domain.entities.state import SimpleSearchState
+from src.utils import truncate_docs_by_tokens
 from src.utils.logger_conf import logger
 
 
@@ -48,9 +50,6 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
             "message_metadata"
         ]["web_search_config"]
 
-        rerank_top = 10
-        max_tokens = 8192
-
         contextualized_query = state["contextualized_query"]
         context_metadata = {
             "kb_id": kb_id,
@@ -72,31 +71,9 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
 
         logger.info(f"Retrieved {len(retrieved_docs)} documents")
 
-        if len(retrieved_docs) > rerank_top:
-            retrieved_docs = retrieved_docs[:rerank_top]
-
-        texts_list = [doc.page_content for doc in retrieved_docs]
-        encoded_batches = self.tokenizer.encode_batch(text=texts_list, num_threads=4)
-        total_tokens = sum(len(tokens) for tokens in encoded_batches)
-
-        logger.info(f"Total tokens: {total_tokens} / {max_tokens}")
-
-        if total_tokens > max_tokens:
-            final_docs = []
-            current_tokens = 0
-
-            for i, doc in enumerate(retrieved_docs):
-                doc_tokens = len(encoded_batches[i])
-                if current_tokens + doc_tokens > max_tokens and final_docs:
-                    logger.warning(
-                        f"Token limit reached. Truncating from "
-                        f"{len(retrieved_docs)} to {len(final_docs)} documents"
-                    )
-                    break
-                final_docs.append(doc)
-                current_tokens += doc_tokens
-
-            retrieved_docs = final_docs
+        retrieved_docs = truncate_docs_by_tokens(
+            retrieved_docs, max_tokens=8192, tokenizer=self.tokenizer
+        )
 
         for i, doc in enumerate(retrieved_docs):
             doc.metadata["original_index"] = i

@@ -263,6 +263,45 @@ services:
       LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-}
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
 
+  # firecrawl-api:
+  #   image: trieve/firecrawl:v0.0.46
+  #   environment:
+  #     - REDIS_URL=${REDIS_URI:-redis://redis:6379}
+  #     - REDIS_RATE_LIMIT_URL=${REDIS_URI:-redis://redis:6379}
+  #     - PORT=${FIRECRAWL_PORT:-3002}
+  #     - NUM_WORKERS_PER_QUEUE=${NUM_WORKERS_PER_QUEUE:-4}
+  #     - BULL_AUTH_KEY=${BULL_AUTH_KEY}
+  #     - TEST_API_KEY=${FIRECRAWL_API_KEY}
+  #     - HOST=${HOST:-0.0.0.0}
+  #     - LOGGING_LEVEL=${LOGGING_LEVEL:-INFO}
+  #     - MAX_RAM=${MAX_RAM:-0.95}
+  #     - MAX_CPU=${MAX_CPU:-0.95}
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   ports:
+  #     - "3002:3002"
+  #   command: ["pnpm", "run", "start:production"]
+
+  # firecrawl-worker:
+  #   image: trieve/firecrawl:v0.0.46
+  #   environment:
+  #     - REDIS_URL=${REDIS_URI:-redis://redis:6379}
+  #     - REDIS_RATE_LIMIT_URL=${REDIS_URI:-redis://redis:6379}
+  #     - PORT=${FIRECRAWL_PORT:-3002}
+  #     - NUM_WORKERS_PER_QUEUE=${NUM_WORKERS_PER_QUEUE:-4}
+  #     - BULL_AUTH_KEY=${BULL_AUTH_KEY}
+  #     - TEST_API_KEY=${FIRECRAWL_API_KEY}
+  #     - SCRAPING_BEE_API_KEY=${SCRAPING_BEE_API_KEY}
+  #     - HOST=${HOST:-0.0.0.0}
+  #     - LOGGING_LEVEL=${LOGGING_LEVEL:-INFO}
+  #     - MAX_RAM=${MAX_RAM:-0.95}
+  #     - MAX_CPU=${MAX_CPU:-0.95}
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+  #   depends_on:
+  #     - firecrawl-api
+  #   command: ["pnpm", "run", "workers"]
+
 volumes:
   postgres_data:
   redis_data:

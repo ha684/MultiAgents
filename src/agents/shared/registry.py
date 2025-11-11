@@ -803,8 +803,8 @@ def seed_base_subgraphs():
     Populate registry with all base subgraph profiles.
     Call this on application startup.
     """
-    SubgraphRegistry.register(RAG_SEARCH_PROFILE)
-    SubgraphRegistry.register(WEB_SEARCH_PROFILE)
+    # SubgraphRegistry.register(RAG_SEARCH_PROFILE)
+    # SubgraphRegistry.register(WEB_SEARCH_PROFILE)
     SubgraphRegistry.register(SQL_QUERY_PROFILE)
     SubgraphRegistry.register(DEEP_RESEARCH_PROFILE)
     SubgraphRegistry.register(DIRECT_RESPONSE_PROFILE)
