@@ -12,7 +12,6 @@ class VectorStorageMigration:
     async def run_migrations(self):
         """Run all necessary migrations/setup"""
         await self._ensure_collection_exists()
-        await self._create_payload_indexes()
 
     async def _ensure_collection_exists(self):
         if not await self.client.collection_exists(settings.vector_collection_name):
@@ -31,17 +30,25 @@ class VectorStorageMigration:
                     )
                 },
             )
+            await self._create_payload_indexes()
+            logger.info(
+                f"Collection '{settings.vector_collection_name}' created successfully"
+            )
+        else:
+            logger.info(
+                f"Collection '{settings.vector_collection_name}' already exists"
+            )
 
     async def _create_payload_indexes(self):
         await self.client.create_payload_index(
             collection_name=settings.vector_collection_name,
             field_name="metadata.document_id",
-            field_schema=models.PayloadSchemaType.KEYWORD,
+            field_schema=models.PayloadSchemaType.UUID,
         )
         await self.client.create_payload_index(
             collection_name=settings.vector_collection_name,
             field_name="metadata.kb_id",
-            field_schema=models.PayloadSchemaType.KEYWORD,
+            field_schema=models.PayloadSchemaType.UUID,
         )
 
         await self.client.create_payload_index(
@@ -55,8 +62,8 @@ class VectorStorageMigration:
             ),
         )
 
-        await self.client.create_payload_index(
-            collection_name=settings.vector_collection_name,
-            field_name="metadata.folder_path",
-            field_schema=models.PayloadSchemaType.KEYWORD,
-        )
+        # await self.client.create_payload_index(
+        #     collection_name=settings.vector_collection_name,
+        #     field_name="metadata.folder_path",
+        #     field_schema=models.PayloadSchemaType.KEYWORD,
+        # )

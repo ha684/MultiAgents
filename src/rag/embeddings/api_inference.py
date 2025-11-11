@@ -110,11 +110,3 @@ class InferenceAPIEmbeddings(BaseModel, Embeddings):
             all_embeddings.extend(batch_embeddings)
 
         return all_embeddings
-
-    def embed_query_sync(self, text: str) -> List[float]:
-        """Synchronous wrapper for embed_query."""
-        return asyncio.run(self.embed_query(text))
-
-    def embed_documents_sync(self, texts: List[str]) -> List[List[float]]:
-        """Synchronous wrapper for embed_documents."""
-        return asyncio.run(self.embed_documents(texts))
