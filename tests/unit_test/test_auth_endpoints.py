@@ -3,7 +3,7 @@ Unit tests for authentication endpoints.
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, ANY, AsyncMock
 from fastapi import HTTPException
 
 from src.database.models.user import UserRole, UserStatus
@@ -17,7 +17,9 @@ class TestAuthEndpoints:
     @pytest.mark.asyncio
     async def test_register_success(self, async_client):
         """Test successful user registration."""
-        with patch("src.api.auth.auth_service.register_user") as mock_register:
+        with patch(
+            "src.api.auth.auth_service.register_user", new_callable=AsyncMock
+        ) as mock_register:
             mock_user = MagicMock()
             mock_user.model_dump.return_value = {
                 "id": "test-user-id",
@@ -38,6 +40,10 @@ class TestAuthEndpoints:
             )
 
             assert response.status_code == 200
+            assert mock_register.await_count == 1
+            mock_register.assert_awaited()
+
+            mock_register.assert_awaited_once_with(ANY)
             data = response.json()
             assert "data" in data
             assert (
