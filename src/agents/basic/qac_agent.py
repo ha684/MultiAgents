@@ -6,7 +6,32 @@ from langchain_core.prompts import PromptTemplate
 
 from src.core.config.llm_config import SupportedLLMProviders
 from src.llm.factory import get_llm
-from src.agents.prompts.get_prompt_template import load_prompt_template
+
+QAC_PROMPT_TEMPLATE = """Your task is to create exactly one question and one answer based on the provided input.
+
+<GUIDELINES>:
+1. The question must be clear, concise, and accurately reflect the content of the input.
+2. The answer must be precise, detailed, and relevant to the question without adding information beyond the input.
+3. If the input lacks sufficient information to create a meaningful question and answer, return a question and answer suitable for the remaining content.
+4. The languague of the question and answer should only be English.
+5. Return exactly one question and one answer only.
+</GUIDELINES>
+
+<EXAMPLE>:
+Input: "Renewable energy provides an environmentally friendly alternative to fossil fuels."
+Output: {{"question": "What are the advantages of renewable energy?", "answer": "Renewable energy provides an environmentally friendly alternative to fossil fuels."}}
+</EXAMPLE>
+
+### Input:
+{input}
+
+### Output:
+The output must be in exact proper valid JSON format, with no extra spaces or line breaks, with special characters properly escaped, following this structure:
+{{"question": "Generated question", "answer": "Generated answer: but with \"quotes\""}}
+
+## Remember:
+JSON only allows certain characters to be escaped, such as double quotes, backslashes, and control characters. Ensure that your output adheres to this format strictly.
+DO NOT escape characters that do not require escaping in JSON, such as underscores or spaces. The output must be a valid JSON object with the keys "question" and "answer"."""
 
 
 class QACAgent:
@@ -24,12 +49,9 @@ class QACAgent:
             List[Tuple[str, str]]: List of (question, answer) tuples.
         """
         try:
-            language = "en"
-            prompt_template = load_prompt_template(
-                task_name="generate_qa",
-                language_code=language,
+            prompt = PromptTemplate(
+                template=QAC_PROMPT_TEMPLATE, input_variables=["input"]
             )
-            prompt = PromptTemplate(template=prompt_template, input_variables=["input"])
 
             chain = prompt | self.llm | JsonOutputParser()
 

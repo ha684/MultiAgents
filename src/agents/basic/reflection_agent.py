@@ -124,6 +124,7 @@ class ReflectionAgent(BaseAgent):
                 ),
             )
             return reflection_result
+
         else:
             learnings = state.get("learnings", [])
             knowledge = state.get("accumulated_knowledge", "")

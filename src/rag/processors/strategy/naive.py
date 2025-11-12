@@ -78,7 +78,7 @@ class NaiveStrategy(BaseStrategy):
             return PyMuPDF4LLMLoader(file_path)
         if file_extension == ".doc":
             return UnstructuredWordDocumentLoader(file_path)
-        if file_extension == ".ppt":
+        if file_extension in [".ppt", ".pptx"]:
             return UnstructuredPowerPointLoader(file_path, include_slide_notes=True)
         if file_extension in [".xml"]:
             return UnstructuredXMLLoader(file_path, max_characters=1000000)
