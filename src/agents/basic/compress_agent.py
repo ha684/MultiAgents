@@ -9,37 +9,48 @@ from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
 COMPRESS_PROMPT_TEMPLATE = textwrap.dedent("""\
-You are an information extraction specialist. Extract key facts from documents that are relevant to the query.
+You are an information extraction specialist. Extract and summarize key facts from documents that relate to the query.
 
-**Your job:** Copy relevant facts from the documents with proper citations. Do NOT add information that isn't in the documents.
+**Your task:** Present ONLY the information found in the documents, organized clearly with citations.
 
 **Citation format:**
 - Each document has: [CITATION: N]
-- Cite using: [N]
+- Cite using: [N] after each fact
 - Example: "Revenue was $50M [5]"
+- Multiple sources: "Revenue increased [1], [3]"
 
-**Rules:**
-1. Only extract facts that directly answer or relate to the query
-2. Keep facts specific: include numbers, dates, names
-3. Cite every fact using [N] format
-4. If the same fact appears in multiple documents, cite all: [1], [3]
-5. Group related facts under simple topic headers when helpful
-6. Use bullet points for lists of facts
-7. DO NOT invent, infer, or elaborate beyond what the documents say
+**How to extract information:**
+1. Read the query and identify what information is being requested
+2. Extract facts from documents that answer ANY part of the query
+3. Include specific details: numbers, dates, names, technical terms
+4. Group related facts under descriptive headers
+5. Use bullet points for each distinct fact
+6. Cite every fact immediately after the statement using [N]
 
-**Output format:**
-```
-## [Topic if needed]
-- Fact from document [N]
-- Another fact [M]
-- Fact from multiple sources [N], [M]
-```
+**CRITICAL RULES - YOU MUST FOLLOW THESE:**
+- Present ONLY facts that exist in the documents
+- If information is not in the documents, DO NOT mention it at all
+- NEVER write statements like:
+  * "The documents do not mention..."
+  * "No specific information about..."
+  * "While not explicitly mentioned..."
+  * "The documents do not detail..."
+- If a query asks about X, Y, and Z, but documents only cover X and Y, only present X and Y
+- Skip any part of the query that has no supporting information in the documents
 
-**What to avoid:**
-- Don't add your own analysis or interpretation
-- Don't combine facts from different sources unless they say the exact same thing
-- Don't include vague or generic statements without specific details
-- Don't extract information unrelated to the query
+**Your output should contain:**
+- Only factual statements found in the documents
+- Clear topic headers (when helpful)
+- Bullet points with citations
+- No commentary about missing information
+
+**Example of what NOT to do:**
+ "Environmental constraints are not mentioned in the documents [1], [2]"
+ "While the documents do not explicitly cover X, they do mention Y [3]"
+
+**Example of what TO do:**
+ "AI adoption in mining will reach 60% by 2025 [1]"
+ "Market growth projected at 39.2% CAGR [2]"
 """)
 
 
@@ -86,20 +97,14 @@ class CompressAgent(BaseAgent):
 
             system_prompt = SystemMessage(content=COMPRESS_PROMPT_TEMPLATE)
             user_content = HumanMessage(
-                content=f"""<query>{query}</query>
-
-{formatted_docs}
-
-Extract relevant facts from these documents. Only include information that is explicitly stated in the documents."""
+                content=f"""
+                Context: \n{formatted_docs}\n\n User Query: {query}
+                Extract relevant facts from these documents. Only include information that is explicitly stated in the documents.
+                """
             )
             messages: List[BaseMessage] = [system_prompt, user_content]
-
             response = await self.simple_llm_call(messages=messages)
-
-            compressed_content = response.content
-            return compressed_content
-
+            return response.content
         except Exception as e:
             logger.error(f"Error compressing information: {e}", exc_info=True)
-            logger.warning("Using fallback: returning raw document content")
             return fallback

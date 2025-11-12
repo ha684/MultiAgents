@@ -41,55 +41,36 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
     @abstractmethod
     def default_run_config(self) -> RunConfig: ...
 
-    def on_node_state(
-        self, last_state: StateT, node_output: Optional[StateT]
-    ) -> StateT:
-        return node_output if node_output is not None else last_state
-
     async def ainvoke(
         self, state: StateT, config_override: Optional[RunConfig] = None
     ) -> InvokeResult[StateT]:
-        """Invoke and return the final result - used for subgraph nodes"""
         run_cfg = config_override or self.default_run_config()
         lg_config = run_cfg.as_langgraph_config()
         last_state: StateT = state
 
         try:
             async with asyncio.timeout(run_cfg.timeout_seconds):
-                async for event in self.graph.astream_events(
-                    state, config=lg_config, version=run_cfg.version
-                ):
-                    out = event.get("data", {}).get("output")
-                    last_state = self.on_node_state(last_state, out)
+                async for chunk in self.graph.astream(state, config=lg_config):
+                    if "__end__" in chunk:
+                        last_state = chunk["__end__"]
+                    else:
+                        for node_output in chunk.values():
+                            if isinstance(node_output, dict):
+                                last_state = {**last_state, **node_output}
 
-            return InvokeResult(state=last_state, status="success")
+                return InvokeResult(state=last_state, status="success")
 
         except RecursionError:
-            msg = (
-                f"🛑 Graph '{run_cfg.graph_name}' stopped due to recursion limit "
-                f"({run_cfg.recursion_limit}). Returning last known state. "
-                f"Consider increasing recursion_limit or checking for circular dependencies."
-            )
-            logger.warning(msg)
-            return InvokeResult(state=last_state, status="recursion_limit", message=msg)
+            logger.warning("Recursion limit - returning last valid state")
+            return InvokeResult(state=last_state, status="recursion_limit")
 
         except asyncio.TimeoutError:
-            msg = (
-                f"⚠️ Graph '{run_cfg.graph_name}' timed out after "
-                f"{run_cfg.timeout_seconds}s. Returning last known state. "
-                f"Consider optimizing long-running nodes or increasing timeout_seconds."
-            )
-            logger.warning(msg)
-            return InvokeResult(state=last_state, status="timeout", message=msg)
+            logger.warning("Timeout - returning last valid state")
+            return InvokeResult(state=last_state, status="timeout")
 
         except Exception as e:
-            msg = (
-                f"❌ Graph '{run_cfg.graph_name}' failed due to unexpected error "
-                f"({type(e).__name__}: {e}). Returning last known state. "
-                f"Review stack trace and node logic for root cause."
-            )
-            logger.error(msg, exc_info=True)
-            return InvokeResult(state=last_state, status="error", message=msg)
+            logger.error(f"Error - returning last valid state: {e}", exc_info=True)
+            return InvokeResult(state=last_state, status="error", message=str(e))
 
     async def astream(
         self, state: StateT, config_override: Optional[RunConfig] = None

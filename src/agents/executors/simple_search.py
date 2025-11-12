@@ -2,8 +2,8 @@
 from typing import Any, Dict
 
 from src.agents.graph import simple_search_graph
-from src.domain.entities.state import OrchestratorState, SimpleSearchState
 from src.domain.entities.graph import SubgraphOutput
+from src.domain.entities.state import OrchestratorState, SimpleSearchState
 
 
 def _prepare_web_metadata(state: OrchestratorState, web_active: bool) -> Dict[str, Any]:
@@ -51,30 +51,47 @@ async def _run_simple_search(
 
     result = await simple_search_graph.ainvoke(state=simple_search_state)
 
-    if result.status != "success":
-        error_msg = (
-            getattr(result, "message", None)
-            or f"SimpleSearchGraph failed with status: {result.status}"
-        )
-        return SubgraphOutput(
-            main_context="",
-            cited_documents=[],
-            response_metadata={"error": error_msg, "status": result.status},
-            subgraph_error=error_msg,
-        )
-
     res_state = (
         result.state
         if hasattr(result, "state") and isinstance(result.state, dict)
         else {}
     )
 
-    return SubgraphOutput(
-        main_context="",
-        cited_documents=res_state.get("cited_documents", []),
-        response_metadata=res_state.get("response_metadata", {}),
-        subgraph_error=None,
-    )
+    cited_docs = res_state.get("cited_documents", [])
+    has_content = bool(cited_docs)
+
+    # Handle different result statuses
+    if result.status == "error" and not has_content:
+        # Hard error with no content - this is a real failure
+        error_msg = getattr(result, "message", None) or "SimpleSearchGraph failed"
+        return SubgraphOutput(
+            main_context="",
+            cited_documents=[],
+            response_metadata={"error": error_msg, "status": result.status},
+            subgraph_error=error_msg,
+        )
+    elif result.status in ("timeout", "recursion_limit"):
+        # Soft failure - may have partial results, not a hard error
+        warning_msg = f"Search {result.status} but may have partial results"
+        return SubgraphOutput(
+            main_context="",
+            cited_documents=cited_docs,
+            response_metadata={
+                "status": result.status,
+                "warning": warning_msg,
+                "partial_results": has_content,
+                **(res_state.get("response_metadata", {})),
+            },
+            subgraph_error=None if has_content else warning_msg,
+        )
+    else:
+        # Success or other status with/without content
+        return SubgraphOutput(
+            main_context="",
+            cited_documents=cited_docs,
+            response_metadata=res_state.get("response_metadata", {}),
+            subgraph_error=None,
+        )
 
 
 class RagSearchExecutor:

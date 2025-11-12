@@ -60,20 +60,41 @@ async def _run_deep_research(
         execution.update_partial_state(result_state)
         message = None
 
-    if result_state.status != "success":
+    accumulated_knowledge = result_state.state.get("accumulated_knowledge", "")
+    cited_documents = result_state.state.get("cited_documents", [])
+    has_content = bool(accumulated_knowledge or cited_documents)
+
+    if result_state.status == "error" and not has_content:
+        logger.error(f"DeepResearchGraph hard error: {result_state.message}")
         return SubgraphOutput(
             main_context="",
             cited_documents=[],
-            response_metadata={},
+            response_metadata=result_state.state.get("response_metadata", {}),
             subgraph_error=(result_state.message or "DeepResearchGraph failed"),
         )
-
-    return SubgraphOutput(
-        main_context=result_state.state.get("accumulated_knowledge", ""),
-        cited_documents=result_state.state.get("cited_documents", []),
-        response_metadata=result_state.state.get("response_metadata", {}),
-        subgraph_error=message,
-    )
+    elif result_state.status in ("timeout", "recursion_limit"):
+        warning_msg = f"Research {result_state.status} but may have partial results"
+        logger.warning(
+            f"DeepResearchGraph {result_state.status} with {'content' if has_content else 'no content'}"
+        )
+        return SubgraphOutput(
+            main_context=accumulated_knowledge,
+            cited_documents=cited_documents,
+            response_metadata={
+                "status": result_state.status,
+                "warning": warning_msg,
+                "partial_results": has_content,
+                **(result_state.state.get("response_metadata", {})),
+            },
+            subgraph_error=None if has_content else warning_msg,
+        )
+    else:
+        return SubgraphOutput(
+            main_context=accumulated_knowledge,
+            cited_documents=cited_documents,
+            response_metadata=result_state.state.get("response_metadata", {}),
+            subgraph_error=message,
+        )
 
 
 class DeepResearchExecutor:

@@ -2,9 +2,9 @@
 from typing import Any, Dict, List
 
 from src.agents.graph.sql_graph import SqlGraph
-from src.domain.entities.state import OrchestratorState, SqlState
-from src.domain.entities.graph import SubgraphOutput
 from src.database.sql_database import AsyncSQLDatabase
+from src.domain.entities.graph import SubgraphOutput
+from src.domain.entities.state import OrchestratorState, SqlState
 
 
 def _stringify_cell(v: Any, max_len: int = 160) -> str:
@@ -50,7 +50,8 @@ async def _run_sql_query(
     error_text = ""
     response_metadata: Dict[str, Any] = result.state.get("response_metadata", {}) or {}
 
-    if result.status != "success":
+    no_content = not result.state.get("query_results", [])
+    if result.status != "success" and no_content:
         error_text = f"SQL Subgraph Error: {result.message}\n\n"
 
     if result.state.get("is_relevant") is False:

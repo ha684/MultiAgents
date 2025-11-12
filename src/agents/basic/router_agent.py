@@ -3,17 +3,20 @@
 import textwrap
 from typing import List, Optional
 
-from langchain_core.messages import BaseMessage
-from langchain_core.messages import get_buffer_string
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import (
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    get_buffer_string,
+)
 
 from src.agents.basic.base import BaseAgent
-from src.domain.entities.state import OrchestratorState
-from src.domain.schemas.graph import RouteDecision
 from src.agents.prompts.agent_prompts import PromptTemplates
 from src.agents.shared.registry import SubgraphRegistry
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.core.config.llm_config import SupportedLLMProviders
+from src.domain.entities.state import OrchestratorState
+from src.domain.schemas.graph import RouteDecision
 from src.utils import parse_response
 from src.utils.logger_conf import logger
 
@@ -37,15 +40,36 @@ class RouterAgent(BaseAgent):
         subgraph_definitions = SubgraphRegistry.generate_routing_prompt(active_map)
 
         execution_history = state.get("execution_history", [])
+        failed_subgraphs = state.get("failed_subgraphs", set())
+        empty_result_subgraphs = state.get("empty_result_subgraphs", set())
 
         history_context = ""
         if execution_history:
-            history_context = "\n\n**Previous attempts:**\n" + "\n".join(
-                [
-                    f"- {h['subgraph']}: {h.get('error', 'No result')}"
-                    for h in execution_history
-                ]
-            )
+            history_parts = []
+            for h in execution_history:
+                subgraph = h["subgraph"]
+                status = h.get("status", "unknown")
+                error = h.get("error", "No result")
+
+                if status == "error":
+                    history_parts.append(
+                        f"- {subgraph}: HARD FAILED - {error} (DO NOT RETRY)"
+                    )
+                elif status == "empty":
+                    history_parts.append(
+                        f"- {subgraph}: NO RESULTS - {error} (can retry with different approach)"
+                    )
+                elif status == "success":
+                    history_parts.append(f"- {subgraph}: ✓ SUCCESS")
+                else:
+                    history_parts.append(f"- {subgraph}: {error}")
+
+            history_context = "\n\n**Previous attempts:**\n" + "\n".join(history_parts)
+
+            if failed_subgraphs:
+                history_context += f"\n\n**Hard failed subgraphs (NEVER retry):** {', '.join(failed_subgraphs)}"
+            if empty_result_subgraphs:
+                history_context += f"\n\n**Empty result subgraphs (retry only with better query):** {', '.join(empty_result_subgraphs)}"
 
         max_iterations = 3
         conversation_context = get_buffer_string(conversation[:-1])
@@ -73,11 +97,9 @@ class RouterAgent(BaseAgent):
         )
         messages: List[BaseMessage] = [system_prompt, context_message]
 
-        router_llm = self.thinking_llm
-
         response = await self.iterative_llm_call_structured(
             messages=messages,
-            llm_with_tools=router_llm,
+            llm_with_tools=self.thinking_llm,
             available_tools={"think": think},
             max_iterations=max_iterations,
             parse_fn=parse_route_decision,

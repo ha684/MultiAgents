@@ -584,7 +584,7 @@ Remember: Transform database query results into clear, actionable answers that n
 class ResponseAgent(BaseAgent):
     """Agent responsible for generating the final response based on mode and context."""
 
-    def __init__(self, provider: SupportedLLMProviders = "google-gemini"):
+    def __init__(self, provider: SupportedLLMProviders = "nxchat"):
         super().__init__(provider)
         logger.info("Response Agent initialized successfully.")
 
@@ -638,7 +638,7 @@ class ResponseAgent(BaseAgent):
             )
             user_prompt = HumanMessage(
                 content=PromptTemplates.FINAL_SYNTHESIZER_PROMPT.format(
-                    user_message=history[-1].content,
+                    user_query=history[-1].content,
                     accumulated_knowledge=accumulated_knowledge,
                 )
             )
