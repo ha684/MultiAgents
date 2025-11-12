@@ -13,14 +13,11 @@ from src.core.config.llm_config import (
     SupportedLLMProviders,
 )
 from src.llm.custom_openai_service import CustomOpenAIService
-from src.utils.logger_conf import logger
 
 
 def get_llm(provider: SupportedLLMProviders) -> BaseChatModel:
     if provider not in LLM_MODELS:
         raise ValueError(f"Invalid provider: {provider}")
-
-    logger.info(f"Initializing LLM for provider: {provider}")
 
     default_configs = LLM_MODELS_CONFIG.get(provider)
     assert default_configs is not None, f"Configs for provider {provider} not found"

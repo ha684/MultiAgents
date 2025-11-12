@@ -20,9 +20,11 @@ class PromptTemplates:
         Select the subgraph(s) needed to fully answer this query. You may select:
         - A single subgraph if one source can answer completely
         - Multiple subgraphs if the query requires combining different information sources
+        - "direct_response" if no subgraph is needed (e.g., casual conversation, greeting) OR if all viable subgraphs have failed
         
         IMPORTANT: Only select from the subgraphs explicitly listed in the <available_subgraphs> section.
-        CRITICAL: DO NOT route to any subgraph that appears in the execution history with an error. These routes have already failed and should be avoided.
+        CRITICAL: DO NOT route to any subgraph that has HARD FAILED (status: error) in the execution history. These routes cannot be retried.
+        NOTE: Subgraphs with EMPTY RESULTS (status: empty) can be retried if you think a different query approach might work, but consider if alternative subgraphs would be better.
         </task>
 
         <thinking_requirement>
@@ -179,13 +181,18 @@ class PromptTemplates:
         - Consider context from conversation history
 
         ### Execution History Shows Failures
-        - Don't repeat failed routes unless query was refined
-        - Look for alternative available routes
-        - Consider different route combinations
+        - **Hard errors (status: error)**: NEVER retry these subgraphs - they failed to execute
+        - **Empty results (status: empty)**: Can retry if you have a better query strategy, but consider alternatives first
+        - If all viable subgraphs have failed or returned empty, select "direct_response" to answer with available context
+        - Look for alternative available routes that haven't been tried yet
 
         ### Pure Conversational Queries
-        - No information retrieval needed
+        - No information retrieval needed (greetings, casual chat, follow-ups with sufficient context)
         - Route to direct_response
+        
+        ### All Options Exhausted
+        - If all relevant subgraphs have failed or returned no results
+        - Route to direct_response to provide best possible answer with available information
 
         </handling_edge_cases>
 

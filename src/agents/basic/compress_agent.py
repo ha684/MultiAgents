@@ -9,37 +9,32 @@ from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
 COMPRESS_PROMPT_TEMPLATE = textwrap.dedent("""\
-You are an information extraction specialist. Extract key facts from documents that are relevant to the query.
+You are an information extraction and summarization specialist. Your task is to extract and summarize key facts from documents that are relevant to the query.
 
-**Your job:** Copy relevant facts from the documents with proper citations. Do NOT add information that isn't in the documents.
+**Your job:** Extract relevant information from the documents and present it clearly with proper citations.
 
 **Citation format:**
 - Each document has: [CITATION: N]
-- Cite using: [N]
+- Cite using: [N] after each fact
 - Example: "Revenue was $50M [5]"
+- Multiple sources: "Revenue increased [1], [3]"
 
 **Rules:**
-1. Only extract facts that directly answer or relate to the query
-2. Keep facts specific: include numbers, dates, names
-3. Cite every fact using [N] format
-4. If the same fact appears in multiple documents, cite all: [1], [3]
-5. Group related facts under simple topic headers when helpful
-6. Use bullet points for lists of facts
-7. DO NOT invent, infer, or elaborate beyond what the documents say
+1. Extract ONLY facts that directly relate to the query
+2. Keep facts specific: include numbers, dates, names, technical details
+3. Cite every fact using [N] format immediately after the statement
+4. Group related facts under clear topic headers
+5. Use bullet points for clarity
+6. Summarize information concisely while preserving ALL key details
 
-**Output format:**
-```
-## [Topic if needed]
-- Fact from document [N]
-- Another fact [M]
-- Fact from multiple sources [N], [M]
-```
+**Critical - What NOT to do:**
+- DO NOT mention what is missing or not covered in the documents
+- DO NOT add statements like "The documents do not mention..." or "No information about..."
+- DO NOT include analysis, interpretation, or speculation beyond the documents
+- DO NOT add conclusions about gaps in information
+- If the query asks about something not in the documents, simply omit that part
 
-**What to avoid:**
-- Don't add your own analysis or interpretation
-- Don't combine facts from different sources unless they say the exact same thing
-- Don't include vague or generic statements without specific details
-- Don't extract information unrelated to the query
+**Focus:** Present only what IS in the documents, organized clearly and cited properly.
 """)
 
 
@@ -86,20 +81,14 @@ class CompressAgent(BaseAgent):
 
             system_prompt = SystemMessage(content=COMPRESS_PROMPT_TEMPLATE)
             user_content = HumanMessage(
-                content=f"""<query>{query}</query>
-
-{formatted_docs}
-
-Extract relevant facts from these documents. Only include information that is explicitly stated in the documents."""
+                content=f"""
+                Context: \n{formatted_docs}\n\n User Query: {query}
+                Extract relevant facts from these documents. Only include information that is explicitly stated in the documents.
+                """
             )
             messages: List[BaseMessage] = [system_prompt, user_content]
-
             response = await self.simple_llm_call(messages=messages)
-
-            compressed_content = response.content
-            return compressed_content
-
+            return response.content
         except Exception as e:
             logger.error(f"Error compressing information: {e}", exc_info=True)
-            logger.warning("Using fallback: returning raw document content")
             return fallback

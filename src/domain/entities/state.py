@@ -80,7 +80,6 @@ class OrchestratorState(TypedDict):
     contextualized_query: Optional[str]
 
     route_decisions: Optional[List[str]]
-    pending_routes: Optional[List[str]]
     response_mode: Optional[str]
     execution_history: List[ExecutionRecord]
 
@@ -98,17 +97,15 @@ class OrchestratorState(TypedDict):
 
     search_iterations: List[SearchIteration]
     current_iteration: int
-    max_iterations: int
     accumulated_context: str
-    reflection_result: Optional[ReflectionResult]
 
     subgraph_results: Dict[str, Dict[str, Any]]
     failed_subgraphs: Set[str]
+    empty_result_subgraphs: Set[str]
 
     seen_urls: Set[str]
     seen_doc_ids: Set[str]
     duplicate_skip_ratio: float
-    duplication_high: bool
 
 
 class SimpleSearchState(TypedDict):

@@ -305,7 +305,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
             )
         except Exception as e:
             logger.error(f"Compression failed: {e}")
-            compressed = "\n\n".join([d.page_content for d in docs_with_citations[:3]])
+            compressed = "\n\n".join([d.page_content for d in docs_with_citations])
 
         learning_point = f"[Depth {state.get('current_depth_level', 0)}] {state.get('thinking_notes', '')}: {compressed[:200]}..."
 
