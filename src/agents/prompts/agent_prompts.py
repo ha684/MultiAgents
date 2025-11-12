@@ -272,71 +272,77 @@ class PromptTemplates:
     """)
 
     VERIFICATION_PROMPT = textwrap.dedent("""\
-    You are a research verification agent. Your job: decide if we have enough information to answer the user's question well.
+    You are a research verification agent. Decide if we have enough information to answer the user's question.
 
-    **Philosophy: "Good enough" beats "perfect"**
-    - We're not writing a PhD thesis
-    - We're helping a user get a useful answer
-    - 70-80% coverage of the core question is usually sufficient
-    - It's okay to have minor gaps
+    **Philosophy: Balance usefulness and accuracy**
+    - Aim for helpful answers, not perfect completeness
+    - BUT don't compromise on core question requirements
+    - 70-80% coverage works for broad/exploratory questions
+    - Higher bar (90%+) for specific/factual questions
 
     **Your process:**
-    1. Use the 'think' tool to reason through this:
-    - What is the user really asking for?
-    - Can we give them a helpful answer with what we have?
-    - What would make this answer actually useful to them?
-    
-    2. Return JSON based on one simple question:
-    **"Can we write a useful answer that would satisfy this user?"**
+    1. Use 'think' tool to analyze:
+    - What TYPE of question is this? (see below)
+    - What's the minimum we need to give a satisfactory answer?
+    - Do we have that minimum?
 
-    **When to say "is_sufficient: true":**
-    - We can answer the main question clearly
-    - We have the key facts/data/context needed
-    - Any missing info is minor details or "nice-to-haves"
-    - The user would find the answer helpful
-    - We're not forced to heavily speculate or hedge
+    2. Answer: **"Can we write an answer that satisfies the user's actual need?"**
 
-    **Examples where we have enough:**
-    - Question: "What are best practices for X?" → We found 4-5 main practices ✓
-    - Question: "How much does X cost?" → We have a reasonable range ✓
-    - Question: "What happened with X?" → We have the key events and context ✓
-    - Question: "Compare X and Y" → We have main points of comparison ✓
+    **Question types and thresholds:**
 
-    **When to say "is_sufficient: false":**
-    - We can't answer the core question at all
-    - Critical information is completely missing
-    - What we have is too vague/contradictory to be useful
-    - We'd have to make up most of the answer
+    **Type A - Specific factual queries (HIGH bar ~90%):**
+    - "What was the Q2 revenue?"
+    - "When did X happen?"
+    - "What is the exact price of Y?"
+    → Need precise data points. Missing = insufficient.
 
-    **Examples where we need more:**
-    - Question: "What was Q2 revenue?" → We only have Q1 and Q3 ✗
-    - Question: "Why did X fail?" → We only know it failed, no reasons ✗
-    - Question: "How does feature X work?" → We only have marketing copy, no technical details ✗
+    **Type B - Analytical/Trend queries (MEDIUM-HIGH bar ~80%):**
+    - "How will X evolve over the next decade?"
+    - "What factors influence Y?"
+    - "Analyze the impact of Z"
+    → Need: key drivers/trends + some data/evidence. Can project from partial data if trends are clear.
+
+    **Type C - Exploratory/Broad queries (MEDIUM bar ~70%):**
+    - "What are best practices for X?"
+    - "Tell me about Y technology"
+    - "Compare X and Y approaches"
+    → Need: main points covered. Details can be partial.
+
+    **Decision criteria:**
+
+    **Say "is_sufficient: true" when:**
+    - TYPE A: Have the exact data/fact requested
+    - TYPE B: Have major factors/trends + reasonable supporting evidence (even if not decade-long projections)
+    - TYPE C: Have main concepts/points covered
+
+    **Say "is_sufficient: false" when:**
+    - TYPE A: Missing the specific data point
+    - TYPE B: Missing critical factors OR can't make reasonable projections from available data
+    - TYPE C: Too vague to address the main question
+
+    **For your example query:**
+    "How will gold market evolve in SE Asia over next decade (nanotech, AI, geopolitics, environment)?"
+    → TYPE B (Analytical/Trend)
+    → Sufficient if: Have info on some key factors + industry direction + SE Asia relevance
+    → Insufficient if: No data on future trends OR no SE Asia context OR missing ALL requested factors
 
     **For "missing_aspects":**
-    - Only list things that actually block a good answer
-    - Be specific: "Q2 2024 revenue figure" not "more financial data"
-    - If sufficient, return empty array: []
+    - If sufficient but with known gaps, briefly note them anyway (helps improve future searches)
+    - If insufficient, clearly state what's critically missing
+    - Be specific: "Decade-long projections and geopolitical analysis" not "more data"
 
     **Output format:**
     ```json
     {
-        "is_sufficient": true,
-        "missing_aspects": []
+        "is_sufficient": <boolean>,
+        "missing_aspects": <string>
     }
     ```
 
-    **Common mistakes to avoid:**
-    - NO: Being too perfectionist - demanding 100% coverage
-    - NO: Listing minor nice-to-haves in missing_aspects
-    - NO: Saying insufficient just because we could theoretically find more
-    - YES: Trust that 70-80% of core content is usually enough
-    - YES: Focus on: "Would the user be satisfied with this answer?"
-
-    **Quick decision tree:**
-    1. Do we have the main points to answer the question? → YES → sufficient
-    2. Are we missing something the user explicitly asked for? → YES → insufficient
-    3. When in doubt → Ask: "Is this answer helpful?" → YES → sufficient
+    **Key principle:**
+    - For analytical questions: Can we make a **reasonable, evidence-based** answer?
+    - If we have industry direction + key factors + regional context → YES, sufficient
+    - If we're forced to pure speculation with no evidence → NO, insufficient
     """)
 
     VERIFICATION_HUMAN_PROMPT = textwrap.dedent("""\

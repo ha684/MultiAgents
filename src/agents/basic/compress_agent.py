@@ -9,9 +9,9 @@ from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
 COMPRESS_PROMPT_TEMPLATE = textwrap.dedent("""\
-You are an information extraction and summarization specialist. Your task is to extract and summarize key facts from documents that are relevant to the query.
+You are an information extraction specialist. Extract and summarize key facts from documents that relate to the query.
 
-**Your job:** Extract relevant information from the documents and present it clearly with proper citations.
+**Your task:** Present ONLY the information found in the documents, organized clearly with citations.
 
 **Citation format:**
 - Each document has: [CITATION: N]
@@ -19,22 +19,38 @@ You are an information extraction and summarization specialist. Your task is to 
 - Example: "Revenue was $50M [5]"
 - Multiple sources: "Revenue increased [1], [3]"
 
-**Rules:**
-1. Extract ONLY facts that directly relate to the query
-2. Keep facts specific: include numbers, dates, names, technical details
-3. Cite every fact using [N] format immediately after the statement
-4. Group related facts under clear topic headers
-5. Use bullet points for clarity
-6. Summarize information concisely while preserving ALL key details
+**How to extract information:**
+1. Read the query and identify what information is being requested
+2. Extract facts from documents that answer ANY part of the query
+3. Include specific details: numbers, dates, names, technical terms
+4. Group related facts under descriptive headers
+5. Use bullet points for each distinct fact
+6. Cite every fact immediately after the statement using [N]
 
-**Critical - What NOT to do:**
-- DO NOT mention what is missing or not covered in the documents
-- DO NOT add statements like "The documents do not mention..." or "No information about..."
-- DO NOT include analysis, interpretation, or speculation beyond the documents
-- DO NOT add conclusions about gaps in information
-- If the query asks about something not in the documents, simply omit that part
+**CRITICAL RULES - YOU MUST FOLLOW THESE:**
+- Present ONLY facts that exist in the documents
+- If information is not in the documents, DO NOT mention it at all
+- NEVER write statements like:
+  * "The documents do not mention..."
+  * "No specific information about..."
+  * "While not explicitly mentioned..."
+  * "The documents do not detail..."
+- If a query asks about X, Y, and Z, but documents only cover X and Y, only present X and Y
+- Skip any part of the query that has no supporting information in the documents
 
-**Focus:** Present only what IS in the documents, organized clearly and cited properly.
+**Your output should contain:**
+- Only factual statements found in the documents
+- Clear topic headers (when helpful)
+- Bullet points with citations
+- No commentary about missing information
+
+**Example of what NOT to do:**
+ "Environmental constraints are not mentioned in the documents [1], [2]"
+ "While the documents do not explicitly cover X, they do mention Y [3]"
+
+**Example of what TO do:**
+ "AI adoption in mining will reach 60% by 2025 [1]"
+ "Market growth projected at 39.2% CAGR [2]"
 """)
 
 

@@ -66,7 +66,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
         self.compiled_graph = self._build_graph()
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
         self.default_breadth = 2
-        self.max_iterations = 10
+        self.max_iterations = 30
         self.min_knowledge_threshold = 500
         logger.info("ResearchGraph initialized (adaptive agent mode).")
 
@@ -76,7 +76,7 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
 
     def default_run_config(self) -> RunConfig:
         return RunConfig(
-            graph_name=self.graph_name, recursion_limit=10, timeout_seconds=300
+            graph_name=self.graph_name, recursion_limit=100, timeout_seconds=300
         )
 
     async def initialize_node(self, state: ResearchState) -> ResearchState:
@@ -352,14 +352,11 @@ class ResearchGraph(GraphAgentBase[ResearchState]):
         try:
             resp = await verification_agent.ainvoke(state=state)
             is_sufficient = resp.get("is_sufficient", False)
-            missing = resp.get("missing_aspects", [])
+            missing = resp.get("missing_aspects", "")
 
             if missing:
-                top_missing = missing[:3]
-                logger.info(f"[Evaluate] Missing: {', '.join(missing[:3])}")
-                gaps_line = "; ".join(top_missing)
                 learnings.append(
-                    f"[Depth {iteration}] Verification gaps, here what are the missing parts that we need to fill: {gaps_line}"
+                    f"[Depth {iteration}] Verification gaps, here what are the missing parts that we need to address: {missing}"
                 )
 
             logger.info(f"[Evaluate] Sufficient: {is_sufficient}")

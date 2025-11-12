@@ -330,9 +330,7 @@ class OrchestratorGraph(GraphAgentBase[OrchestratorState]):
 
             if main_context:
                 if accumulated_context:
-                    accumulated_context += (
-                        f"\n\n--- Search {current_iteration} ({route_name}) ---\n"
-                    )
+                    accumulated_context += f"\n\n--- Search {current_iteration} ---\n"
                 accumulated_context += main_context
 
         has_any_content = bool(accumulated_context or all_cited_docs)

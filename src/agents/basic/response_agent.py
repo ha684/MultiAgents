@@ -638,7 +638,7 @@ class ResponseAgent(BaseAgent):
             )
             user_prompt = HumanMessage(
                 content=PromptTemplates.FINAL_SYNTHESIZER_PROMPT.format(
-                    user_message=history[-1].content,
+                    user_query=history[-1].content,
                     accumulated_knowledge=accumulated_knowledge,
                 )
             )

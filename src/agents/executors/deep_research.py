@@ -64,9 +64,7 @@ async def _run_deep_research(
     cited_documents = result_state.state.get("cited_documents", [])
     has_content = bool(accumulated_knowledge or cited_documents)
 
-    # Handle different result statuses
     if result_state.status == "error" and not has_content:
-        # Hard error with no content - real failure
         logger.error(f"DeepResearchGraph hard error: {result_state.message}")
         return SubgraphOutput(
             main_context="",
@@ -75,7 +73,6 @@ async def _run_deep_research(
             subgraph_error=(result_state.message or "DeepResearchGraph failed"),
         )
     elif result_state.status in ("timeout", "recursion_limit"):
-        # Soft failure - may have partial results
         warning_msg = f"Research {result_state.status} but may have partial results"
         logger.warning(
             f"DeepResearchGraph {result_state.status} with {'content' if has_content else 'no content'}"
@@ -92,7 +89,6 @@ async def _run_deep_research(
             subgraph_error=None if has_content else warning_msg,
         )
     else:
-        # Success or other status
         return SubgraphOutput(
             main_context=accumulated_knowledge,
             cited_documents=cited_documents,

@@ -24,9 +24,7 @@ class VerificationSchema(BaseModel):
     is_sufficient: bool = Field(
         description="Whether the accumulated knowledge is sufficient to answer the original query"
     )
-    missing_aspects: List[str] = Field(
-        description="List of information gaps that need to be filled"
-    )
+    missing_aspects: str = Field(description="Information gaps that need to be filled")
 
 
 class DynamicQueriesSchema(BaseModel):
