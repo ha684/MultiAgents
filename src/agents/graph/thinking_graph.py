@@ -15,7 +15,7 @@ from src.agents.basic import (
 from src.agents.executors import EXECUTORS
 from src.agents.graph.base import GraphAgentBase
 from src.agents.shared.registry import SubgraphRegistry
-from src.domain.entities.graph import RunConfig, SubgraphOutput
+from src.domain.entities.graph import ResponseMode, RunConfig, SubgraphOutput
 from src.domain.entities.state import ThinkingState
 from src.utils import normalize_url, truncate_docs_by_tokens
 from src.utils.logger_conf import logger
@@ -54,18 +54,19 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         Generate focused research direction for current depth level.
         Similar to ChatGPT's progressive thinking.
         """
-        query = state["contextualized_query"]
+        conversation = state.get("conversation", [])
+        state["conversation"] = conversation
 
         try:
             resp = await reflection_agent.ainvoke(state=state)
-            direction = resp.get("query", query)
+            direction = resp.get("query", conversation[-1].content)
             action = resp.get("action", "use_tool")
             selected_subgraph = resp.get("subgraph", "web_search")
             reasoning = resp.get("reasoning", "")
 
         except Exception as e:
             logger.error(f"Failed to generate direction: {e}")
-            direction = query
+            direction = conversation[-1].content
             action = "use_tool"
             selected_subgraph = "web_search"
             reasoning = ""
@@ -310,6 +311,8 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
     async def synthesize_response(self, state: ThinkingState) -> Dict[str, Any]:
         """Finalize research."""
+        response_mode = ResponseMode.ADVANCE
+        state["response_mode"] = response_mode
         resp = await response_agent.ainvoke(state=state)
         return {
             "final_answer": resp.content,

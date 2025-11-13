@@ -56,29 +56,22 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
         Generate focused research direction for current depth level.
         Similar to ChatGPT's progressive thinking.
         """
-        depth_level = state.get("current_depth_level", 0)
-        query = state["contextualized_query"]
-
+        conversation = state.get("conversation", [])
+        state["conversation"] = conversation
         try:
-            resp, thinking_content = await reflection_agent.ainvoke(state=state)
-            direction = resp.get("query", query)
+            resp = await reflection_agent.ainvoke(state=state)
+            direction = resp.get("query", conversation[-1].content)
             action = resp.get("action", "use_tool")
             selected_subgraph = resp.get("subgraph", "web_search")
             reasoning = resp.get("reasoning", "")
-            thinking = (
-                thinking_content
-                if thinking_content
-                else f"Exploring next aspect of: {query}"
-            )
+
         except Exception as e:
             logger.error(f"Failed to generate direction: {e}")
-            direction = query
+            direction = conversation[-1].content
             action = "use_tool"
             selected_subgraph = "web_search"
             reasoning = ""
-            thinking = f"Continuing research on: {query}"
 
-        logger.info(f"[Depth {depth_level}] {thinking}")
         logger.info(f"[Direction] {direction}")
 
         return {
@@ -86,7 +79,6 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
             "action": action,
             "selected_subgraph": selected_subgraph,
             "reasoning": reasoning,
-            "thinking_notes": thinking,
         }
 
     async def execute_subgraph_node(self, state: NormalGraphState) -> Dict[str, Any]:
