@@ -4,7 +4,7 @@ from typing import Any, Dict, List, Optional
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.basic.base import BaseAgent
-from src.domain.entities.state import OrchestratorState
+from src.domain.entities.state import ResearchState
 from src.domain.schemas.graph import VerificationSchema
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.agents.prompts.agent_prompts import PromptTemplates
@@ -22,7 +22,7 @@ class VerificationAgent(BaseAgent):
         super().__init__(provider)
         logger.info("Verification Agent initialized successfully.")
 
-    async def ainvoke(self, state: OrchestratorState) -> Dict[str, Any]:
+    async def ainvoke(self, state: ResearchState) -> Dict[str, Any]:
         """
         Verifies information from relevant documents.
         """

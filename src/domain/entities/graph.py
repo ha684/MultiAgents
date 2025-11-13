@@ -69,8 +69,7 @@ class ResponseMode(str, Enum):
 
     ADVANCE = "advance"
     STANDARD = "standard"
-    CHITCHAT = "chitchat"
-    FOLLOWUP = "followup"
+    INTERFACE = "interface"
     NO_VIABLE_OPTION = "no_viable_option"
     ERROR = "error"
     SQL_RESPONSE = "sql_response"

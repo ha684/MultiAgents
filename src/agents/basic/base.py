@@ -1,12 +1,14 @@
 # src/agents/basic/base.py
 from __future__ import annotations
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Union
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import Tool
+import tiktoken
+
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.core.config.llm_config import SupportedLLMProviders
 from src.llm.factory import get_llm
@@ -19,6 +21,7 @@ class BaseAgent(ABC):
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):
         self.llm = get_llm(provider)
         self.thinking_llm = self.llm.bind_tools([think])
+        self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
 
     async def simple_llm_call(
         self,
@@ -41,10 +44,8 @@ class BaseAgent(ABC):
         retry_prompt: str,
         fallback_value: str = "",
         error_context: str = "Agent",
-        return_thinking: bool = False,
-    ) -> Union[str, Tuple[str, Optional[str]]]:
+    ) -> Union[str]:
         iteration = 0
-        thinking_content = None
 
         while iteration < max_iterations:
             iteration += 1
@@ -52,14 +53,7 @@ class BaseAgent(ABC):
             response: AIMessage = await (prompt | llm_with_tools).ainvoke({})
             messages.append(response)
 
-            if response.tool_calls:
-                for tc in response.tool_calls:
-                    if tc["name"] == "think":
-                        thinking_content = tc["args"].get("thought", "")
-
             if response.content:
-                if return_thinking:
-                    return response.content, thinking_content
                 return response
 
             if response.tool_calls:
@@ -86,8 +80,6 @@ class BaseAgent(ABC):
         logger.error(
             f"{error_context}: Failed after {iteration} iterations. Returning fallback."
         )
-        if return_thinking:
-            return fallback_value, thinking_content
         return fallback_value
 
     async def iterative_llm_call_structured(

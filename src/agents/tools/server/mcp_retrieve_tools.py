@@ -75,3 +75,49 @@ async def think(thought: str) -> str:
                 - Final completeness assessment before task completion
     """
     return thought
+
+
+@tool
+def use_normal_mode() -> str:
+    """
+    Execute NORMAL mode - Fast, focused information retrieval with a linear execution path.
+
+    Use this tool when:
+    - The query is clear and specific
+    - You know exactly what information source is needed
+    - A single straightforward lookup will answer the question
+    - The question has a direct, factual answer
+
+    Examples of when to use:
+    - "What's our refund policy?"
+    - "Show sales data for Q3 2024"
+    - "Find documentation for feature X"
+    - "What's the current status of project Y?"
+
+    The system will automatically route to the appropriate subgraph (docs, database, external search, etc.)
+    and return results in a single pass.
+    """
+    return "normal_mode_activated"
+
+
+@tool
+def use_thinking_mode() -> str:
+    """
+    Execute THINKING mode - Iterative research with reflection and refinement.
+
+    Use this tool when:
+    - The query is complex, vague, or open-ended
+    - You're not sure which information source to use
+    - Multiple information sources might be needed
+    - The query requires analysis, synthesis, or multi-step reasoning
+
+    Examples of when to use:
+    - "Why did our sales drop last quarter?"
+    - "Analyze market trends and suggest strategy"
+    - "What factors contributed to the project delay?"
+    - "Compare options and recommend the best approach"
+
+    The system will think about which tools to use, execute searches, evaluate results,
+    and iterate until a satisfactory answer is found.
+    """
+    return "thinking_mode_activated"

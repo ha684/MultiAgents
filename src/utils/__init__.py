@@ -2,8 +2,9 @@
 from datetime import datetime
 import json
 import re
-from typing import List
+from typing import Any, Dict, List
 from zoneinfo import ZoneInfo
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from langchain_core.documents import Document
 from src.domain.schemas.chat import Message
@@ -136,3 +137,29 @@ def truncate_docs_by_tokens(
         final_docs.append(type(doc)(page_content=truncated_text, metadata=doc.metadata))
 
     return final_docs
+
+
+def normalize_url(meta: Dict[str, Any]) -> str:
+    """Normalize URL by removing tracking params and fragments."""
+    url = (
+        meta.get("url")
+        or meta.get("source")
+        or meta.get("resolved_url")
+        or meta.get("original_filename")
+        or ""
+    )
+    try:
+        p = urlparse(url)
+        if not p.scheme or not p.netloc:
+            return url
+        q = [
+            (k, v)
+            for k, v in parse_qsl(p.query, keep_blank_values=True)
+            if not k.lower().startswith("utm_")
+        ]
+        new_query = urlencode(q, doseq=True)
+        return urlunparse(
+            (p.scheme.lower(), p.netloc.lower(), p.path, "", new_query, "")
+        )
+    except Exception:
+        return url

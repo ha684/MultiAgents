@@ -122,7 +122,7 @@ class SimpleSearchState(TypedDict):
     early_terminate: bool
 
 
-class ResearchState(TypedDict, total=False):
+class ThinkingState(TypedDict, total=False):
     """State for research operations (simplified for efficiency)"""
 
     contextualized_query: str
@@ -168,3 +168,21 @@ class SqlState(TypedDict):
     chart_spec: Optional[Dict]
 
     response_metadata: Dict
+
+
+class NormalGraphState(TypedDict):
+    """State for normal graph operations"""
+
+    conversation: List[BaseMessage]
+    context_metadata: Dict[str, Any]
+    selected_subgraph: str
+    current_direction: str
+    thinking_notes: str
+    accumulated_knowledge: str
+    learnings: List[str]
+    search_count: int
+    search_history: List[Dict[str, Any]]
+    cited_documents: List[Document]
+    citation_map: List[Dict[str, Any]]
+    used_rag_ids: List[str]
+    used_web_urls: List[str]

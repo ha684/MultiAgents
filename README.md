@@ -38,55 +38,47 @@ Hệ thống **Agent Research System** được xây dựng với mục tiêu t�
 ### 📊 Flow Diagram
 
 ```mermaid
-flowchart TB
-    User([👤 User Query]) --> Orchestrator[🎯 Orchestrator Graph]
+graph TD
+    Start([Entry Point]) --> DirectResponse[Direct Response Node<br/>Function Calling with 2 tools:<br/>1. use_subgraph_simple<br/>2. use_subgraph_thinking]
     
-    Orchestrator --> Contextualize[📝 Contextualize Query]
-    Contextualize --> Router[🧭 Smart Router]
+    DirectResponse -->|text response| End1([END])
+    DirectResponse -->|tool call| RouteMode{Route Mode}
     
-    Router --> |SQL-related| SQL[💾 SQL Query Graph]
-    Router --> |Internal docs| RAG[📚 RAG Search Graph]
-    Router --> |External info| Web[🌐 Web Search Graph]
-    Router --> |Complex research| Research[🔬 Deep Research Graph]
-    Router --> |Chitchat| Direct[💬 Direct Response]
+    RouteMode -->|normal| NormalMode[NORMAL MODE]
+    RouteMode -->|thinking| ThinkingMode[THINKING MODE]
     
-    SQL --> |Schema Analysis| SQLAnalyze[Analyze Query Intent]
-    SQLAnalyze --> SQLGen[Generate SQL]
-    SQLGen --> SQLExec[Execute & Validate]
-    SQLExec --> SQLChart[📊 Generate Chart]
+    subgraph Normal[" NORMAL MODE - Linear Flow "]
+        NormalMode --> GenDirNormal[Generate Direction<br/>- Pick subgraph web/rag/sql<br/>- Generate query<br/>Output: JSON]
+        GenDirNormal --> ExecNormal[Execute Subgraph]
+        ExecNormal --> SynthNormal[Synthesize Response]
+        SynthNormal --> End2([END])
+    end
     
-    RAG --> |Semantic Search| RAGExtract[Extract Filename]
-    RAGExtract --> RAGRetrieve[Retrieve Documents]
-    RAGRetrieve --> RAGFilter[Filter Citations]
+    subgraph Thinking[" THINKING MODE - Iterative Loop "]
+        ThinkingMode --> InitThink[Initialize<br/>iteration_count = 0]
+        InitThink --> GenDirThink[Generate Direction<br/>Decide:<br/>- use_tool OR reason_only<br/>- If tool: which subgraph?<br/>Output: JSON]
+        
+        GenDirThink -->|action: use_tool| ExecThink[Execute Subgraph]
+        GenDirThink -->|action: reason_only| PureReason[Pure Reasoning<br/>No external calls]
+        
+        ExecThink --> ExtractLearn[Extract Learnings]
+        PureReason --> ExtractLearn
+        
+        ExtractLearn --> Evaluate[Evaluate Sufficiency<br/>Output: VerificationSchema]
+        
+        Evaluate -->|is_sufficient: false| Continue[Continue Iteration<br/>iteration_count++]
+        Evaluate -->|is_sufficient: true| Finalize[Finalize Response]
+        
+        Continue --> GenDirThink
+        Finalize --> End3([END])
+    end
     
-    Web --> |Tavily/Firecrawl| WebSearch[Search Web]
-    WebSearch --> WebProcess[Process Results]
-    
-    Research --> |Multi-step| ResearchPlan[🗓️ Query Planner]
-    ResearchPlan --> ResearchCheck[Pre-flight RAG Check]
-    ResearchCheck --> ResearchExec[Search Executor]
-    ResearchExec --> ResearchProcess[Process Results]
-    ResearchProcess --> ResearchVerify[🔍 Verification Agent]
-    ResearchVerify --> |Need more| ResearchReflect[Reflection Node]
-    ResearchReflect --> ResearchDynamic[Dynamic Query Generator]
-    ResearchDynamic --> ResearchExec
-    
-    SQLChart --> Response[📤 Final Response Node]
-    RAGFilter --> Response
-    WebProcess --> Response
-    ResearchVerify --> |Complete| Response
-    Direct --> Response
-    
-    Response --> Answer([✨ Citation-backed Answer])
-    
-    style Orchestrator fill:#4A90E2,stroke:#2E5C8A,stroke-width:3px,color:#fff
-    style Router fill:#E94B3C,stroke:#A63429,stroke-width:2px,color:#fff
-    style SQL fill:#50C878,stroke:#2E7D4E,stroke-width:2px,color:#fff
-    style RAG fill:#9B59B6,stroke:#6C3483,stroke-width:2px,color:#fff
-    style Web fill:#F39C12,stroke:#B7720C,stroke-width:2px,color:#fff
-    style Research fill:#E74C3C,stroke:#A93226,stroke-width:2px,color:#fff
-    style Direct fill:#95A5A6,stroke:#5D6D7E,stroke-width:2px,color:#fff
-    style Response fill:#16A085,stroke:#117A65,stroke-width:3px,color:#fff
+    style DirectResponse fill:#e1f5ff
+    style Normal fill:#fff4e6
+    style Thinking fill:#f3e5f5
+    style GenDirNormal fill:#ffeb3b
+    style GenDirThink fill:#ffeb3b
+    style PureReason fill:#4caf50,color:#fff
 ```
 
 ### 🎭 Orchestrator Pattern
