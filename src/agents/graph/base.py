@@ -11,7 +11,6 @@ from langgraph.graph.state import CompiledStateGraph
 from src.agents.basic.base import BaseAgent
 from src.domain.entities.graph import RunConfig
 from src.utils.logger_conf import logger
-from src.core.monitoring.langfuse import setup_langfuse
 
 StateT = TypeVar("StateT")
 Status = Literal["success", "timeout", "recursion_limit", "error"]
@@ -77,8 +76,8 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
     ) -> AsyncGenerator[StreamEvent, None]:
         """Stream events - use for testing and monitoring"""
         run_cfg = config_override or self.default_run_config()
-        langfuse_handler = setup_langfuse()
-        run_cfg.extra["callbacks"] = [langfuse_handler]
+        # langfuse_handler = setup_langfuse()
+        # run_cfg.extra["callbacks"] = [langfuse_handler]
         lg_config = run_cfg.as_langgraph_config()
         last_state: StateT = state
 

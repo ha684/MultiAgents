@@ -1,5 +1,5 @@
 # tests/intergration_test/main_graph_test.py
-from src.agents.main_graph import OrchestratorGraph
+from src.agents.main_graph import MainGraph
 from src.domain.schemas.chat import SearchProvider, WebSearchConfig
 from langchain_core.messages import HumanMessage
 from src.core.config.settings import settings
@@ -9,7 +9,7 @@ import asyncio
 import time
 
 
-class OrchestratorStreamer:
+class MainGraphStreamer:
     """Helper class to visualize streaming from OrchestratorGraph"""
 
     def __init__(self):
@@ -33,9 +33,7 @@ class OrchestratorStreamer:
             print(f"{c}║{reset} {content}")
         print(f"{c}{'=' * 70}{reset}")
 
-    async def stream_orchestrator(
-        self, orchestrator: OrchestratorGraph, conversation: list
-    ):
+    async def stream_orchestrator(self, orchestrator: MainGraph, conversation: list):
         """Stream orchestrator execution with visual feedback"""
 
         self._print_box("🚀 STARTING ORCHESTRATOR", color="cyan")
@@ -117,16 +115,16 @@ async def main():
     context_metadata.update({"web_search_config": web_search_config.model_dump()})
 
     logger.info("Initializing OrchestratorGraph...")
-    orchestrator = OrchestratorGraph()
+    orchestrator = MainGraph()
 
     human_message = HumanMessage(
-        content="Given the recent advancements in nanotechnology and AI-assisted mineral extraction, how would the projected market value and extraction yield of gold in Southeast Asia evolve over the next decade, considering current geopolitical trends, environmental constraints, and the financial strategies of major multinational mining corporations operating in the region?",
+        content="I want to find xyz",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]
 
     logger.info("OrchestratorGraph initialized successfully.\n")
-    streamer = OrchestratorStreamer()
+    streamer = MainGraphStreamer()
     await streamer.stream_orchestrator(orchestrator, conversation)
 
 

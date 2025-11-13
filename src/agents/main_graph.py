@@ -18,7 +18,7 @@ from src.agents.graph.thinking_graph import ThinkingGraph
 from src.agents.shared.manager import execution_manager
 from src.agents.shared.registry import enable_sql, seed_base_subgraphs
 from src.domain.entities.graph import ResponseMode, RunConfig
-from src.domain.entities.state import NormalGraphState, OrchestratorState, ThinkingState
+from src.domain.entities.state import NormalGraphState, MainGraphState, ThinkingState
 from src.domain.schemas.chat import Message, RetrievalContext, TextPart
 from src.services.conversation_service import ConversationService
 from src.agents.prompts.agent_prompts import PromptTemplates
@@ -29,7 +29,7 @@ from src.agents.tools.server.mcp_retrieve_tools import (
 from src.utils.logger_conf import logger
 
 
-class MainGraph(GraphAgentBase[OrchestratorState]):
+class MainGraph(GraphAgentBase[MainGraphState]):
     """
     Main Orchestrator - Entry Point with Intelligent Routing
 
@@ -66,7 +66,7 @@ class MainGraph(GraphAgentBase[OrchestratorState]):
             timeout_seconds=600,
         )
 
-    async def direct_response_node(self, state: OrchestratorState) -> Dict[str, Any]:
+    async def direct_response_node(self, state: MainGraphState) -> Dict[str, Any]:
         """
         Entry point with intelligent routing.
         LLM decides: direct response / normal mode / thinking mode
@@ -124,7 +124,7 @@ class MainGraph(GraphAgentBase[OrchestratorState]):
                 },
             }
 
-    def route_after_entry(self, state: OrchestratorState) -> str:
+    def route_after_entry(self, state: MainGraphState) -> str:
         """Route after entry point based on mode decision."""
         route_mode = state.get("route_mode", "direct")
 
@@ -139,7 +139,7 @@ class MainGraph(GraphAgentBase[OrchestratorState]):
 
         return "end"
 
-    async def execute_normal_node(self, state: OrchestratorState) -> Dict[str, Any]:
+    async def execute_normal_node(self, state: MainGraphState) -> Dict[str, Any]:
         """
         Execute NormalGraph and return results.
         Delegates to NormalGraph for fast path execution.
@@ -176,7 +176,7 @@ class MainGraph(GraphAgentBase[OrchestratorState]):
                 },
             }
 
-    async def execute_thinking_node(self, state: OrchestratorState) -> Dict[str, Any]:
+    async def execute_thinking_node(self, state: MainGraphState) -> Dict[str, Any]:
         """
         Execute ThinkingGraph and return results.
         Delegates to ThinkingGraph for iterative research.
@@ -212,7 +212,7 @@ class MainGraph(GraphAgentBase[OrchestratorState]):
 
     def _build_graph(self) -> CompiledStateGraph:
         """Build the main graph."""
-        workflow = StateGraph(OrchestratorState)
+        workflow = StateGraph(MainGraphState)
 
         workflow.add_node("direct_response", self.direct_response_node)
         workflow.add_node("execute_normal", self.execute_normal_node)
@@ -259,7 +259,7 @@ class MainGraph(GraphAgentBase[OrchestratorState]):
             "extras": extras,
         }
 
-        initial_state = OrchestratorState(
+        initial_state = MainGraphState(
             conversation=conversation,
             subgraph_policy=subgraph_policy,
             search_iterations=[],
@@ -280,7 +280,7 @@ class MainGraph(GraphAgentBase[OrchestratorState]):
     ) -> Optional[Dict[str, Any]]:
         """Non-streaming execution."""
         try:
-            initial_state = OrchestratorState(
+            initial_state = MainGraphState(
                 conversation=conversation,
                 search_iterations=[],
                 current_iteration=1,

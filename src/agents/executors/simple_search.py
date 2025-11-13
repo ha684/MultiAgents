@@ -3,10 +3,10 @@ from typing import Any, Dict
 
 from src.agents.graph import simple_search_graph
 from src.domain.entities.graph import SubgraphOutput
-from src.domain.entities.state import OrchestratorState, SimpleSearchState
+from src.domain.entities.state import MainGraphState, SimpleSearchState
 
 
-def _prepare_web_metadata(state: OrchestratorState, web_active: bool) -> Dict[str, Any]:
+def _prepare_web_metadata(state: MainGraphState, web_active: bool) -> Dict[str, Any]:
     conv = list(state["conversation"])
     if not conv:
         raise ValueError("Conversation is empty.")
@@ -36,9 +36,7 @@ def _prepare_web_metadata(state: OrchestratorState, web_active: bool) -> Dict[st
     return {"conversation": conv}
 
 
-async def _run_simple_search(
-    state: OrchestratorState, web_active: bool
-) -> SubgraphOutput:
+async def _run_simple_search(state: MainGraphState, web_active: bool) -> SubgraphOutput:
     conv_update = _prepare_web_metadata(state, web_active)
     simple_search_state = SimpleSearchState(
         conversation=conv_update["conversation"],
@@ -95,10 +93,10 @@ async def _run_simple_search(
 
 
 class RagSearchExecutor:
-    async def __call__(self, state: OrchestratorState) -> SubgraphOutput:
+    async def __call__(self, state: MainGraphState) -> SubgraphOutput:
         return await _run_simple_search(state, web_active=False)
 
 
 class WebSearchExecutor:
-    async def __call__(self, state: OrchestratorState) -> SubgraphOutput:
+    async def __call__(self, state: MainGraphState) -> SubgraphOutput:
         return await _run_simple_search(state, web_active=True)

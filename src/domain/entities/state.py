@@ -73,39 +73,18 @@ class SearchIteration(TypedDict):
     error: Optional[str]  # Error message if subgraph failed
 
 
-class OrchestratorState(TypedDict):
+class MainGraphState(TypedDict):
     """Enhanced state for agentic orchestrator"""
 
     conversation: List[BaseMessage]
-    contextualized_query: Optional[str]
-
-    route_decisions: Optional[List[str]]
-    response_mode: Optional[str]
-    execution_history: List[ExecutionRecord]
-
-    subgraph_result: Optional[str]
-    subgraph_error: Optional[str]
-
     main_context: Optional[str]
     cited_documents: Optional[List[Document]]
-
-    subgraph_policy: Dict[str, Any]
-    active_subgraphs: List[str]
 
     final_answer: Optional[str]
     response_metadata: Optional[Dict[str, Any]]
 
-    search_iterations: List[SearchIteration]
-    current_iteration: int
     accumulated_context: str
-
-    subgraph_results: Dict[str, Dict[str, Any]]
-    failed_subgraphs: Set[str]
-    empty_result_subgraphs: Set[str]
-
-    seen_urls: Set[str]
-    seen_doc_ids: Set[str]
-    duplicate_skip_ratio: float
+    route_mode: str
 
 
 class SimpleSearchState(TypedDict):
