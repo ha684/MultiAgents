@@ -1,15 +1,14 @@
 # src/services/chat_service.py
 import uuid
-from typing import Any, AsyncGenerator, Dict, Generator, List, Union, cast
+from typing import Any, AsyncGenerator, Dict, Generator, List, Union
 
 import tiktoken
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from qdrant_client.models import Filter, models
+from qdrant_client.models import Filter
 
 from src.agents import Agent
 from src.agents.basic import (
     citation_agent,
-    file_name_agent,
     query_context_agent,
     response_agent,
     summary_agent,
@@ -227,21 +226,7 @@ class ChatService:
                     )
                     search_method = "web"
             else:
-                with tracer.start_as_current_span("FilenameAgent.extract_filename"):
-                    requested_filename = await file_name_agent.ainvoke(
-                        query=original_query
-                    )
-
                 filters: Filter = Filter(must=[])
-
-                if requested_filename:
-                    logger.info(f"Requested filename: {requested_filename}")
-                    cast(List[models.Condition], filters.must).append(
-                        models.FieldCondition(
-                            key="metadata.original_filename",
-                            match=models.MatchText(text=requested_filename),
-                        )
-                    )
 
                 logger.info(f"Filter applied: {filters}")
                 with tracer.start_as_current_span("vector_retrieval.retrieve"):
@@ -387,19 +372,7 @@ class ChatService:
                 "Searching for relevant documents...",
                 progress=0.3,
             )
-            requested_filename = await file_name_agent.ainvoke(query=original_query)
-
             filters: Filter = Filter(must=[])
-
-            if requested_filename:
-                logger.info(f"Requested filename: {requested_filename}")
-                cast(List[models.Condition], filters.must).append(
-                    models.FieldCondition(
-                        key="metadata.original_filename",
-                        match=models.MatchText(text=requested_filename),
-                    )
-                )
-
             retrieved_docs = await vector_retrieval.retrieve(
                 kb_id=str(kb_id),
                 query=contextualized_query,

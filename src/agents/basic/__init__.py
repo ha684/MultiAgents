@@ -8,6 +8,7 @@ from src.agents.basic.response_agent import ResponseAgent
 from src.agents.basic.summary_agent import SummaryAgent
 from src.agents.basic.verification_agent import VerificationAgent
 from src.agents.basic.reflection_agent import ReflectionAgent
+from src.agents.basic.query_context_agent import QueryContextAgent
 
 citation_agent = CitationAgent()
 summary_agent = SummaryAgent()
@@ -16,3 +17,4 @@ verification_agent = VerificationAgent()
 qac_agent = QACAgent()
 compress_agent = CompressAgent()
 reflection_agent = ReflectionAgent()
+query_context_agent = QueryContextAgent()
