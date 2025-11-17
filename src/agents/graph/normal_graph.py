@@ -83,7 +83,6 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
     async def execute_subgraph_node(self, state: NormalGraphState) -> Dict[str, Any]:
         """Execute selected subgraph and return documents."""
         subgraph_name = state.get("selected_subgraph")
-        query = state.get("direction")
 
         if state.get("action") == "reason_only":
             return {}
@@ -110,11 +109,11 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
                 )
                 return {"cited_documents": []}
 
-            execution_state = dict(state)
+            logger.info(
+                f"[NormalGraph] Executing {subgraph_name}: {state.get('direction')}"
+            )
 
-            logger.info(f"[NormalGraph] Executing {subgraph_name}: {query}")
-
-            result_obj: SubgraphOutput = await executor(execution_state)
+            result_obj: SubgraphOutput = await executor(state)
             main_context = result_obj.main_context or ""
             cited_documents = result_obj.cited_documents or []
 

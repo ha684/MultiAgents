@@ -93,7 +93,7 @@ class SimpleSearchState(TypedDict):
     """State for simple search operations"""
 
     conversation: List[BaseMessage]
-    contextualized_query: str
+    direction: str
     cited_documents: List[Document]
     response_metadata: Dict[str, Any]
 
@@ -158,6 +158,6 @@ class NormalGraphState(TypedDict):
     response_metadata: Dict
     conversation: List[BaseMessage]
     selected_subgraph: str
-    current_direction: str
+    direction: str
     cited_documents: List[Document]
     response_mode: ResponseMode

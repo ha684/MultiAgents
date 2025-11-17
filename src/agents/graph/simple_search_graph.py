@@ -50,7 +50,7 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
             "message_metadata"
         ]["web_search_config"]
 
-        contextualized_query = state["contextualized_query"]
+        direction = state["direction"]
         context_metadata = {
             "kb_id": kb_id,
         }
@@ -58,14 +58,14 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
         if web_search_config.get("active"):
             logger.info("Using web search")
             retrieved_docs = await web_search(
-                query=contextualized_query,
+                query=direction,
             )
             search_method = "web"
 
         else:
             logger.info("Using RAG search")
             retrieved_docs = await rag_search(
-                query=contextualized_query, context_metadata=context_metadata
+                query=direction, context_metadata=context_metadata
             )
             search_method = "rag"
 
