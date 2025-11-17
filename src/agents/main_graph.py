@@ -81,7 +81,6 @@ class MainGraph(GraphAgentBase[MainGraphState]):
             response: AIMessage = await llm_with_tools.ainvoke(messages)
 
             if response.content and not response.tool_calls:
-                logger.info("[DirectResponse] Agent chose to answer directly")
                 return {
                     "route_mode": "direct",
                     "final_answer": response.content,
@@ -127,8 +126,6 @@ class MainGraph(GraphAgentBase[MainGraphState]):
     def route_after_entry(self, state: MainGraphState) -> str:
         """Route after entry point based on mode decision."""
         route_mode = state.get("route_mode", "direct")
-
-        logger.info(f"[Orchestrator] Routing to: {route_mode}")
 
         if route_mode == "direct":
             return "end"

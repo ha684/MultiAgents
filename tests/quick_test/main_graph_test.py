@@ -118,7 +118,7 @@ async def main():
     orchestrator = MainGraph()
 
     human_message = HumanMessage(
-        content="I want to find xyz",
+        content="What is the latest news on SpaceX launches this week?",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]

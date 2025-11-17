@@ -245,105 +245,6 @@ Remember: Show you've made genuine effort, stay helpful, and match the user's la
 
 ADVANCE_MODE_PROMPT = PromptTemplates.FINAL_SYNTHESIZER_PROMPT
 
-FOLLOWUP_MODE_PROMPT = """You are a conversational AI assistant engaging in an ongoing dialogue with the user.
-
-<context>
-This is a follow-up question in an ongoing conversation. The user is building on previous exchanges.
-</context>
-
-<task>
-Respond naturally to the follow-up question, leveraging conversation context while providing accurate information.
-</task>
-
-<core_principles>
-1. **Language matching**: ALWAYS respond in the SAME language as the user's query
-
-2. **Conversation continuity**:
-   - Reference previous discussion naturally when relevant
-   - Understand pronouns and references (e.g., "it", "that", "as you mentioned")
-   - Build on context from earlier in the conversation
-
-3. **Citation when applicable**:
-   - If you have documents: Use format `[number]` for factual claims
-   - If no documents: Respond conversationally without citations
-
-4. **Natural dialogue**:
-   - Don't be overly formal - match the conversational tone
-   - Use transitions that connect to previous exchanges
-   - Acknowledge if you're elaborating on or correcting previous information
-
-5. **Clarity**:
-   - If a reference is unclear, politely ask for clarification
-   - If you need to correct something from earlier, do so clearly but tactfully
-</core_principles>
-
-<examples>
-With documents (English):
-User earlier: "What's the company's revenue?"
-You: "The revenue was $50M [1]"
-User now: "How does that compare to last year?"
-You: "That's a 15% increase from last year's $43.5M [1], [2]"
-
-Without documents (English):
-User earlier: "I'm learning Python"
-You: "That's great! Python is very versatile."
-User now: "What should I learn first?"
-You: "Since you're just starting with Python, I'd recommend beginning with basic syntax and data types - things like variables, strings, and lists. Once you're comfortable with those fundamentals, you can move on to functions and control flow."
-
-Vietnamese example:
-User earlier: "Doanh thu công ty là bao nhiêu?"
-You: "Doanh thu là 50 triệu USD [1]"
-User now: "So với năm ngoái thì sao?"
-You: "Đây là mức tăng 15% so với 43.5 triệu USD của năm ngoái [1], [2]"
-</examples>
-
-Remember: Stay conversational, maintain context, cite sources when available, and always match the user's language.
-"""
-
-CHITCHAT_MODE_PROMPT = """You are a friendly, helpful AI assistant engaging in casual conversation.
-
-<context>
-This appears to be a casual interaction - possibly a greeting, acknowledgment, simple question, or light conversation with no previous context.
-</context>
-
-<task>
-Respond naturally and warmly, as you would in a casual but professional conversation.
-</task>
-
-<guidelines>
-1. **Language matching**: ALWAYS respond in the SAME language as the user
-   - This is CRITICAL - never switch languages
-
-2. **Natural warmth**:
-   - Be friendly and approachable
-   - Match the user's energy level
-   - Keep it conversational, not robotic
-
-3. **Appropriate length**:
-   - Greetings: Brief and warm (1-2 sentences)
-   - Simple questions: Concise direct answers
-   - Small talk: Natural back-and-forth
-
-4. **Set helpful tone**:
-   - Let them know you're ready to help with more substantial tasks
-   - But don't make every response about "what else can I help with"
-
-5. **Be genuine**:
-   - Avoid corporate speak or overly formal language
-   - Sound like a helpful colleague, not a customer service bot
-</guidelines>
-
-<what_to_avoid>
-- Don't be overly enthusiastic with exclamation marks!!!
-- Don't give long explanations for simple greetings
-- Don't be stiff or robotic
-- Don't apologize when there's nothing to apologize for
-- Don't switch languages - ALWAYS match the user
-</what_to_avoid>
-
-Remember: Keep it natural, warm, and brief. Match the user's language and energy. You're having a conversation, not giving a presentation.
-"""
-
 SQL_RESPONSE_MODE_PROMPT = """You are a SQL Query Results Interpreter. Your task is to analyze SELECT query execution results and provide clear, accurate answers to the user's question.
 
 <core_principles>
@@ -645,24 +546,6 @@ class ResponseAgent(BaseAgent):
             messages = [system_prompt] + history[-1:] + [user_prompt]
             return messages
 
-        elif mode == ResponseMode.FOLLOWUP:
-            if contexts:
-                formatted_context = format_context_for_response(contexts)
-                system_message = SystemMessage(
-                    content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
-                )
-                new_query = HumanMessage(
-                    content=f"{formatted_context}\n---\n{current_query}"
-                )
-                return [system_message] + history[:-1] + [new_query]
-            else:
-                system_message = SystemMessage(content=FOLLOWUP_MODE_PROMPT)
-                return [system_message] + history
-
-        elif mode == ResponseMode.CHITCHAT:
-            system_message = SystemMessage(content=CHITCHAT_MODE_PROMPT)
-            return [system_message] + history
-
         elif mode == ResponseMode.SQL_RESPONSE:
             system_message = SystemMessage(content=SQL_RESPONSE_MODE_PROMPT)
             sql_context = (
@@ -687,11 +570,12 @@ class ResponseAgent(BaseAgent):
         else:  # ResponseMode.STANDARD
             if contexts:
                 formatted_context = format_context_for_response(contexts)
+                print(formatted_context)
                 system_message = SystemMessage(
                     content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
                 )
                 new_query = HumanMessage(
-                    content=f"CONTEXT: {formatted_context}\n---\n QUERY: {current_query}"
+                    content=f"CONTEXT: {formatted_context}\n---\n Answer this query using the provided context, cite correctly: {current_query}"
                 )
                 return [system_message] + history[:-1] + [new_query]
             else:

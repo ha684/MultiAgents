@@ -17,7 +17,6 @@ from src.domain.entities.graph import RunConfig, SubgraphOutput
 from src.domain.entities.state import NormalGraphState
 from src.utils import (
     format_context_for_response,
-    normalize_url,
     truncate_docs_by_tokens,
 )
 from src.utils.logger_conf import logger
@@ -75,7 +74,7 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
         logger.info(f"[Direction] {direction}")
 
         return {
-            "current_direction": direction,
+            "direction": direction,
             "action": action,
             "selected_subgraph": selected_subgraph,
             "reasoning": reasoning,
@@ -84,18 +83,21 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
     async def execute_subgraph_node(self, state: NormalGraphState) -> Dict[str, Any]:
         """Execute selected subgraph and return documents."""
         subgraph_name = state.get("selected_subgraph")
-        query = state.get("current_direction")
+        query = state.get("direction")
+
+        if state.get("action") == "reason_only":
+            return {}
 
         if not subgraph_name:
             logger.error("[NormalGraph] No subgraph selected")
-            return {"_temp_documents": []}
+            return {"cited_documents": []}
 
         try:
             subgraph_config = SubgraphRegistry.get_profile(subgraph_name)
 
             if not subgraph_config:
                 logger.error(f"[NormalGraph] Subgraph '{subgraph_name}' not found")
-                return {"_temp_documents": []}
+                return {"cited_documents": []}
 
             exec_ref = subgraph_config.executor
             executor = (
@@ -106,10 +108,9 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
                 logger.error(
                     f"[NormalGraph] Executor for '{subgraph_name}' not callable"
                 )
-                return {"_temp_documents": []}
+                return {"cited_documents": []}
 
             execution_state = dict(state)
-            execution_state["contextualized_query"] = query
 
             logger.info(f"[NormalGraph] Executing {subgraph_name}: {query}")
 
@@ -124,55 +125,15 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
                 f"[NormalGraph] {subgraph_name} returned {len(cited_documents)} documents"
             )
 
-            used_rag_ids = set(state.get("used_rag_ids", []))
-            used_web_urls = set(state.get("used_web_urls", []))
-
-            new_docs = []
-            for doc in cited_documents:
-                meta = doc.metadata
-                doc_id = meta.get("document_id")
-                url = normalize_url(meta)
-
-                if doc_id and doc_id in used_rag_ids:
-                    continue
-                if url and url in used_web_urls:
-                    continue
-
-                new_docs.append(doc)
-                if doc_id:
-                    used_rag_ids.add(doc_id)
-                if url:
-                    used_web_urls.add(url)
-
-            logger.info(
-                f"[NormalGraph] {len(new_docs)}/{len(cited_documents)} new documents after dedup"
+            cited_documents = truncate_docs_by_tokens(
+                cited_documents, max_tokens=8192, tokenizer=self.tokenizer
             )
 
-            new_docs = truncate_docs_by_tokens(
-                new_docs, max_tokens=8192, tokenizer=self.tokenizer
-            )
-
-            search_history = list(state.get("search_history", []))
-            search_history.append(
-                {
-                    "subgraph": subgraph_name,
-                    "query": query,
-                    "doc_count": len(new_docs),
-                    "depth_level": state.get("current_depth_level", 0),
-                }
-            )
-
-            return {
-                "_temp_documents": new_docs,
-                "used_rag_ids": list(used_rag_ids),
-                "used_web_urls": list(used_web_urls),
-                "search_count": state.get("search_count", 0) + 1,
-                "search_history": search_history,
-            }
+            return {"cited_documents": cited_documents}
 
         except Exception as e:
             logger.error(f"[NormalGraph] Error executing {subgraph_name}: {e}")
-            return {"_temp_documents": []}
+            return {"cited_documents": []}
 
     async def synthesize_response_node(self, state: NormalGraphState) -> Dict[str, Any]:
         """Synthesize final response using response_agent."""
@@ -183,7 +144,7 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
             response_mode = ResponseMode.SQL_RESPONSE
         else:
             response_mode = ResponseMode.STANDARD
-
+        state["response_mode"] = response_mode
         response = await response_agent.ainvoke(state)
 
         response_metadata = state.get("response_metadata", {})

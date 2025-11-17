@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 from src.agents.graph.sql_graph import SqlGraph
 from src.database.sql_database import AsyncSQLDatabase
 from src.domain.entities.graph import SubgraphOutput
-from src.domain.entities.state import OrchestratorState, SqlState
+from src.domain.entities.state import SqlState
 
 
 def _stringify_cell(v: Any, max_len: int = 160) -> str:
@@ -38,9 +38,7 @@ def _format_table_preview(rows: List[Dict[str, Any]]) -> str:
     return "".join(lines)
 
 
-async def _run_sql_query(
-    state: OrchestratorState, sql_db: AsyncSQLDatabase
-) -> SubgraphOutput:
+async def _run_sql_query(state: Dict, sql_db: AsyncSQLDatabase) -> SubgraphOutput:
     """Execute SQL query subgraph and format comprehensive context without overloading the LLM."""
     sql_state = SqlState(contextualized_query=state["contextualized_query"])
     sql_graph = SqlGraph(sql_db)
@@ -163,5 +161,5 @@ class SqlQueryExecutor:
     def __init__(self, sql_db: AsyncSQLDatabase):
         self.sql_db = sql_db
 
-    async def __call__(self, state: OrchestratorState) -> SubgraphOutput:
+    async def __call__(self, state: Dict) -> SubgraphOutput:
         return await _run_sql_query(state, self.sql_db)

@@ -575,7 +575,7 @@ class PromptTemplates:
         Available Subgraphs:
         {subgraph_definitions}
         
-        Original Query: {original_query}
+        Conversation history: {conversation_text}
 
         Based on what we've learned and what remains unclear, what should we investigate next to best serve the original query?
     """)

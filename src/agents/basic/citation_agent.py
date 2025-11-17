@@ -7,7 +7,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from src.agents.basic.base import BaseAgent
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.domain.schemas.chat import CitationIndexes
-from src.utils import parse_response
+from src.utils import format_context_for_response, parse_response
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
@@ -117,19 +117,6 @@ class CitationAgent(BaseAgent):
         super().__init__()
         logger.info("Citation Agent initialized successfully.")
 
-    def _format_context_for_response(self, documents: List[Document]) -> str:
-        """Formats documents for the response prompt."""
-        xml_output = "<documents>\n"
-        for i, doc in enumerate(documents):
-            xml_output += f'<document index="{i + 1}">\n'
-            content = doc.page_content
-            xml_output += "<document_content>\n"
-            xml_output += f"{content}\n"
-            xml_output += "</document_content>\n"
-            xml_output += "</document>\n"
-        xml_output += "</documents>"
-        return xml_output
-
     async def ainvoke(
         self, history: List[BaseMessage], reference: List[Document]
     ) -> CitationIndexes:
@@ -138,7 +125,7 @@ class CitationAgent(BaseAgent):
             return CitationIndexes(indexes=[])
 
         try:
-            formatted_context = self._format_context_for_response(reference)
+            formatted_context = format_context_for_response(reference)
             system_prompt = SystemMessage(content=CITATION_PROMPT_TEMPLATE)
             user_content = HumanMessage(
                 content=f"""Here are documents:\n{formatted_context}\n---\nExtract correct citations for the following query: {history[-1].content}"""

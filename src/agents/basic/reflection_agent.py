@@ -1,7 +1,12 @@
 # src/agents/basic/router_agent.py
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    get_buffer_string,
+)
 
 from src.agents.basic.base import BaseAgent
 from src.agents.prompts.agent_prompts import PromptTemplates
@@ -26,8 +31,9 @@ class ReflectionAgent(BaseAgent):
             extras=state.get("subgraph_policy", {}).get("extras"),
         )
 
+        conversation_text = get_buffer_string(state["conversation"])
         prompt_input = PromptTemplates.REFLECTION_HUMAN_PROMPT.format(
-            original_query=state["contextualized_query"],
+            conversation_text=conversation_text,
             learnings="\n".join(f"- {learning}" for learning in learnings[-3:])
             if learnings
             else "None yet",

@@ -4,6 +4,8 @@ from typing import Any, Dict, List, Literal, Optional, Set, TypedDict
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
 
+from src.domain.entities.graph import ResponseMode
+
 
 class SearchQuery(TypedDict):
     """Search query from search operations"""
@@ -152,16 +154,10 @@ class SqlState(TypedDict):
 class NormalGraphState(TypedDict):
     """State for normal graph operations"""
 
+    final_answer: str
+    response_metadata: Dict
     conversation: List[BaseMessage]
-    context_metadata: Dict[str, Any]
     selected_subgraph: str
     current_direction: str
-    thinking_notes: str
-    accumulated_knowledge: str
-    learnings: List[str]
-    search_count: int
-    search_history: List[Dict[str, Any]]
     cited_documents: List[Document]
-    citation_map: List[Dict[str, Any]]
-    used_rag_ids: List[str]
-    used_web_urls: List[str]
+    response_mode: ResponseMode

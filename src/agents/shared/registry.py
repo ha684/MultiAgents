@@ -559,7 +559,6 @@ def seed_base_subgraphs():
     SubgraphRegistry.register(RAG_SEARCH_PROFILE)
     SubgraphRegistry.register(WEB_SEARCH_PROFILE)
     SubgraphRegistry.register(SQL_QUERY_PROFILE)
-    print(f"✅ Registered {len(SubgraphRegistry._profiles)} subgraph profiles")
 
 
 def enable_sql(db_url: str, allow_tables: list[str]):
