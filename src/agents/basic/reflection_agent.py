@@ -24,11 +24,33 @@ class ReflectionAgent(BaseAgent):
     async def ainvoke(self, state: Dict[str, Any]) -> Dict[str, Any]:
         learnings = state.get("learnings", [])
         knowledge = state.get("accumulated_knowledge", "")
+        execution_history = state.get("execution_history", [])
+
+        history_section = ""
+        if execution_history:
+            recent_history = execution_history[-5:]
+            history_text = "\n".join(
+                [
+                    f"  [{ex.get('iteration')}] {ex.get('subgraph')} - {ex.get('status')}: {ex.get('query', '')[:60]}..."
+                    + (
+                        f" (Error: {ex.get('error')})"
+                        if ex.get("status") == "failed"
+                        else ""
+                    )
+                    for ex in recent_history
+                ]
+            )
+            history_section = f"Execution History:\n{history_text}\n"
 
         active_map = SubgraphRegistry.resolve_active(
             allow=state.get("subgraph_policy", {}).get("allow"),
             block=state.get("subgraph_policy", {}).get("block"),
             extras=state.get("subgraph_policy", {}).get("extras"),
+        )
+
+        missing_aspects = state.get("_missing_aspects", "")
+        missing_section = (
+            f"Missing Aspects: {missing_aspects}\n" if missing_aspects else ""
         )
 
         conversation_text = get_buffer_string(state["conversation"])
@@ -39,7 +61,9 @@ class ReflectionAgent(BaseAgent):
             if learnings
             else "None yet",
             knowledge=knowledge[-3000:] if knowledge else "None yet",
+            execution_history_section=history_section,
             subgraph_definitions=SubgraphRegistry.generate_routing_prompt(active_map),
+            missing_aspects_section=missing_section,
         )
 
         messages: List[BaseMessage] = [

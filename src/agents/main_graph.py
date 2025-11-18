@@ -17,7 +17,7 @@ from src.agents.graph.normal_graph import NormalGraph
 from src.agents.graph.thinking_graph import ThinkingGraph
 from src.agents.shared.manager import execution_manager
 from src.agents.shared.registry import enable_sql, seed_base_subgraphs
-from src.domain.entities.graph import ResponseMode, RunConfig
+from src.domain.entities.graph import RunConfig
 from src.domain.entities.state import NormalGraphState, MainGraphState, ThinkingState
 from src.domain.schemas.chat import Message, RetrievalContext, TextPart
 from src.services.conversation_service import ConversationService
@@ -90,8 +90,6 @@ class MainGraph(GraphAgentBase[MainGraphState]):
                 tool_call = response.tool_calls[0]
                 tool_name = tool_call["name"]
 
-                logger.info(f"[DirectResponse] Agent called tool: {tool_name}")
-
                 if tool_name == "use_normal_mode":
                     return {
                         "route_mode": "normal",
@@ -101,7 +99,6 @@ class MainGraph(GraphAgentBase[MainGraphState]):
                         "route_mode": "thinking",
                     }
                 else:
-                    logger.warning(f"[DirectResponse] Unknown tool: {tool_name}")
                     return {
                         "route_mode": "direct",
                         "final_answer": "I apologize, but I encountered an issue. Could you please rephrase your question?",
@@ -169,7 +166,6 @@ class MainGraph(GraphAgentBase[MainGraphState]):
                 "response_metadata": {
                     "mode": "normal",
                     "error": str(e),
-                    "response_mode": ResponseMode.NO_VIABLE_OPTION,
                 },
             }
 
@@ -203,7 +199,6 @@ class MainGraph(GraphAgentBase[MainGraphState]):
                 "response_metadata": {
                     "mode": "thinking",
                     "error": str(e),
-                    "response_mode": ResponseMode.NO_VIABLE_OPTION,
                 },
             }
 

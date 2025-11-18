@@ -116,13 +116,13 @@ class ThinkingState(TypedDict, total=False):
 
     # ===== Current Iteration Context =====
     iteration_count: int  # Current iteration number (0-indexed)
-    current_direction: str  # Current research direction/query
+    direction: str  # Current research direction/query
     selected_subgraph: str  # Subgraph to execute (e.g., "web_search")
     action: str  # "use_tool" or "reason_only"
     reasoning: str  # Reasoning from reflection_agent
 
     # ===== Accumulated Research =====
-    accumulated_knowledge: str  # Compressed knowledge from all iterations
+    accumulated_context: str  # Compressed knowledge from all iterations
     learnings: List[str]  # SIMPLIFIED: Human-readable log of learnings
 
     # ===== Citation Management =====
@@ -139,7 +139,8 @@ class ThinkingState(TypedDict, total=False):
 
     # ===== Flags for Path Tracking =====
     has_tool_results: bool  # Track if we've executed ANY tools (not just reasoning)
-
+    execution_history: List[Dict[str, Any]] = []  # Track all attempts
+    consecutive_failures: int = 0
     # ===== Internal Control (private, prefixed with _) =====
     _temp_documents: List[Document]  # Temporary docs from current iteration
     _sql_result: str  # Temporary SQL result from current iteration
