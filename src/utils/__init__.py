@@ -78,20 +78,14 @@ def get_last_message_id(m: Message | None) -> str | None:
 
 
 def format_context_for_response(documents: List[Document]) -> str:
-    """Formats documents for the response prompt."""
     if not documents:
         return ""
 
-    xml_output = "<documents>\n"
-    for i, doc in enumerate(documents):
-        xml_output += f'  <document index="{i + 1}">\n'
-        content = getattr(doc, "page_content", "")
-        xml_output += "    <document_content>\n"
-        xml_output += f"{content}\n"
-        xml_output += "    </document_content>\n"
-        xml_output += "  </document>\n"
-    xml_output += "</documents>"
-    return xml_output
+    parts = ["# Retrieved documents:\n"]
+    for i, doc in enumerate(documents, start=1):
+        source = doc.metadata.get("original_filename", "Unknown source")
+        parts.append(f"[{i}] Source: {source}\n{doc.page_content}\n")
+    return "\n".join(parts)
 
 
 def truncate_docs_by_tokens(

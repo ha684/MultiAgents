@@ -351,8 +351,9 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             logger.error(f"[Learnings] Compression failed: {e}")
             compressed = "\n\n".join([d.page_content for d in docs_with_citations])
 
-        preview = compressed[:250] + "..." if len(compressed) > 250 else compressed
-        learning_entry = f"[Iter {iteration}] {subgraph_name} for '{query}': Found {len(docs)} docs. Preview: {preview}"
+        learning_entry = (
+            f"[Iter {iteration}] {subgraph_name} for '{query}': Found {len(docs)} docs."
+        )
 
         learnings = list(state.get("learnings", []))
         learnings.append(learning_entry)

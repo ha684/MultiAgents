@@ -1093,123 +1093,114 @@ class PromptTemplates:
     FINAL_SYNTHESIZER_PROMPT = textwrap.dedent("""\
         Your task is to synthesize the accumulated context into a comprehensive response that directly addresses the user's query.
 
-        PART 1: LANGUAGE DETECTION
+        LANGUAGE DETECTION
 
         CRITICAL: Detect the language of the user's message and respond in THAT EXACT LANGUAGE.
         - Vietnamese query → Vietnamese response
         - English query → English response  
         - Chinese query → Chinese response
-        - Apply to ALL content: text, headers, everything
+        - Apply to ALL content: text, headers, lists, everything
 
-        PART 2: CITATION FORMAT
+        CITATION FORMAT
 
         CITATION RULES:
-        1. **Every factual claim** must include its citation number [N]
-        2. **Place citations immediately after the claim**: The economy grew 5% [3].
-        3. **Multiple sources**: Use comma-separated numbers [1,5,7]
-        4. **Position**: After the claim, before punctuation when possible
-        5. **Preservation**: Do NOT modify or skip any citation numbers
-        6. **No invention**: Do NOT add citations that don't exist in accumulated context
+        1. **Format**: Use `([source_name][N])` where:
+        - `source_name` is a SHORT identifier (filename, website, doc title)
+        - `N` is the document/source index number
+        - Keep source names under 15 characters
+        
+        2. **Examples**:
+        - `([report.pdf][1])`
+        - `([company-site][2])`
+        - `([Q3-analysis][3])`
+        - Alternative simple: `([1])` if source name unclear
+        
+        3. **Placement**: 
+        - Place immediately after each factual claim
+        - Example: "Revenue grew to $5.2M ([financial][1])"
+        - Multiple sources: "Sales increased ([report][1]), ([summary][3])"
+        
+        4. **Requirements**:
+        - Every factual claim MUST have citation
+        - Use EXACT numbers from accumulated context
+        - Do NOT modify or skip citation numbers
+        - Do NOT invent citations not in context
+        - Preserve source names when provided in context
+        
+        5. **Multiple sources for one claim**:
+        - List separately: "Project completed on time ([status][1]), ([update][4])"
+        - Or combine if same info: "Revenue increased ([1], [3])"
 
-        PART 3: RESPONSE STYLE & PRESENTATION
+        RESPONSE STYLE & PRESENTATION
 
         RESPOND NATURALLY:
         - Answer directly as if someone asked you a question
         - Do NOT use rigid structures like "Introduction", "Body", "Conclusion"
-        - Do NOT announce sections ("First, I will...", "In this report...")
-        - Do NOT say "Based on the research..." or "This report will cover..."
-        - Just start answering naturally
+        - Do NOT announce sections ("First, I will...", "This report will cover...")
+        - Do NOT say "Based on the research..." or meta-commentary
+        - Just start answering naturally and conversationally
 
         ORGANIZE BY CONTENT:
-        - Let the information guide your structure
-        - Use headers when they help (not because you "should")
+        - Let the information guide your structure naturally
+        - Use headers (##, ###) when they add clarity
         - Flow logically from one point to another
-        - Think: "How would I explain this clearly?" not "What structure should I follow?"
+        - Think: "How would I explain this clearly to someone?"
+        - Break complex topics into digestible sections
 
-        PART 4: MARKDOWN FORMATTING
+        FOR REPORTS/COMPREHENSIVE ANSWERS:
+        - Use descriptive headers that indicate content
+        - Group related information together
+        - Provide context before diving into details
+        - Use subsections (###) for deeper organization
+        - End naturally without forced conclusions
 
-        FORMAT YOUR RESPONSE IN MARKDOWN:
+        EVIDENCE GROUNDING
 
-        **Headers:**
-        ```markdown
-        ## Main Section
-        ### Subsection
-        #### Detail Level
-        ```
-
-        **Text Formatting:**
-        - **Bold** for key terms or emphasis (use sparingly)
-        - *Italic* for subtle emphasis or terms
-        - `code` for technical terms, commands, or variables
-
-        **Lists:**
-        ```markdown
-        - Bullet point
-        - Another point
-        
-        1. Numbered item
-        2. Next item
-        ```
-
-        **Other Elements:**
-        - Tables for comparing data
-        - > Blockquotes for important callouts
-        - Horizontal rules (---) to separate major sections if needed
-
-        Write naturally using markdown syntax throughout your entire response.
-
-        PART 5: EVIDENCE GROUNDING
-
-        STRICT BOUNDARIES:
-        - Base your response ONLY on information in accumulated context
-        - Every factual claim must have a citation
-        - If information is missing, state it clearly
-        - Never invent, assume, or extrapolate beyond the evidence
+        - Use provided context for references
+        - Every factual claim must have a citation in `([source][N])` format
         - Present conflicting information objectively with all citations
 
         HANDLING INCOMPLETE INFORMATION:
-        - Be honest about gaps in available information
-        - State clearly what IS known (with citations)
-        - State clearly what is NOT found in sources
-        - Don't fill gaps with general knowledge or speculation
+        - **Focus on what you KNOW** - present available information fully
+        - **Minimize meta-commentary** - don't over-emphasize gaps
+        - Only mention missing information if:
+        * User specifically asked about it
+        * It's critical to understanding the answer
 
-        Example:
-        - "The platform supports feature X [3] and feature Y [7]. However, information about feature Z was not found in the available sources."
+        CONFLICTING INFORMATION:
+        - Present all perspectives with their citations
+        - Be objective and neutral
+        - Example: "According to the sales report ([sales][1]), revenue increased 15%, while the quarterly summary ([summary][3]) reports 12% growth."
 
-        PART 6: WRITING QUALITY
+        WRITING QUALITY
 
         BE COMPREHENSIVE:
         - Provide thorough answers with appropriate depth
-        - Include relevant details, context, and examples
+        - Include relevant details, context, and examples (all cited)
         - Explain technical terms naturally when first mentioned
         - Be specific with numbers, dates, and facts (always cited)
+        - For report-style queries, aim for completeness
 
         BE CLEAR & PRECISE:
         - Use precise language that reflects the evidence
         - Maintain consistent terminology throughout
         - Show relationships and connections between ideas
         - Use qualifiers appropriately (may, likely, appears to, suggests)
+        - Define acronyms on first use
 
-        BE NATURAL:
-        - Write as if explaining to someone who asked you directly
+        BE NATURAL & READABLE:
+        - Write as if explaining to an intelligent colleague
         - Vary sentence structure and length for readability
-        - Use transitions that flow naturally
+        - Use transitions that flow naturally ("Additionally", "However", "As a result")
         - Let the information speak through clear explanation
+        - Avoid repetition unless emphasizing key points
 
-        FINAL CHECKLIST:
-        - [ ] Responded in user's language
-        - [ ] All citations transformed to [N] format only
-        - [ ] Every factual claim has citation
-        - [ ] Natural, direct response (no "Introduction/Body/Conclusion" announcements)
-        - [ ] Proper markdown formatting throughout
-        - [ ] Only information from accumulated context
-        - [ ] Gaps in knowledge explicitly stated
-        - [ ] Comprehensive and clear explanation
-        
-        Context: {accumulated_context}
-        User Query: {user_query}
-        
-        Now synthesize the accumulated context into a well-formatted markdown response that naturally and completely answers the user's query.
+        STRUCTURE FOR COMPLEX QUERIES:
+        - Start with most important/relevant information
+        - Progress logically through subtopics
+        - Use headers to guide readers
+        - Provide synthesis/connections between sections
+        - End on a complete thought (no forced conclusions)
     """)
 
     SQL_ANALYSIS_SYSTEM_PROMPT = textwrap.dedent("""\

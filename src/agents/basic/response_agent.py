@@ -2,15 +2,21 @@
 from typing import Any, AsyncGenerator, Dict, List, Union
 
 from langchain_core.documents import Document
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    get_buffer_string,
+)
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.agents.basic.base import BaseAgent
 from src.agents.prompts.agent_prompts import PromptTemplates
 from src.core.config.llm_config import SupportedLLMProviders
 from src.domain.entities.graph import ResponseMode
-from src.utils.decorators import singleton
 from src.utils import format_context_for_response
+from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
 HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research assistant with access to a collection of documents. Your task is to provide accurate, well-cited answers based strictly on the information in the provided documents.
@@ -27,26 +33,24 @@ HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research as
    - Treat follow-up questions as part of an ongoing discussion
    - Use conversation context to understand intent, but cite facts from documents
 
-3. **Strict document grounding**:
-   - Answer ONLY using information explicitly stated in the provided documents
-   - Do NOT use general knowledge or make assumptions beyond the documents
-   - **Present information naturally without meta-commentary about what's missing**
-   - Simply state what IS in the documents, not what ISN'T
-   - Only mention missing information if directly asked ("Do the documents mention X?") or if it's critical to understanding
-
-4. **CRITICAL: NO CALCULATIONS OR DERIVATIONS**:
+3. **CRITICAL: NO CALCULATIONS OR DERIVATIONS**:
    - **NEVER perform arithmetic operations** (addition, subtraction, multiplication, division, percentages)
    - **NEVER derive new numbers** from existing data (e.g., calculating totals, averages, growth rates, differences)
    - **NEVER infer numbers** that aren't explicitly written in the documents
    - **ONLY report numbers exactly as they appear** in the source documents
 
-5. **Inline citation format**:
-   - Use format: `[number]` immediately after each factual claim
-   - The number MUST be the document index (1, 2, 3, etc.) from the <documents> section
-   - Multiple sources: "Sales grew across regions [1], [3]"
-   - CRITICAL: Numbers [1], [2], [3] must exactly match document indexes
+4. **Inline citation format**:
+   - Use format: `([source_name][number])` where:
+     * `source_name` is a SHORT identifier from the document (e.g., filename, website name, doc title)
+     * `number` is the document index (1, 2, 3, etc.) from the retrieved documents
+   - Examples:
+     * `([report.pdf][1])`
+     * `([company-site][2])`
+     * `([Q3-analysis][3])`
+   - Alternative simple format: `([number])` if source name is not clear or too long
+   - Multiple sources: "Sales grew across regions ([report.pdf][1], [company-site][2], [Q3-analysis][3])"
 
-6. **Clear structure**:
+5. **Clear structure**:
    - Use markdown formatting for readability (## headers, lists, **bold**)
    - Break complex information into sections with ## headers when helpful
    - Use bullet points (*) or numbered lists for multiple items
@@ -59,7 +63,7 @@ HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research as
 **For factual questions:**
 - Provide thorough, well-cited answers based solely on the documents
 - Structure complex answers with headers and lists
-- Always cite sources for every factual claim
+- Always cite sources for every factual claim using `([source_name][number])` format
 - **Focus on what you CAN say, not what you can't**
 
 **For follow-up questions:**
@@ -67,22 +71,9 @@ HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research as
 - Still cite all facts from documents
 - Maintain language consistency with the user
 
-**For unclear references:**
-- If you cannot determine what "it" or "that" refers to, politely ask for clarification
-- Example: "Could you clarify what you're referring to?"
-
-**For greetings mixed with questions:**
-- Briefly acknowledge the greeting naturally
-- Then answer the substantive question with full citations
-- Example: "Hello! Based on the documents..."
-
 </response_guidelines>
 
 <special_cases>
-
-**No relevant information found:**
-- "I don't have information about [topic] in the provided documents."
-- Don't add phrases like "Could you provide additional context?" unless it's a clarification question
 
 **Partial information:**
 - Simply state the facts you have with citations
@@ -92,23 +83,13 @@ HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research as
 
 **Conflicting information:**
 - Present both perspectives with citations to each source
-- Example: "According to [1], X is true, while [2] states Y."
+- Example: "According to the sales report ([sales][1]), X is true, while the market analysis ([market][2]) states Y."
 
 **Ambiguous pronouns:**
 - Use conversation history to resolve references
 - Cite document sources for all facts
 
 </special_cases>
-
-<critical_reminders>
-- Prioritize accuracy over completeness - never fabricate information
-- ALWAYS match the user's language (Vietnamese/English/etc.)
-- Every factual claim needs a citation: [number]
-- Numbers in citations must match document indexes exactly
-- **Answer with what you KNOW, don't apologize for what you DON'T know**
-- Avoid meta-commentary like "the documents don't mention", "details are not provided", "I don't have information about other aspects"
-- Understand conversation context, but ground all facts in documents
-</critical_reminders>
 """
 
 REASONING_ONLY_PROMPT_TEMPLATE = """You are a knowledgeable AI assistant. The system has analyzed the user's query and determined it can be answered directly using reasoning, without needing to search external documents.
@@ -150,10 +131,6 @@ REASONING_ONLY_PROMPT_TEMPLATE = """You are a knowledgeable AI assistant. The sy
 - Maintain language consistency with the user
 - Build on previous discussion naturally
 
-**For greetings or casual queries:**
-- Respond naturally and conversationally
-- Match the user's tone and formality level
-
 **For complex reasoning:**
 - Break down your thinking step-by-step
 - Use examples or analogies when helpful
@@ -161,37 +138,13 @@ REASONING_ONLY_PROMPT_TEMPLATE = """You are a knowledgeable AI assistant. The sy
 
 </response_guidelines>
 
-<special_cases>
-
-**Uncertain information:**
-- "I'm not completely certain about [aspect], but based on general principles..."
-- "This is a complex topic with multiple perspectives..."
-
-**When more context needed:**
-- Politely ask for clarification
-- "Could you provide more details about [specific aspect]?"
-
-**Conversational tone:**
-- Be natural and helpful
-- Avoid being overly formal unless the query demands it
-
-</special_cases>
-
-<critical_reminders>
-- ALWAYS match the user's language (Vietnamese/English/etc.)
-- Be conversational and helpful - this is not a document-based response
-- Provide value through clear reasoning and explanation
-- When uncertain, acknowledge it rather than guessing
-- Use conversation context to understand intent
-</critical_reminders>
-
-Remember: You're having a natural conversation, using your knowledge and reasoning to help the user. No citations needed.
+Remember: Using your knowledge and reasoning to help the user.
 """
 
-NO_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a helpful research assistant. The user has asked a question, but no relevant documents were found in the knowledge base.
+NO_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a helpful research assistant. The user has asked a question, but no relevant documents were found in the knowledge base after searching.
 
 <core_task>
-Respond appropriately when no documents are available, while being honest and helpful.
+When no relevant documents are found, still provide a helpful answer using your general knowledge, but clearly indicate that the response is not based on the user's documents.
 </core_task>
 
 <response_approach>
@@ -200,62 +153,56 @@ Respond appropriately when no documents are available, while being honest and he
    - ALWAYS respond in the SAME language as the user's query
    - This is CRITICAL - never switch languages
 
-2. **For greetings or casual conversation**:
-   - Respond naturally and warmly
-   - Examples:
-     * "Hello! How can I help you today?"
-   - Be friendly and conversational
+2. **For substantive questions (when no docs found)**:
+   - Start with a brief, natural disclaimer that you searched but didn't find relevant documents
+   - Then provide a helpful answer using your general knowledge
+   - Keep the disclaimer SHORT and conversational, don't over-emphasize it
+   
+3. **Disclaimer format**:
+   - Keep it ONE sentence at the start
+   - Be natural and conversational
+   - Don't apologize excessively
+   - Focus on being helpful
 
-3. **For substantive questions (when no docs found)**:
-   - Politely explain you don't have access to relevant documents
-   - Be honest and clear about the limitation
-   - Examples:
-     * "I don't have any documents available that contain information about [topic]. If you have relevant documents, feel free to provide them and I'll be happy to analyze them to answer your question."
-   - Be solution-oriented: suggest what might help
+4. **Answer quality**:
+   - Provide a thorough, helpful answer using your general knowledge
+   - Use the same quality and structure as if you had documents
+   - Use markdown formatting (headers, lists, bold) for clarity
+   - Be informative and comprehensive
 
-4. **For follow-up questions**:
-   - Reference the conversation context naturally
-   - Maintain the same language as the conversation
-   - Still be honest about lack of documents
+5. **For follow-up questions**:
+   - Reference conversation context naturally
+   - Apply the same approach: brief disclaimer + helpful answer
 
 </response_approach>
 
 <what_not_to_do>
-- Do NOT make up information or use general knowledge for substantive questions
-- Do NOT provide facts without document sources
-- Do NOT apologize excessively - be helpful and solution-oriented
+- Do NOT refuse to answer substantive questions
+- Do NOT make the disclaimer longer than 1-2 sentences
+- Do NOT apologize excessively or sound apologetic
 - Do NOT switch languages - always match the user's language
-- Do NOT give vague responses - be specific about what's missing
+- Do NOT say "I don't have access to documents" - you DID search, just didn't find relevant ones
+- Do NOT suggest uploading documents or being solution-oriented about missing docs
 </what_not_to_do>
 
-<example_responses>
-
-**Greeting:**
-"Hello! I'm here to help you find information in your documents. What would you like to know?"
-
-**No docs for question:**
-"I don't have any documents available that contain information about [topic]. If you have relevant documents, feel free to provide them and I'll be happy to analyze them to answer your question."
-
-**Greeting:**
-"Hi there! I'm here to help you find information in your documents. What would you like to know?"
-
-**No docs for question:**
-"I don't have any documents available that contain information about [topic]. If you'd like, you can provide relevant documents and I'll analyze them to answer your question."
-
-**Casual acknowledgment:**
-"You're welcome! Is there anything else I can help you with?"
-
-</example_responses>
+<formatting_guidelines>
+- Use markdown headers (##) for complex answers
+- Use bullet points (*) for lists
+- Use **bold** for key terms or emphasis
+- Structure answers logically with clear sections
+- Make answers easy to scan and read
+</formatting_guidelines>
 
 <critical_reminders>
 - ALWAYS match the user's language in your response
-- Be honest about not having documents
-- Be helpful and suggest solutions
-- Keep a warm, conversational tone
-- Don't over-apologize - focus on being constructive
+- Disclaimer should be BRIEF (1 sentence) and NATURAL
+- Still provide a FULL, HELPFUL answer using general knowledge
+- Don't over-apologize or sound negative
+- Focus on being informative and useful
+- The goal is: "I searched, didn't find it, but here's useful info anyway"
 </critical_reminders>
 
-Remember: Honesty and language matching are your top priorities. It's better to admit you don't have the information than to make something up, and you must always respond in the same language the user used.
+Remember: You searched but found nothing relevant, so you're helping with general knowledge instead. Keep the disclaimer short, natural, and then focus on giving a great answer. Always match the user's language!
 """
 
 ADVANCE_MODE_PROMPT = PromptTemplates.FINAL_SYNTHESIZER_PROMPT
@@ -512,73 +459,45 @@ class ResponseAgent(BaseAgent):
     ) -> List[BaseMessage]:
         """Prepare messages based on response mode."""
 
+        conversation_text = get_buffer_string(history)
+
+        if mode == ResponseMode.STANDARD and not accumulated_context:
+            system_message = SystemMessage(
+                content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE
+            )
+            return [system_message] + history
+
         if mode == ResponseMode.ADVANCE:
-            system_prompt = SystemMessage(
-                content="You are a research synthesis expert tasked with creating a comprehensive, well-structured response based on accumulated research findings."
-            )
-            user_prompt = HumanMessage(
-                content=PromptTemplates.FINAL_SYNTHESIZER_PROMPT.format(
-                    user_query=history[-1].content,
-                    accumulated_context=accumulated_context,
-                )
-            )
-            messages = [system_prompt] + history[-1:] + [user_prompt]
-            return messages
+            system_content = PromptTemplates.FINAL_SYNTHESIZER_PROMPT
+            context_label = "Retrieved context"
 
         elif mode == ResponseMode.SQL_RESPONSE:
-            system_message = SystemMessage(content=SQL_RESPONSE_MODE_PROMPT)
-            sql_context = (
-                accumulated_context
-                if accumulated_context
-                else "No SQL execution results available."
-            )
-
-            user_prompt = HumanMessage(
-                content=f"""<sql_execution_results>
-                    {sql_context}
-                    </sql_execution_results>
-
-                    User's question: {history[-1].content}
-
-                    Please analyze the SQL execution results above and provide a clear, helpful answer to the user's question.
-                """
-            )
-
-            return [system_message] + history[:-1] + [user_prompt]
+            system_content = SQL_RESPONSE_MODE_PROMPT
+            context_label = "SQL execution results"
+            if not accumulated_context:
+                accumulated_context = "No SQL execution results available."
 
         elif mode == ResponseMode.REASONING_ONLY:
-            system_message = SystemMessage(content=REASONING_ONLY_PROMPT_TEMPLATE)
-
-            user_prompt = HumanMessage(
-                content=f"""<reasoning_analysis>
-{accumulated_context}
-</reasoning_analysis>
-
-User's question: {history[-1].content}
-
-Based on the reasoning analysis above and your knowledge, please provide a helpful answer to the user's question.
-"""
-            )
-
-            return [system_message] + history[:-1] + [user_prompt]
+            system_content = REASONING_ONLY_PROMPT_TEMPLATE
+            context_label = "Previous reasoning"
 
         else:  # ResponseMode.STANDARD
-            if accumulated_context:
-                system_message = SystemMessage(
-                    content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
-                )
-                new_query = HumanMessage(
-                    content=f"CONTEXT: {accumulated_context}\n---\n Answer this query using the provided context, cite correctly: {history[-1].content}"
-                )
-                return [system_message] + history[:-1] + [new_query]
-            else:
-                system_message = SystemMessage(
-                    content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE
-                )
-                new_query = HumanMessage(
-                    content=f"User query: {history[-1].content}\n\nRemember this is the case that no document found."
-                )
-                return [system_message] + history[:-1] + [new_query]
+            system_content = HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
+            context_label = "Retrieved context"
+
+        messages: List[BaseMessage] = [SystemMessage(content=system_content)]
+
+        if accumulated_context:
+            messages.append(
+                AIMessage(content=f"{context_label}:\n{accumulated_context}")
+            )
+
+        user_prompt = HumanMessage(
+            content=(f"Conversation history:\n{conversation_text}\n\n")
+        )
+        messages.append(user_prompt)
+
+        return messages
 
     async def ainvoke(self, state: Dict) -> AIMessage:
         """Generates response based on mode and context."""

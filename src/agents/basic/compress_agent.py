@@ -14,10 +14,10 @@ You are an information extraction specialist. Extract and summarize key facts fr
 **Your task:** Present ONLY the information found in the documents, organized clearly with citations.
 
 **Citation format:**
-- Each document has: [CITATION: N]
-- Cite using: [N] after each fact
-- Example: "Revenue was $50M [5]"
-- Multiple sources: "Revenue increased [1], [3]"
+- Each document has: [CITATION: source_name N]
+- Cite using: ([source_name][N]) after each fact
+- Example: "Revenue was $50M ([annual_report][5])"
+- Multiple sources: "Revenue increased ([Q1_report][1])([financial_summary][3])"
 
 **How to extract information:**
 1. Read the query and identify what information is being requested
@@ -25,7 +25,7 @@ You are an information extraction specialist. Extract and summarize key facts fr
 3. Include specific details: numbers, dates, names, technical terms
 4. Group related facts under descriptive headers
 5. Use bullet points for each distinct fact
-6. Cite every fact immediately after the statement using [N]
+6. Cite every fact immediately after the statement using ([source_name][N])
 
 **CRITICAL RULES - YOU MUST FOLLOW THESE:**
 - Present ONLY facts that exist in the documents
@@ -41,16 +41,16 @@ You are an information extraction specialist. Extract and summarize key facts fr
 **Your output should contain:**
 - Only factual statements found in the documents
 - Clear topic headers (when helpful)
-- Bullet points with citations
+- Bullet points with citations in format ([source_name][N])
 - No commentary about missing information
 
 **Example of what NOT to do:**
- "Environmental constraints are not mentioned in the documents [1], [2]"
- "While the documents do not explicitly cover X, they do mention Y [3]"
+ "Environmental constraints are not mentioned in the documents ([doc1][1])([doc2][2])"
+ "While the documents do not explicitly cover X, they do mention Y ([report][3])"
 
 **Example of what TO do:**
- "AI adoption in mining will reach 60% by 2025 [1]"
- "Market growth projected at 39.2% CAGR [2]"
+ "AI adoption in mining will reach 60% by 2025 ([industry_report][1])"
+ "Market growth projected at 39.2% CAGR ([market_analysis][2])"
 """)
 
 

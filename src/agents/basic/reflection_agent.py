@@ -23,7 +23,7 @@ class ReflectionAgent(BaseAgent):
 
     async def ainvoke(self, state: Dict[str, Any]) -> Dict[str, Any]:
         learnings = state.get("learnings", [])
-        knowledge = state.get("accumulated_knowledge", "")
+        knowledge = state.get("accumulated_context", "")
         execution_history = state.get("execution_history", [])
 
         history_section = ""
