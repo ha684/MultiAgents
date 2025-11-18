@@ -57,9 +57,7 @@ async def _run_simple_search(state: Dict, web_active: bool) -> SubgraphOutput:
     cited_docs = res_state.get("cited_documents", [])
     has_content = bool(cited_docs)
 
-    # Handle different result statuses
     if result.status == "error" and not has_content:
-        # Hard error with no content - this is a real failure
         error_msg = getattr(result, "message", None) or "SimpleSearchGraph failed"
         return SubgraphOutput(
             main_context="",
@@ -68,7 +66,6 @@ async def _run_simple_search(state: Dict, web_active: bool) -> SubgraphOutput:
             subgraph_error=error_msg,
         )
     elif result.status in ("timeout", "recursion_limit"):
-        # Soft failure - may have partial results, not a hard error
         warning_msg = f"Search {result.status} but may have partial results"
         return SubgraphOutput(
             main_context="",
@@ -82,7 +79,6 @@ async def _run_simple_search(state: Dict, web_active: bool) -> SubgraphOutput:
             subgraph_error=None if has_content else warning_msg,
         )
     else:
-        # Success or other status with/without content
         return SubgraphOutput(
             main_context="",
             cited_documents=cited_docs,

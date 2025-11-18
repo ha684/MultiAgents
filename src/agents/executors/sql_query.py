@@ -40,7 +40,7 @@ def _format_table_preview(rows: List[Dict[str, Any]]) -> str:
 
 async def _run_sql_query(state: Dict, sql_db: AsyncSQLDatabase) -> SubgraphOutput:
     """Execute SQL query subgraph and format comprehensive context without overloading the LLM."""
-    sql_state = SqlState(contextualized_query=state["contextualized_query"])
+    sql_state = SqlState(conversation=state["conversation"])
     sql_graph = SqlGraph(sql_db)
     result = await sql_graph.ainvoke(state=sql_state)
 
@@ -75,8 +75,6 @@ async def _run_sql_query(state: Dict, sql_db: AsyncSQLDatabase) -> SubgraphOutpu
 
         if query_results:
             results_text = "=== SQL Query Execution Results ===\n\n"
-            results_text += f"Original Question: {state['contextualized_query']}\n\n"
-
             successful_queries = [qr for qr in query_results if qr.get("success")]
             failed_queries = [qr for qr in query_results if not qr.get("success")]
 
@@ -146,7 +144,6 @@ async def _run_sql_query(state: Dict, sql_db: AsyncSQLDatabase) -> SubgraphOutpu
                 }
             )
         else:
-            results_text = f"Original Question: {state['contextualized_query']}\n\n"
             results_text += "No queries were executed. The system determined no SQL queries were needed.\n"
 
     return SubgraphOutput(

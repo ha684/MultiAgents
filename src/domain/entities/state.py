@@ -104,39 +104,54 @@ class SimpleSearchState(TypedDict):
 
 
 class ThinkingState(TypedDict, total=False):
-    """State for research operations (simplified for efficiency)"""
+    """
+    State for iterative research with reflection.
+    Organized by purpose for clarity.
+    """
 
-    contextualized_query: str
-    context_metadata: Dict[str, Any]
+    # ===== Core Input/Output =====
+    conversation: List[BaseMessage]  # User conversation history
+    final_answer: str  # Final synthesized response
+    response_metadata: Dict[str, Any]  # Metadata for response
 
-    breadth: int
-    current_depth_level: int
-    current_direction: str
-    thinking_notes: str
-    accumulated_knowledge: str
-    learnings: List[str]
-    search_count: int
-    search_history: List[Dict[str, Any]]
+    # ===== Current Iteration Context =====
+    iteration_count: int  # Current iteration number (0-indexed)
+    current_direction: str  # Current research direction/query
+    selected_subgraph: str  # Subgraph to execute (e.g., "web_search")
+    action: str  # "use_tool" or "reason_only"
+    reasoning: str  # Reasoning from reflection_agent
 
-    citation_counter: int
-    cited_documents: List[Document]
-    citation_map: List[Dict[str, Any]]
+    # ===== Accumulated Research =====
+    accumulated_knowledge: str  # Compressed knowledge from all iterations
+    learnings: List[str]  # SIMPLIFIED: Human-readable log of learnings
 
-    used_rag_ids: List[str]
-    used_web_urls: List[str]
+    # ===== Citation Management =====
+    citation_counter: int  # Next citation number to use
+    cited_documents: List[Document]  # All documents cited so far
+    citation_map: List[Dict[str, Any]]  # Map of citation index -> metadata
 
-    rag_available: bool
-    web_available: bool
+    # ===== Deduplication Tracking =====
+    used_rag_ids: List[str]  # RAG document IDs already used
+    used_web_urls: List[str]  # Web URLs already fetched
 
-    _temp_documents: List[Document]
-    _should_continue: bool
-    _evaluation_result: Dict[str, Any]
+    # ===== Response Mode =====
+    response_mode: str  # ResponseMode enum value
+
+    # ===== Flags for Path Tracking =====
+    has_tool_results: bool  # Track if we've executed ANY tools (not just reasoning)
+
+    # ===== Internal Control (private, prefixed with _) =====
+    _temp_documents: List[Document]  # Temporary docs from current iteration
+    _sql_result: str  # Temporary SQL result from current iteration
+    _is_sql_iteration: bool  # Flag to indicate SQL iteration
+    _should_continue: bool  # Should continue iterating?
+    _missing_aspects: str  # What's missing (from evaluation)
 
 
 class SqlState(TypedDict):
     """State for SQL query operations"""
 
-    contextualized_query: str
+    conversation: List[BaseMessage]
 
     is_relevant: Optional[bool]
     irrelevance_reason: Optional[str]
@@ -161,3 +176,4 @@ class NormalGraphState(TypedDict):
     direction: str
     cited_documents: List[Document]
     response_mode: ResponseMode
+    accumulated_context: str

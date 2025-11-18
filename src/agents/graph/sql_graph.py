@@ -7,7 +7,12 @@ from __future__ import annotations
 import json
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    get_buffer_string,
+)
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 import pandas as pd
@@ -72,11 +77,12 @@ class SqlGraph(GraphAgentBase[SqlState]):
         schema_info = await self.sql_database.get_table_info()
         available_tables = ", ".join(self.sql_database.get_usable_table_names())
 
+        conversation_text = get_buffer_string(state["conversation"])
         user_prompt = HumanMessage(
             content=PromptTemplates.RELEVANCE_VALIDATION_HUMAN_PROMPT.format(
-                user_query=state["contextualized_query"],
                 available_tables=available_tables,
                 database_schema=schema_info,
+                conversation_text=conversation_text,
             )
         )
 
@@ -166,10 +172,11 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         schema_info = await self.sql_database.get_table_info()
 
+        conversation_text = get_buffer_string(state["conversation"])
         user_prompt = HumanMessage(
             content=PromptTemplates.SQL_ANALYSIS_HUMAN_PROMPT.format(
-                user_query=state["contextualized_query"],
                 database_schema=schema_info,
+                conversation_text=conversation_text,
             )
         )
 
@@ -238,9 +245,10 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         schema_info = await self.sql_database.get_table_info()
 
+        conversation_text = get_buffer_string(state["conversation"])
         user_prompt = HumanMessage(
             content=PromptTemplates.SQL_GENERATION_HUMAN_PROMPT.format(
-                user_query=state["contextualized_query"],
+                conversation_text=conversation_text,
                 database_schema=schema_info,
                 query_plan=json.dumps(query_plan, indent=2),
             )
@@ -536,9 +544,10 @@ class SqlGraph(GraphAgentBase[SqlState]):
             return {"chart_spec": None}
 
         logger.debug(f"[generate_chart] Prepared data summary for LLM: {data_summary}")
+        conversation_text = get_buffer_string(state["conversation"])
         user_prompt = HumanMessage(
             content=PromptTemplates.CHART_GENERATION_HUMAN_PROMPT.format(
-                user_query=state["contextualized_query"],
+                conversation_text=conversation_text,
                 chart_type=state.get("analysis", {}).get("chart_type", "auto"),
                 data_summary=json.dumps(data_summary, indent=2, default=str),
             )

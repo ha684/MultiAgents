@@ -6,7 +6,7 @@ Linear flow: Generate Direction → Execute Subgraph → Synthesize Response
 
 from typing import Any, Dict
 
-from langgraph.graph import END, StateGraph
+from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.basic import response_agent
@@ -56,7 +56,6 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
         Similar to ChatGPT's progressive thinking.
         """
         conversation = state.get("conversation", [])
-        state["conversation"] = conversation
         try:
             resp = await reflection_agent.ainvoke(state=state)
             direction = resp.get("query", conversation[-1].content)
@@ -83,9 +82,11 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
     async def execute_subgraph_node(self, state: NormalGraphState) -> Dict[str, Any]:
         """Execute selected subgraph and return documents."""
         subgraph_name = state.get("selected_subgraph")
-
         if state.get("action") == "reason_only":
-            return {}
+            return {
+                "accumulated_context": state.get("reasoning", ""),
+                "response_mode": ResponseMode.REASONING_ONLY,
+            }
 
         if not subgraph_name:
             logger.error("[NormalGraph] No subgraph selected")
@@ -127,8 +128,13 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
             cited_documents = truncate_docs_by_tokens(
                 cited_documents, max_tokens=8192, tokenizer=self.tokenizer
             )
-
-            return {"cited_documents": cited_documents}
+            return {
+                "cited_documents": cited_documents,
+                "accumulated_context": main_context,
+                "response_mode": ResponseMode.SQL_RESPONSE
+                if state.get("selected_subgraph") == "sql_query"
+                else ResponseMode.STANDARD,
+            }
 
         except Exception as e:
             logger.error(f"[NormalGraph] Error executing {subgraph_name}: {e}")
@@ -136,28 +142,13 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
 
     async def synthesize_response_node(self, state: NormalGraphState) -> Dict[str, Any]:
         """Synthesize final response using response_agent."""
-        execution_error = state.get("execution_error")
-        if execution_error:
-            response_mode = ResponseMode.NO_VIABLE_OPTION
-        elif state.get("selected_subgraph") == "sql_query":
-            response_mode = ResponseMode.SQL_RESPONSE
-        else:
-            response_mode = ResponseMode.STANDARD
-        state["response_mode"] = response_mode
         response = await response_agent.ainvoke(state)
-
-        response_metadata = state.get("response_metadata", {})
-        response_metadata.update(
-            {
-                "mode": "normal",
-                "subgraph": state.get("selected_subgraph"),
-                "response_mode": response_mode,
-            }
-        )
+        resp_metadata = response.response_metadata
+        resp_metadata.update(state.get("response_metadata", {}))
 
         return {
             "final_answer": response.content,
-            "response_metadata": response_metadata,
+            "response_metadata": resp_metadata,
         }
 
     def _build_graph(self) -> CompiledStateGraph:
@@ -171,6 +162,6 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
         workflow.set_entry_point("generate_direction")
         workflow.add_edge("generate_direction", "execute_subgraph")
         workflow.add_edge("execute_subgraph", "synthesize_response")
-        workflow.add_edge("synthesize_response", END)
+        workflow.set_finish_point("synthesize_response")
 
         return workflow.compile(name=self.graph_name)

@@ -115,6 +115,83 @@ HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research as
 Remember: You're having a contextual conversation, but every factual claim must come from the documents with proper citations in the user's language.
 """
 
+REASONING_ONLY_PROMPT_TEMPLATE = """You are a knowledgeable AI assistant. The system has analyzed the user's query and determined it can be answered directly using reasoning, without needing to search external documents.
+
+<core_principles>
+
+1. **Language matching**:
+   - ALWAYS respond in the SAME language as the user's query
+   - Maintain consistent language throughout your entire response
+
+2. **Conversation awareness**:
+   - The query has been contextualized with the full conversation history
+   - Understand references like "it", "that", "they", "the previous point"
+   - Treat follow-up questions as part of an ongoing discussion
+
+3. **Direct reasoning**:
+   - Provide clear, accurate answers based on your knowledge and reasoning
+   - Explain your thinking process when helpful
+   - Be confident but acknowledge uncertainty when appropriate
+   - NO citations needed - this is direct knowledge-based response
+
+4. **Clear structure**:
+   - Use markdown formatting for readability (## headers, lists, **bold**)
+   - Break complex information into sections when helpful
+   - Use bullet points (*) or numbered lists for clarity
+   - Highlight key points with **bold**
+
+</core_principles>
+
+<response_guidelines>
+
+**For factual questions:**
+- Provide thorough, well-reasoned answers
+- Structure complex answers with headers and lists
+- Explain reasoning when it adds value
+
+**For follow-up questions:**
+- Use conversation history to understand context
+- Maintain language consistency with the user
+- Build on previous discussion naturally
+
+**For greetings or casual queries:**
+- Respond naturally and conversationally
+- Match the user's tone and formality level
+
+**For complex reasoning:**
+- Break down your thinking step-by-step
+- Use examples or analogies when helpful
+- Acknowledge limitations or assumptions
+
+</response_guidelines>
+
+<special_cases>
+
+**Uncertain information:**
+- "I'm not completely certain about [aspect], but based on general principles..."
+- "This is a complex topic with multiple perspectives..."
+
+**When more context needed:**
+- Politely ask for clarification
+- "Could you provide more details about [specific aspect]?"
+
+**Conversational tone:**
+- Be natural and helpful
+- Avoid being overly formal unless the query demands it
+
+</special_cases>
+
+<critical_reminders>
+- ALWAYS match the user's language (Vietnamese/English/etc.)
+- Be conversational and helpful - this is not a document-based response
+- Provide value through clear reasoning and explanation
+- When uncertain, acknowledge it rather than guessing
+- Use conversation context to understand intent
+</critical_reminders>
+
+Remember: You're having a natural conversation, using your knowledge and reasoning to help the user. No citations needed.
+"""
+
 NO_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a helpful research assistant. The user has asked a question, but no relevant documents were found in the knowledge base.
 
 <core_task>
@@ -184,64 +261,6 @@ Respond appropriately when no documents are available, while being honest and he
 
 Remember: Honesty and language matching are your top priorities. It's better to admit you don't have the information than to make something up, and you must always respond in the same language the user used.
 """
-
-ERROR_MODE_PROMPT = """You are a helpful assistant dealing with a technical issue that prevented retrieving information.
-
-<situation>
-Route attempted: {route}
-Error encountered: {error_message}
-Previous attempts: {execution_history}
-</situation>
-
-<task>
-Inform the user that you encountered an issue while trying to retrieve information, and offer next steps.
-</task>
-
-<guidelines>
-1. **Language matching**: ALWAYS respond in the SAME language as the user's query
-2. **Be honest but not technical**: Explain the issue in simple terms without overwhelming technical details
-3. **Stay helpful**: Suggest alternatives or ask if they'd like you to try a different approach
-4. **No excessive apologies**: One brief acknowledgment is enough, then focus on solutions
-5. **Maintain confidence**: Show that you're actively working to help them
-</guidelines>
-
-<response_structure>
-1. Brief acknowledgment of the issue (1 sentence)
-2. Simple explanation if helpful (optional, 1 sentence)
-3. Offer alternative approach or ask for clarification (1-2 sentences)
-</response_structure>
-
-Remember: Be solution-oriented, not problem-focused. Match the user's language.
-"""
-
-NO_VIABLE_OPTION_PROMPT = """You are a helpful assistant that has exhausted available retrieval options.
-
-<situation>
-Multiple retrieval attempts have been made without finding relevant information.
-Execution history: {execution_history}
-</situation>
-
-<task>
-Honestly inform the user that you've tried multiple approaches to find information but couldn't locate relevant documents. Offer to help in alternative ways.
-</task>
-
-<guidelines>
-1. **Language matching**: ALWAYS respond in the SAME language as the user's query
-2. **Be transparent**: Clearly state that multiple attempts were made
-3. **Stay constructive**: Offer alternatives (reformulate question, provide general knowledge, ask for more context)
-4. **Show effort**: Briefly mention you tried different approaches
-5. **Keep positive tone**: Frame as "let's find another way" not "I failed"
-</guidelines>
-
-<response_structure>
-1. Acknowledge multiple attempts made (1 sentence)
-2. Clearly state no relevant documents were found (1 sentence)
-3. Offer 2-3 alternative ways to help (2-3 sentences)
-</response_structure>
-
-Remember: Show you've made genuine effort, stay helpful, and match the user's language.
-"""
-
 
 ADVANCE_MODE_PROMPT = PromptTemplates.FINAL_SYNTHESIZER_PROMPT
 
@@ -489,58 +508,22 @@ class ResponseAgent(BaseAgent):
         super().__init__(provider)
         logger.info("Response Agent initialized successfully.")
 
-    def _format_execution_history(self, execution_history: List[Dict]) -> str:
-        """Format execution history for prompts."""
-        if not execution_history:
-            return "No previous attempts"
-
-        formatted = []
-        for i, attempt in enumerate(execution_history, 1):
-            formatted.append(
-                f"Attempt {i}: {attempt['subgraph']} - {attempt.get('error', 'No result')}"
-            )
-        return "\n".join(formatted)
-
     def _prepare_messages_by_mode(
         self,
         mode: str,
-        contexts: List[Document],
         history: List[BaseMessage],
-        accumulated_knowledge: str = "",
-        execution_history: List[Dict] = None,
-        error_message: str = None,
-        pending_route: str = None,
+        accumulated_context: str = "",
     ) -> List[BaseMessage]:
         """Prepare messages based on response mode."""
-        current_query = history[-1].content
-        execution_history = execution_history or []
 
-        if mode == ResponseMode.ERROR:
-            system_prompt = ERROR_MODE_PROMPT.format(
-                route=execution_history[-1]["subgraph"]
-                if execution_history
-                else "unknown",
-                error_message=error_message or "Unknown error",
-                execution_history=self._format_execution_history(execution_history),
-            )
-            system_message = SystemMessage(content=system_prompt)
-            return [system_message] + history
-
-        elif mode == ResponseMode.NO_VIABLE_OPTION:
-            system_prompt = NO_VIABLE_OPTION_PROMPT.format(
-                execution_history=self._format_execution_history(execution_history)
-            )
-            system_message = SystemMessage(content=system_prompt)
-            return [system_message] + history
-
-        elif mode == ResponseMode.ADVANCE:
+        if mode == ResponseMode.ADVANCE:
             system_prompt = SystemMessage(
                 content="You are a research synthesis expert tasked with creating a comprehensive, well-structured response based on accumulated research findings."
             )
             user_prompt = HumanMessage(
                 content=PromptTemplates.FINAL_SYNTHESIZER_PROMPT.format(
                     user_query=history[-1].content,
-                    accumulated_knowledge=accumulated_knowledge,
+                    accumulated_context=accumulated_context,
                 )
             )
             messages = [system_prompt] + history[-1:] + [user_prompt]
@@ -549,8 +532,8 @@ class ResponseAgent(BaseAgent):
         elif mode == ResponseMode.SQL_RESPONSE:
             system_message = SystemMessage(content=SQL_RESPONSE_MODE_PROMPT)
             sql_context = (
-                accumulated_knowledge
-                if accumulated_knowledge
+                accumulated_context
+                if accumulated_context
                 else "No SQL execution results available."
             )
 
@@ -559,7 +542,7 @@ class ResponseAgent(BaseAgent):
                     {sql_context}
                     </sql_execution_results>
 
-                    User's question: {current_query}
+                    User's question: {history[-1].content}
 
                     Please analyze the SQL execution results above and provide a clear, helpful answer to the user's question.
                 """
@@ -567,15 +550,29 @@ class ResponseAgent(BaseAgent):
 
             return [system_message] + history[:-1] + [user_prompt]
 
+        elif mode == ResponseMode.REASONING_ONLY:
+            system_message = SystemMessage(content=REASONING_ONLY_PROMPT_TEMPLATE)
+
+            user_prompt = HumanMessage(
+                content=f"""<reasoning_analysis>
+{accumulated_context}
+</reasoning_analysis>
+
+User's question: {history[-1].content}
+
+Based on the reasoning analysis above and your knowledge, please provide a helpful answer to the user's question.
+"""
+            )
+
+            return [system_message] + history[:-1] + [user_prompt]
+
         else:  # ResponseMode.STANDARD
-            if contexts:
-                formatted_context = format_context_for_response(contexts)
-                print(formatted_context)
+            if accumulated_context:
                 system_message = SystemMessage(
                     content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
                 )
                 new_query = HumanMessage(
-                    content=f"CONTEXT: {formatted_context}\n---\n Answer this query using the provided context, cite correctly: {current_query}"
+                    content=f"CONTEXT: {accumulated_context}\n---\n Answer this query using the provided context, cite correctly: {history[-1].content}"
                 )
                 return [system_message] + history[:-1] + [new_query]
             else:
@@ -583,28 +580,16 @@ class ResponseAgent(BaseAgent):
                     content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE
                 )
                 new_query = HumanMessage(
-                    content=f"User query: {current_query}\n\nRemember this is the case that no document found."
+                    content=f"User query: {history[-1].content}\n\nRemember this is the case that no document found."
                 )
                 return [system_message] + history[:-1] + [new_query]
 
     async def ainvoke(self, state: Dict) -> AIMessage:
         """Generates response based on mode and context."""
-        mode = state.get("response_mode", ResponseMode.STANDARD)
-        contexts = state.get("cited_documents", [])
-        history = state["conversation"]
-        accumulated_knowledge = state.get("accumulated_context", "")
-        execution_history = state.get("execution_history", [])
-        error_message = state.get("subgraph_error", "")
-        pending_route = state.get("pending_route", None)
-
         messages = self._prepare_messages_by_mode(
-            mode=mode,
-            contexts=contexts,
-            history=history,
-            accumulated_knowledge=accumulated_knowledge,
-            execution_history=execution_history,
-            error_message=error_message,
-            pending_route=pending_route,
+            mode=state.get("response_mode", ResponseMode.STANDARD),
+            history=state["conversation"],
+            accumulated_context=state.get("accumulated_context", ""),
         )
         response = await self.simple_llm_call(messages)
         return response

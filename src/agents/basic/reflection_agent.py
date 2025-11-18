@@ -32,6 +32,7 @@ class ReflectionAgent(BaseAgent):
         )
 
         conversation_text = get_buffer_string(state["conversation"])
+
         prompt_input = PromptTemplates.REFLECTION_HUMAN_PROMPT.format(
             conversation_text=conversation_text,
             learnings="\n".join(f"- {learning}" for learning in learnings[-3:])

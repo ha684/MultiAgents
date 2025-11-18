@@ -67,12 +67,10 @@ class SubgraphExecutor(Protocol):
 class ResponseMode(str, Enum):
     """Modes for response_agent to handle different scenarios"""
 
-    ADVANCE = "advance"
     STANDARD = "standard"
-    INTERFACE = "interface"
-    NO_VIABLE_OPTION = "no_viable_option"
-    ERROR = "error"
+    ADVANCE = "advance"
     SQL_RESPONSE = "sql_response"
+    REASONING_ONLY = "reasoning_only"
 
 
 @dataclass

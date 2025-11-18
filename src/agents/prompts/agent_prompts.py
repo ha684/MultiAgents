@@ -847,32 +847,11 @@ class PromptTemplates:
         """)
 
     SQL_GENERATION_HUMAN_PROMPT = textwrap.dedent("""\
-        <user_query>
-        {user_query}
-        </user_query>
+        Database schema: {database_schema}
+        Conversation history: {conversation_text}
+        Query plan: {query_plan}
 
-        <database_schema>
-        {database_schema}
-        </database_schema>
-
-        <query_plan>
-        {query_plan}
-        </query_plan>
-
-        <instructions>
         Based on the query plan and database schema above, generate executable SQL SELECT queries that will answer the user's question.
-
-        Requirements:
-        1. Use the 'think' tool to plan your SQL generation
-        2. Follow the query plan's structure and purposes
-        3. Generate ONLY SELECT statements
-        4. Ensure queries use actual tables and columns from the schema
-        5. Add appropriate filters, joins, and aggregations
-        6. Include LIMIT clauses for safety (typically 100-1000 rows)
-        7. Format queries for readability
-
-        Provide your final answer as a JSON object following the required schema.
-        </instructions>
         """)
 
     SQL_VALIDATION_PROMPT = textwrap.dedent("""\
@@ -1204,7 +1183,7 @@ class PromptTemplates:
         """)
 
     FINAL_SYNTHESIZER_PROMPT = textwrap.dedent("""\
-        Your task is to synthesize the accumulated knowledge into a comprehensive response that directly addresses the user's query.
+        Your task is to synthesize the accumulated context into a comprehensive response that directly addresses the user's query.
 
         PART 1: LANGUAGE DETECTION
 
@@ -1222,7 +1201,7 @@ class PromptTemplates:
         3. **Multiple sources**: Use comma-separated numbers [1,5,7]
         4. **Position**: After the claim, before punctuation when possible
         5. **Preservation**: Do NOT modify or skip any citation numbers
-        6. **No invention**: Do NOT add citations that don't exist in accumulated knowledge
+        6. **No invention**: Do NOT add citations that don't exist in accumulated context
 
         PART 3: RESPONSE STYLE & PRESENTATION
 
@@ -1274,7 +1253,7 @@ class PromptTemplates:
         PART 5: EVIDENCE GROUNDING
 
         STRICT BOUNDARIES:
-        - Base your response ONLY on information in accumulated knowledge
+        - Base your response ONLY on information in accumulated context
         - Every factual claim must have a citation
         - If information is missing, state it clearly
         - Never invent, assume, or extrapolate beyond the evidence
@@ -1315,14 +1294,14 @@ class PromptTemplates:
         - [ ] Every factual claim has citation
         - [ ] Natural, direct response (no "Introduction/Body/Conclusion" announcements)
         - [ ] Proper markdown formatting throughout
-        - [ ] Only information from accumulated knowledge
+        - [ ] Only information from accumulated context
         - [ ] Gaps in knowledge explicitly stated
         - [ ] Comprehensive and clear explanation
         
-        Context: {accumulated_knowledge}
+        Context: {accumulated_context}
         User Query: {user_query}
         
-        Now synthesize the accumulated knowledge into a well-formatted markdown response that naturally and completely answers the user's query.
+        Now synthesize the accumulated context into a well-formatted markdown response that naturally and completely answers the user's query.
     """)
 
     SQL_ANALYSIS_SYSTEM_PROMPT = textwrap.dedent("""\
@@ -1551,22 +1530,13 @@ class PromptTemplates:
         """)
 
     SQL_ANALYSIS_HUMAN_PROMPT = textwrap.dedent("""\
-        <user_query>
-        {user_query}
-        </user_query>
+        Database schema: {database_schema}
+        Conversation history: {conversation_text}
 
-        <database_schema>
-        {database_schema}
-        </database_schema>
-
-        <instructions>
-        Analyze the user query and database schema above. Determine:
+        Analyze the conversation history and database schema above. Determine:
         1. What data is needed to answer the question
         2. Whether visualization would be helpful
-        3. The optimal query strategy
-
-        Use the 'think' tool to reason through your analysis, then provide your final answer as a JSON object following the required schema.
-        </instructions>
+        3. The optimal query strategy and chart type
         """)
 
     CHART_GENERATION_SYSTEM_PROMPT = textwrap.dedent("""\
@@ -2037,33 +2007,11 @@ class PromptTemplates:
         """)
 
     CHART_GENERATION_HUMAN_PROMPT = textwrap.dedent("""\
-        <user_query>
-        {user_query}
-        </user_query>
+        Conversation history: {conversation_text}
+        Suggested chart type: {chart_type}
+        Query results summary: {data_summary}
 
-        <suggested_chart_type>
-        {chart_type}
-        </suggested_chart_type>
-
-        <query_results_summary>
-        {data_summary}
-        </query_results_summary>
-
-        <instructions>
         Generate a Vega-Lite chart specification that visualizes the query results to answer the user's question.
-
-        Requirements:
-        1. Use the 'think' tool to plan your visualization
-        2. Create a complete, valid Vega-Lite v5 specification
-        3. Embed the actual data in the spec (data.values)
-        4. Choose appropriate mark type and encodings
-        5. Include interactive tooltips
-        6. Format axes and labels for readability
-        7. Consider the suggested chart type but override if data characteristics suggest otherwise
-        8. Limit data to first 100-500 rows if result set is large
-
-        Provide your final answer as a JSON object following the required schema.
-        </instructions>
         """)
 
     RELEVANCE_VALIDATION_SYSTEM_PROMPT = textwrap.dedent("""\
@@ -2217,23 +2165,9 @@ class PromptTemplates:
         """)
 
     RELEVANCE_VALIDATION_HUMAN_PROMPT = textwrap.dedent("""\
-        <user_query>
-        {user_query}
-        </user_query>
-
-        <available_tables>
-        {available_tables}
-        </available_tables>
-
-        <database_schema>
-        {database_schema}
-        </database_schema>
-
-        <instructions>
-        Determine if the user's query can be answered using the available database tables and schema.
-        
-        Use the 'think' tool to reason through your decision, then provide your final answer as a JSON object following the required schema.
-        </instructions>
+        Available tables: {available_tables}
+        Database schema: {database_schema}
+        Conversation history : {conversation_text}
         """)
 
     ORCHESTRATOR_REFLECTION_PROMPT = textwrap.dedent("""\
