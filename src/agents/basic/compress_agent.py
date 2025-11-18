@@ -7,6 +7,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from src.agents.basic.base import BaseAgent
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
+from src.utils import format_context_for_response
 
 COMPRESS_PROMPT_TEMPLATE = textwrap.dedent("""\
 You are an information extraction specialist. Extract and summarize key facts from documents that relate to the query.
@@ -14,10 +15,13 @@ You are an information extraction specialist. Extract and summarize key facts fr
 **Your task:** Present ONLY the information found in the documents, organized clearly with citations.
 
 **Citation format:**
-- Each document has: [CITATION: source_name N]
-- Cite using: ([source_name][N]) after each fact
-- Example: "Revenue was $50M ([annual_report][5])"
-- Multiple sources: "Revenue increased ([Q1_report][1])([financial_summary][3])"
+- Each document has: [CITATION: N] and a Source URL
+- Extract a SHORT identifier from the source (domain name, key slug, or doc ID)
+- Cite using: ([identifier][N]) after each fact
+- Example: "Revenue was $50M ([globenewswire][5])"
+- Example: "Market grows ([annual-report-2024][1])"
+- Multiple sources: "Revenue increased ([source1][1])([source2][3])"
+- Keep identifiers SHORT (1-3 words, lowercase, hyphens for spaces)
 
 **How to extract information:**
 1. Read the query and identify what information is being requested
@@ -25,7 +29,7 @@ You are an information extraction specialist. Extract and summarize key facts fr
 3. Include specific details: numbers, dates, names, technical terms
 4. Group related facts under descriptive headers
 5. Use bullet points for each distinct fact
-6. Cite every fact immediately after the statement using ([source_name][N])
+6. Cite every fact immediately after the statement using ([identifier][N])
 
 **CRITICAL RULES - YOU MUST FOLLOW THESE:**
 - Present ONLY facts that exist in the documents
@@ -41,7 +45,7 @@ You are an information extraction specialist. Extract and summarize key facts fr
 **Your output should contain:**
 - Only factual statements found in the documents
 - Clear topic headers (when helpful)
-- Bullet points with citations in format ([source_name][N])
+- Bullet points with citations in format ([identifier][N])
 - No commentary about missing information
 
 **Example of what NOT to do:**
@@ -49,8 +53,9 @@ You are an information extraction specialist. Extract and summarize key facts fr
  "While the documents do not explicitly cover X, they do mention Y ([report][3])"
 
 **Example of what TO do:**
- "AI adoption in mining will reach 60% by 2025 ([industry_report][1])"
- "Market growth projected at 39.2% CAGR ([market_analysis][2])"
+ "AI adoption in mining will reach 60% by 2025 ([mckinsey][1])"
+ "Market growth projected at 39.2% CAGR ([reuters][2])"
+ "Revenue increased 15% year-over-year ([q4-earnings][3])"
 """)
 
 
@@ -61,19 +66,6 @@ class CompressAgent(BaseAgent):
     def __init__(self):
         super().__init__()
         logger.info("Compress Agent initialized successfully.")
-
-    def _format_context_for_response(self, documents: List[Document]) -> str:
-        """Formats documents for the response prompt."""
-        xml_output = "<documents>\n"
-        for i, doc in enumerate(documents):
-            content = doc.page_content
-            xml_output += f'<document index="{i + 1}">\n'
-            xml_output += "<document_content>\n"
-            xml_output += f"{content}\n"
-            xml_output += "</document_content>\n"
-            xml_output += "</document>\n"
-        xml_output += "</documents>"
-        return xml_output
 
     async def ainvoke(self, query: str, reference: List[Document]) -> str:
         """
@@ -93,13 +85,11 @@ class CompressAgent(BaseAgent):
         fallback = "\n\n".join([doc.page_content for doc in reference])
 
         try:
-            formatted_docs = self._format_context_for_response(reference)
-
+            formatted_docs = format_context_for_response(reference)
             system_prompt = SystemMessage(content=COMPRESS_PROMPT_TEMPLATE)
             user_content = HumanMessage(
                 content=f"""
                 Context: \n{formatted_docs}\n\n User Query: {query}
-                Extract relevant facts from these documents. Only include information that is explicitly stated in the documents.
                 """
             )
             messages: List[BaseMessage] = [system_prompt, user_content]
