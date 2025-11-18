@@ -272,85 +272,83 @@ class PromptTemplates:
     """)
 
     VERIFICATION_PROMPT = textwrap.dedent("""\
-    You are a research verification agent. Decide if we have enough information to answer the user's question.
+        You are a research verification agent. Decide if we have enough information to answer the user's question.
 
-    **Philosophy: Balance usefulness and accuracy**
-    - Aim for helpful answers, not perfect completeness
-    - BUT don't compromise on core question requirements
-    - 70-80% coverage works for broad/exploratory questions
-    - Higher bar (90%+) for specific/factual questions
+        **Philosophy: Balance usefulness and accuracy**
+        - Aim for helpful answers, not perfect completeness
+        - BUT don't compromise on core question requirements
+        - 70-80% coverage works for broad/exploratory questions
+        - Higher bar (90%+) for specific/factual questions
 
-    **Your process:**
-    1. Use 'think' tool to analyze:
-    - What TYPE of question is this? (see below)
-    - What's the minimum we need to give a satisfactory answer?
-    - Do we have that minimum?
+        **Your process:**
+        1. Use 'think' tool to analyze:
+        - What TYPE of question is this? (see below)
+        - What's the minimum we need to give a satisfactory answer?
+        - Do we have that minimum?
 
-    2. Answer: **"Can we write an answer that satisfies the user's actual need?"**
+        2. Answer: **"Can we write an answer that satisfies the user's actual need?"**
 
-    **Question types and thresholds:**
+        **Question types and thresholds:**
 
-    **Type A - Specific factual queries (HIGH bar ~90%):**
-    - "What was the Q2 revenue?"
-    - "When did X happen?"
-    - "What is the exact price of Y?"
-    → Need precise data points. Missing = insufficient.
+        **Type A - Specific factual queries (HIGH bar ~90%):**
+        - "What was the Q2 revenue?"
+        - "When did X happen?"
+        - "What is the exact price of Y?"
+        → Need precise data points. Missing = insufficient.
 
-    **Type B - Analytical/Trend queries (MEDIUM-HIGH bar ~80%):**
-    - "How will X evolve over the next decade?"
-    - "What factors influence Y?"
-    - "Analyze the impact of Z"
-    → Need: key drivers/trends + some data/evidence. Can project from partial data if trends are clear.
+        **Type B - Analytical/Trend queries (MEDIUM-HIGH bar ~80%):**
+        - "How will X evolve over the next decade?"
+        - "What factors influence Y?"
+        - "Analyze the impact of Z"
+        → Need: key drivers/trends + some data/evidence. Can project from partial data if trends are clear.
 
-    **Type C - Exploratory/Broad queries (MEDIUM bar ~70%):**
-    - "What are best practices for X?"
-    - "Tell me about Y technology"
-    - "Compare X and Y approaches"
-    → Need: main points covered. Details can be partial.
+        **Type C - Exploratory/Broad queries (MEDIUM bar ~70%):**
+        - "What are best practices for X?"
+        - "Tell me about Y technology"
+        - "Compare X and Y approaches"
+        → Need: main points covered. Details can be partial.
 
-    **Decision criteria:**
+        **Decision criteria:**
 
-    **Say "is_sufficient: true" when:**
-    - TYPE A: Have the exact data/fact requested
-    - TYPE B: Have major factors/trends + reasonable supporting evidence (even if not decade-long projections)
-    - TYPE C: Have main concepts/points covered
+        **Say "is_sufficient: true" when:**
+        - TYPE A: Have the exact data/fact requested
+        - TYPE B: Have major factors/trends + reasonable supporting evidence (even if not decade-long projections)
+        - TYPE C: Have main concepts/points covered
 
-    **Say "is_sufficient: false" when:**
-    - TYPE A: Missing the specific data point
-    - TYPE B: Missing critical factors OR can't make reasonable projections from available data
-    - TYPE C: Too vague to address the main question
+        **Say "is_sufficient: false" when:**
+        - TYPE A: Missing the specific data point
+        - TYPE B: Missing critical factors OR can't make reasonable projections from available data
+        - TYPE C: Too vague to address the main question
 
-    **For your example query:**
-    "How will gold market evolve in SE Asia over next decade (nanotech, AI, geopolitics, environment)?"
-    → TYPE B (Analytical/Trend)
-    → Sufficient if: Have info on some key factors + industry direction + SE Asia relevance
-    → Insufficient if: No data on future trends OR no SE Asia context OR missing ALL requested factors
+        **For your example query:**
+        "How will gold market evolve in SE Asia over next decade (nanotech, AI, geopolitics, environment)?"
+        → TYPE B (Analytical/Trend)
+        → Sufficient if: Have info on some key factors + industry direction + SE Asia relevance
+        → Insufficient if: No data on future trends OR no SE Asia context OR missing ALL requested factors
 
-    **For "missing_aspects":**
-    - If sufficient but with known gaps, briefly note them anyway (helps improve future searches)
-    - If insufficient, clearly state what's critically missing
-    - Be specific: "Decade-long projections and geopolitical analysis" not "more data"
+        **For "missing_aspects":**
+        - If sufficient but with known gaps, briefly note them anyway (helps improve future searches)
+        - If insufficient, clearly state what's critically missing
+        - Be specific: "Decade-long projections and geopolitical analysis" not "more data"
 
-    **Output format:**
-    ```json
-    {
-        "is_sufficient": <boolean>,
-        "missing_aspects": <string>
-    }
-    ```
+        **Output format:**
+        ```json
+        {
+            "is_sufficient": <boolean>,
+            "missing_aspects": <string>
+        }
+        ```
 
-    **Key principle:**
-    - For analytical questions: Can we make a **reasonable, evidence-based** answer?
-    - If we have industry direction + key factors + regional context → YES, sufficient
-    - If we're forced to pure speculation with no evidence → NO, insufficient
-    """)
+        **Key principle:**
+        - For analytical questions: Can we make a **reasonable, evidence-based** answer?
+        - If we have industry direction + key factors + regional context → YES, sufficient
+        - If we're forced to pure speculation with no evidence → NO, insufficient
+        """)
 
     VERIFICATION_HUMAN_PROMPT = textwrap.dedent("""\
-        <accumulated_knowledge>
-        {accumulated_knowledge}
-        </accumulated_knowledge>
-        
-        Original Query: {original_query}
+        Context: {accumulated_context}
+        ---
+        Conversation history: {conversation_text}
         """)
 
     REFLECTION_PROMPT = textwrap.dedent("""\
@@ -396,6 +394,10 @@ class PromptTemplates:
         - Can we reason with what we have?
         - If need tool: which one and why?
         - Are we repeating previous attempts?
+        You MUST follow this sequence:
+        1. First, call the 'think' tool to analyze (this will be your first response)
+        2. After thinking, you will be prompted again to provide the JSON decision
+        DO NOT try to output JSON and use tools in the same response.
         </thinking_process>
 
         <tool_usage>
@@ -433,71 +435,58 @@ class PromptTemplates:
 
         Example 1: Need data
         Think: "No information about cloud platforms yet. Need foundational data."
-        ```json
+        
+        Output:
         {
             "action": "use_tool",
             "subgraph": "web_search",
             "query": "AWS vs Azure vs GCP serverless pricing and features comparison 2025",
             "reasoning": null
         }
-        ```
 
         Example 2: Have data, time to think
         Think: "Have pricing for all 3 platforms. Can analyze tradeoffs now."
-        ```json
+        
+        Output:
         {
             "action": "reason_only",
             "subgraph": null,
             "query": null,
             "reasoning": "With pricing data collected, I can now analyze. AWS Lambda costs $0.20 per 1M requests vs GCP $0.16. However, AWS has 250ms cold starts vs GCP 400ms. For user-facing APIs, the better cold start justifies the 25% cost premium. The startup prioritizes UX over minimum cost, so AWS is optimal here despite higher price..."
         }
-        ```
 
         Example 3: Tool failed, adapt
         Think: "Search failed twice. Have some data from earlier. Use what we have."
-        ```json
+        
+        Output:
         {
             "action": "reason_only",
             "subgraph": null,
             "query": null,
             "reasoning": "Search tool failing, but earlier iterations captured key trends: 15% YoY growth in renewables, solar at 40% of new installs. Can't get latest stats but can analyze established patterns. Solar LCOE now below fossil fuels creates self-reinforcing cycle. Will note data limitations but provide valid analysis..."
         }
-        ```
 
         Example 4: Query failed, simplify
         Think: "Complex database query timed out. Try simpler version."
-        ```json
+        
+        Output:
         {
             "action": "use_tool",
             "subgraph": "sql_query",
             "query": "SELECT month, SUM(revenue) FROM sales WHERE year = 2025 GROUP BY month",
             "reasoning": null
         }
-        ```
-
         </examples>
-
-        Remember: Think first (use think tool), reasoning, use tools when necessary.
-    """)
+        """)
 
     REFLECTION_HUMAN_PROMPT = textwrap.dedent("""\
+        Learnings: {learnings}
+        Knowledge: {knowledge}
+        Execution history: {execution_history_section}
+        Available Tools: {subgraph_definitions}
+        Missing aspects: {missing_aspects_section}
         Conversation history: {conversation_text}
-        
-        Learnings:
-        {learnings}
-
-        Knowledge:
-        {knowledge}
-        
-        {execution_history_section}
-        
-        Available Tools:
-        {subgraph_definitions}
-        
-        {missing_aspects_section}
-
-        Think through what to do next, then decide your action.
-    """)
+        """)
 
     SQL_GENERATION_SYSTEM_PROMPT = textwrap.dedent("""\
         <role>

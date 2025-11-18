@@ -374,7 +374,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
     async def evaluate_sufficiency_node(self, state: ThinkingState) -> Dict[str, Any]:
         """Evaluate if research is sufficient with failure detection."""
-        knowledge = state.get("accumulated_knowledge", "")
+        context = state.get("accumulated_context", "")
         iteration = state.get("iteration_count", 0)
         consecutive_failures = state.get("consecutive_failures", 0)
         execution_failed = state.get("_execution_failed", False)
@@ -426,9 +426,9 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
                 "_missing_aspects": f"Previous tool execution failed: {state.get('_failure_reason', 'Unknown error')}. Try different approach.",
             }
 
-        if not knowledge or len(knowledge) < self.min_knowledge_threshold:
+        if not context or len(context) < self.min_knowledge_threshold:
             logger.info(
-                f"[Evaluate] Knowledge too short ({len(knowledge)} chars). CONTINUE."
+                f"[Evaluate] Context too short ({len(context)} chars). CONTINUE."
             )
             return {
                 "_should_continue": True,

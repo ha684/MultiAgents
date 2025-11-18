@@ -1,16 +1,21 @@
 # src/agents/basic/verification_agent.py
 from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    get_buffer_string,
+)
 
 from src.agents.basic.base import BaseAgent
+from src.agents.prompts.agent_prompts import PromptTemplates
+from src.agents.tools.server.mcp_retrieve_tools import think
+from src.core.config.llm_config import SupportedLLMProviders
 from src.domain.entities.state import ThinkingState
 from src.domain.schemas.graph import VerificationSchema
-from src.agents.tools.server.mcp_retrieve_tools import think
-from src.agents.prompts.agent_prompts import PromptTemplates
-from src.core.config.llm_config import SupportedLLMProviders
-from src.utils.decorators import singleton
 from src.utils import parse_response
+from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
 
@@ -27,10 +32,10 @@ class VerificationAgent(BaseAgent):
         Verifies information from relevant documents.
         """
         max_iterations = 3
-
+        conversation_text = get_buffer_string(state["conversation"])
         prompt_input = PromptTemplates.VERIFICATION_HUMAN_PROMPT.format(
-            original_query=state["contextualized_query"],
-            accumulated_knowledge=state["accumulated_knowledge"],
+            conversation_text=conversation_text,
+            accumulated_context=state["accumulated_context"],
         )
 
         messages: List[BaseMessage] = [

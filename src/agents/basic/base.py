@@ -120,7 +120,10 @@ class BaseAgent(ABC):
                 if tool:
                     tool_result = await tool.ainvoke(tc["args"])
                     tool_outputs.append(
-                        ToolMessage(content=str(tool_result), tool_call_id=tc["id"])
+                        ToolMessage(
+                            content=f"{tool_result}\n\nNow provide your decision in JSON format as specified.",
+                            tool_call_id=tc["id"],
+                        )
                     )
                 else:
                     logger.warning(f"{error_context}: Unknown tool: {tc['name']}")
