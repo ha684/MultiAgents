@@ -262,6 +262,19 @@ wheels = [
 ]
 
 [[package]]
+name = "arrow"
+version = "1.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "python-dateutil" },
+    { name = "tzdata" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b9/33/032cdc44182491aa708d06a68b62434140d8c50820a087fac7af37703357/arrow-1.4.0.tar.gz", hash = "sha256:ed0cc050e98001b8779e84d461b0098c4ac597e88704a655582b21d116e526d7", size = 152931, upload-time = "2025-10-18T17:46:46.761Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ed/c9/d7977eaacb9df673210491da99e6a247e93df98c715fc43fd136ce1d3d33/arrow-1.4.0-py3-none-any.whl", hash = "sha256:749f0769958ebdc79c173ff0b0670d59051a535fa26e8eba02953dc19eb43205", size = 68797, upload-time = "2025-10-18T17:46:45.663Z" },
+]
+
+[[package]]
 name = "asgiref"
 version = "3.9.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2058,6 +2071,19 @@ wheels = [
 ]
 
 [[package]]
+name = "jinja2-time"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "arrow" },
+    { name = "jinja2" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/de/7c/ee2f2014a2a0616ad3328e58e7dac879251babdb4cb796d770b5d32c469f/jinja2-time-0.2.0.tar.gz", hash = "sha256:d14eaa4d315e7688daa4969f616f226614350c48730bfa1692d2caebd8c90d40", size = 5701, upload-time = "2016-06-08T23:36:52.454Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6a/a1/d44fa38306ffa34a7e1af09632b158e13ec89670ce491f8a15af3ebcb4e4/jinja2_time-0.2.0-py2.py3-none-any.whl", hash = "sha256:d3eab6605e3ec8b7a0863df09cc1d23714908fa61aa6986a845c20ba488b4efa", size = 6360, upload-time = "2016-06-08T23:36:48.197Z" },
+]
+
+[[package]]
 name = "jiter"
 version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2261,6 +2287,7 @@ dependencies = [
     { name = "asyncpg" },
     { name = "autopep8" },
     { name = "bcrypt" },
+    { name = "black" },
     { name = "celery", extra = ["redis"] },
     { name = "demjson3" },
     { name = "dotenv" },
@@ -2290,6 +2317,7 @@ dependencies = [
     { name = "langsmith" },
     { name = "lingua-language-detector" },
     { name = "litellm" },
+    { name = "make" },
     { name = "minio" },
     { name = "miniopy-async" },
     { name = "openpyxl" },
@@ -2366,6 +2394,7 @@ requires-dist = [
     { name = "autopep8", specifier = ">=2.3.2" },
     { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.7.6" },
     { name = "bcrypt", specifier = ">=4.3.0" },
+    { name = "black", specifier = ">=25.9.0" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=24.0.0" },
     { name = "celery", extras = ["redis"], specifier = ">=5.5.3" },
     { name = "demjson3", specifier = ">=3.0.6" },
@@ -2401,6 +2430,7 @@ requires-dist = [
     { name = "langsmith", specifier = ">=0.4.28" },
     { name = "lingua-language-detector", specifier = ">=2.1.1" },
     { name = "litellm", specifier = ">=1.75.5.post1" },
+    { name = "make", specifier = ">=0.1.6.post2" },
     { name = "minio", specifier = ">=7.2.15" },
     { name = "miniopy-async", specifier = ">=1.23.2" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.8.0" },
@@ -2965,6 +2995,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/79/b6/466e71db127950fb8d172026a8f0a9f0dc6f64c8e78e2ca79f252e5790b8/lxml_html_clean-0.4.2.tar.gz", hash = "sha256:91291e7b5db95430abf461bc53440964d58e06cc468950f9e47db64976cebcb3", size = 21622, upload-time = "2025-04-09T11:33:59.432Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4e/0b/942cb7278d6caad79343ad2ddd636ed204a47909b969d19114a3097f5aa3/lxml_html_clean-0.4.2-py3-none-any.whl", hash = "sha256:74ccfba277adcfea87a1e9294f47dd86b05d65b4da7c5b07966e3d5f3be8a505", size = 14184, upload-time = "2025-04-09T11:33:57.988Z" },
+]
+
+[[package]]
+name = "make"
+version = "0.1.6.post2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jinja2" },
+    { name = "jinja2-time" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/71/8b/af4b541d2a6e1ea2021dc95f5fd75fc5679462e5b06b155eed65b25cc2eb/make-0.1.6.post2-py3-none-any.whl", hash = "sha256:307991f0d24668b7785a9abade301ba6c2d004460e90c59baf19b47c16b8ed39", size = 14237, upload-time = "2020-10-27T20:16:46.072Z" },
 ]
 
 [[package]]
@@ -5238,6 +5280,8 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/6b/fa/3234f913fe9a6525a7b97c6dad1f51e72b917e6872e051a5e2ffd8b16fbb/ruamel.yaml.clib-0.2.14-cp314-cp314-macosx_15_0_arm64.whl", hash = "sha256:70eda7703b8126f5e52fcf276e6c0f40b0d314674f896fc58c47b0aef2b9ae83", size = 137970, upload-time = "2025-09-22T19:51:09.472Z" },
     { url = "https://files.pythonhosted.org/packages/ef/ec/4edbf17ac2c87fa0845dd366ef8d5852b96eb58fcd65fc1ecf5fe27b4641/ruamel.yaml.clib-0.2.14-cp314-cp314-musllinux_1_2_i686.whl", hash = "sha256:a0cb71ccc6ef9ce36eecb6272c81afdc2f565950cdcec33ae8e6cd8f7fc86f27", size = 739639, upload-time = "2025-09-22T19:51:10.566Z" },
     { url = "https://files.pythonhosted.org/packages/15/18/b0e1fafe59051de9e79cdd431863b03593ecfa8341c110affad7c8121efc/ruamel.yaml.clib-0.2.14-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:e7cb9ad1d525d40f7d87b6df7c0ff916a66bc52cb61b66ac1b2a16d0c1b07640", size = 764456, upload-time = "2025-09-22T19:51:11.736Z" },
+    { url = "https://files.pythonhosted.org/packages/e7/cd/150fdb96b8fab27fe08d8a59fe67554568727981806e6bc2677a16081ec7/ruamel_yaml_clib-0.2.14-cp314-cp314-win32.whl", hash = "sha256:9b4104bf43ca0cd4e6f738cb86326a3b2f6eef00f417bd1e7efb7bdffe74c539", size = 102394, upload-time = "2025-11-14T21:57:36.703Z" },
+    { url = "https://files.pythonhosted.org/packages/bd/e6/a3fa40084558c7e1dc9546385f22a93949c890a8b2e445b2ba43935f51da/ruamel_yaml_clib-0.2.14-cp314-cp314-win_amd64.whl", hash = "sha256:13997d7d354a9890ea1ec5937a219817464e5cc344805b37671562a401ca3008", size = 122673, upload-time = "2025-11-14T21:57:38.177Z" },
 ]
 
 [[package]]
