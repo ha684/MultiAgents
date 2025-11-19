@@ -1,15 +1,15 @@
 # src/api/websocket.py
 import asyncio
-from typing import Any, Dict, Optional
 import uuid
+from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
+from src.dependencies.auth import get_current_user
 from src.infrastructure.events import get_event_publisher
 from src.services.document_service import DocumentService
 from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 from src.utils.logger_conf import logger
-from src.dependencies.auth import get_current_user
 
 router = APIRouter(
     prefix="/websocket", tags=["WebSocket"], dependencies=[Depends(get_current_user)]
@@ -43,8 +43,8 @@ class WebSocketManager:
     async def send_message(
         self,
         message_type: str,
-        data: Optional[Dict[str, Any]] = None,
-        message: Optional[str] = None,
+        data: dict[str, Any] | None = None,
+        message: str | None = None,
     ) -> bool:
         """Send message to client with error handling"""
         if not self.is_connected:
@@ -88,7 +88,7 @@ class WebSocketManager:
             )
             return False
 
-    async def process_status_event(self, event: Dict[str, Any]) -> bool:
+    async def process_status_event(self, event: dict[str, Any]) -> bool:
         """Process and send status update event"""
         try:
             event_doc_id = event.get("id") or event.get("document_id")

@@ -1,7 +1,7 @@
 # src/agents/graph/simple_search_graph.py
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
@@ -38,14 +38,14 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
             graph_name=self.graph_name, recursion_limit=10, timeout_seconds=180
         )
 
-    async def retrieve_documents_node(self, state: SimpleSearchState) -> Dict[str, Any]:
+    async def retrieve_documents_node(self, state: SimpleSearchState) -> dict[str, Any]:
         """
         Retrieve documents from RAG or web search based on config
         """
-        conversation: List[BaseMessage] = state["conversation"]
+        conversation: list[BaseMessage] = state["conversation"]
         last_human_message = conversation[-1]
         kb_id = last_human_message.additional_kwargs["message_metadata"]["kb_id"]
-        web_search_config: Dict[str, str] = last_human_message.additional_kwargs[
+        web_search_config: dict[str, str] = last_human_message.additional_kwargs[
             "message_metadata"
         ]["web_search_config"]
 
@@ -125,7 +125,7 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
             "direction": direction,
         }
 
-    async def filter_citations_node(self, state: SimpleSearchState) -> Dict[str, Any]:
+    async def filter_citations_node(self, state: SimpleSearchState) -> dict[str, Any]:
         if state.get("early_terminate"):
             logger.info("Early terminate is True -> skip citation filtering")
             cited_docs = []

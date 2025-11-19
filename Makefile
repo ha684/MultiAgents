@@ -89,28 +89,26 @@ test-watch:
 
 # Code Quality
 lint:
-	@echo Running Ruff...
+	@echo Running Ruff checks...
 	uv run ruff check src/ tests/
-	@echo Running Black check...
-	uv run black --check src/ tests/
-	@echo Running isort check...
-	uv run isort --check-only src/ tests/
-	@echo Running mypy...
-	uv run mypy src/ --ignore-missing-imports
+	@echo Running Ruff format check...
+	uv run ruff format --check src/ tests/
 
 format:
-	@echo Formatting with Black...
-	uv run black src/ tests/
-	@echo Sorting imports with isort...
-	uv run isort src/ tests/
+	@echo Formatting with Ruff...
+	uv run ruff format src/ tests/
 	@echo Auto-fixing with Ruff...
-	uv run ruff check src/ tests/ --fix
+	uv run ruff check src/ tests/ --fix --unsafe-fixes
 
 security:
 	@echo Running Bandit security scan...
 	uv run bandit -r src/ -f json -o bandit-report.json
 	@echo Running Safety dependency check...
-	uv run safety check
+	uv run safety check --json
+
+# Optional: Run all checks at once
+check-all: lint security
+	@echo All checks passed!
 
 # Docker Test Environment
 docker-test-up:

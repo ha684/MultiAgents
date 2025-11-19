@@ -1,9 +1,9 @@
 # src/agents/basic/verification_agent.py
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from langchain_core.messages import (
-    BaseMessage,
     AIMessage,
+    BaseMessage,
     HumanMessage,
     SystemMessage,
     get_buffer_string,
@@ -28,7 +28,7 @@ class VerificationAgent(BaseAgent):
         super().__init__(provider)
         logger.info("Verification Agent initialized successfully.")
 
-    async def ainvoke(self, state: ThinkingState) -> Dict[str, Any]:
+    async def ainvoke(self, state: ThinkingState) -> dict[str, Any]:
         """
         Verifies information from relevant documents.
         """
@@ -36,7 +36,7 @@ class VerificationAgent(BaseAgent):
         conversation_text = get_buffer_string(state["conversation"])
 
         total_context = f"Accumulated context:\n{state.get('accumulated_context', '') + '\n\n' + state.get('internal_reasoning', '')}"
-        messages: List[BaseMessage] = [
+        messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.VERIFICATION_PROMPT),
             AIMessage(content=total_context),
             HumanMessage(content=f"Conversation: {conversation_text}"),
@@ -55,7 +55,7 @@ class VerificationAgent(BaseAgent):
         return verification_dict
 
 
-def parse_verification_response(content: str) -> Optional[VerificationSchema]:
+def parse_verification_response(content: str) -> VerificationSchema | None:
     """Parse verification response"""
     try:
         parsed = parse_response(content)

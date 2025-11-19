@@ -1,5 +1,4 @@
 # src/agents/basic/qac_agent.py
-from typing import List, Tuple
 
 from langchain_core.output_parsers import JsonOutputParser
 from langchain_core.prompts import PromptTemplate
@@ -38,7 +37,7 @@ class QACAgent:
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):
         self.llm = get_llm(provider)
 
-    async def generate_qa(self, contexts: List[str]) -> List[Tuple[str, str]]:
+    async def generate_qa(self, contexts: list[str]) -> list[tuple[str, str]]:
         """
         Generate question-answer pairs based on the provided contexts.
 

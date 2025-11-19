@@ -1,7 +1,7 @@
 # src/rag/vectorstores/__init__.py
-from src.rag.vectorstores.storage import VectorStorage
-from src.rag.vectorstores.retrieval import VectorRetrieval
 from src.rag.vectorstores.migrations import VectorStorageMigration
+from src.rag.vectorstores.retrieval import VectorRetrieval
+from src.rag.vectorstores.storage import VectorStorage
 
 vector_storage = VectorStorage()
 vector_storage_migration = VectorStorageMigration(client=vector_storage.client)

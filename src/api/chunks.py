@@ -1,13 +1,11 @@
 # src/api/chunks.py
-from typing import List
 
 from fastapi import APIRouter, Depends
 from langchain_core.documents import Document
 from pydantic import BaseModel
 
-from src.services.chunks_service import ChunksService
 from src.dependencies.auth import get_current_user
-
+from src.services.chunks_service import ChunksService
 
 router = APIRouter(
     prefix="/chunks", tags=["Chunks"], dependencies=[Depends(get_current_user)]
@@ -16,13 +14,13 @@ chunks_service = ChunksService()
 
 
 class ChunkIdsRequest(BaseModel):
-    chunk_ids: List[str]
+    chunk_ids: list[str]
 
 
 @router.get("/")
 async def get_chunks(
     document_id: str,
-) -> List[Document]:
+) -> list[Document]:
     """
     Get all chunks for a specific document.
 
@@ -42,7 +40,7 @@ async def get_chunks(
 @router.get("/ids")
 async def get_chunk_ids(
     document_id: str,
-) -> List[str]:
+) -> list[str]:
     """
     Get only the chunk IDs for a specific document.
 
@@ -60,7 +58,7 @@ async def get_chunk_ids(
 
 
 @router.post("/batch")
-async def get_chunks_by_ids(request: ChunkIdsRequest) -> List[Document]:
+async def get_chunks_by_ids(request: ChunkIdsRequest) -> list[Document]:
     """
     Retrieve multiple chunks by their IDs.
 

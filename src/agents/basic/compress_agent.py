@@ -1,6 +1,5 @@
 # src/agents/basic/compress_agent.py
 import textwrap
-from typing import List
 
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -9,7 +8,8 @@ from src.agents.basic.base import BaseAgent
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
-COMPRESS_PROMPT_TEMPLATE = textwrap.dedent("""\
+COMPRESS_PROMPT_TEMPLATE = textwrap.dedent(
+    """\
 You are an information extraction specialist. Extract and summarize key facts from documents that relate to the query.
 
 **Your task:** Present ONLY the information found in the documents, organized clearly with citations.
@@ -62,7 +62,8 @@ You are an information extraction specialist. Extract and summarize key facts fr
  "AI adoption in mining will reach 60% by 2025 ([mckinsey][1])"
  "Market growth projected at 39.2% CAGR ([reuters][2])"
  "Revenue increased 15% year-over-year ([q4-earnings][3])"
-""")
+"""
+)
 
 
 @singleton
@@ -73,7 +74,7 @@ class CompressAgent(BaseAgent):
         super().__init__()
         logger.info("Compress Agent initialized successfully.")
 
-    async def ainvoke(self, query: str, reference: List[Document]) -> str:
+    async def ainvoke(self, query: str, reference: list[Document]) -> str:
         if not reference:
             logger.warning("No relevant documents to compress")
             return ""
@@ -86,7 +87,7 @@ class CompressAgent(BaseAgent):
                 parts.append(f"{doc.page_content}\n")
             formatted_docs = "\n".join(parts)
 
-            messages: List[BaseMessage] = [
+            messages: list[BaseMessage] = [
                 SystemMessage(content=COMPRESS_PROMPT_TEMPLATE),
                 AIMessage(content=formatted_docs),
                 HumanMessage(content=f"User query: {query}"),

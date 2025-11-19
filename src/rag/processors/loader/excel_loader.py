@@ -1,22 +1,21 @@
 # src/rag/processors/loader/excel_loader.py
-from collections.abc import Iterator
 import os
-from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-from typing import List, Optional
 import uuid
 import xml.etree.ElementTree as ET
 import zipfile
+from collections.abc import Iterator
+from pathlib import Path
 from zipfile import ZipFile
 
-from PIL import Image, ImageChops
 from langchain_core.document_loaders.base import BaseLoader
 from langchain_core.documents import Document
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.worksheet.worksheet import Worksheet
+from PIL import Image, ImageChops
 from pydantic import BaseModel
 from spire.xls import FileFormat, Workbook
 
@@ -91,7 +90,7 @@ class ExcelLoader(BaseLoader):
                     },
                 )
         result = self.flowchart_loader()
-        if isinstance(result, List):
+        if isinstance(result, list):
             yield from result
 
     def _convert_to_markdown(self, sheet: Worksheet, table: ExcelTable) -> str:
@@ -208,11 +207,9 @@ class ExcelLoader(BaseLoader):
         )
 
         # Find subtables using Breadth-First Search (BFS) on the refined active cells
-        for row in sorted(
-            list(final_active_rows)
-        ):  # Iterate through active rows in order
+        for row in sorted(final_active_rows):  # Iterate through active rows in order
             for col in sorted(
-                list(final_active_cols)
+                final_active_cols
             ):  # Iterate through active columns in order
                 cell_coord = (row, col)
                 cell = worksheet.cell(row=row, column=col)
@@ -366,8 +363,8 @@ class ExcelLoader(BaseLoader):
         # Step 2: Iteratively remove empty rows and columns from the outside in
         # This process converges when no more entirely empty rows or columns (within the active set) are found.
         removed_something = True
-        active_rows = sorted(list(initially_non_empty_rows))
-        active_cols = sorted(list(initially_non_empty_cols))
+        active_rows = sorted(initially_non_empty_rows)
+        active_cols = sorted(initially_non_empty_cols)
 
         while removed_something:
             removed_something = False
@@ -459,9 +456,8 @@ class ExcelLoader(BaseLoader):
             ws.views.sheetView
             and ws.views.sheetView[0].pane
             and ws.views.sheetView[0].pane.ySplit is not None
-        ):
-            if row_index <= ws.views.sheetView[0].pane.ySplit:
-                score += 10  # High score for frozen rows
+        ) and row_index <= ws.views.sheetView[0].pane.ySplit:
+            score += 10  # High score for frozen rows
 
         for col_index in range(start_col, end_col + 1):
             cell = ws.cell(row=row_index, column=col_index)
@@ -557,7 +553,7 @@ class ExcelLoader(BaseLoader):
         return max(best_row, steepest_decline_row)
 
     # flowchart processing
-    def flowchart_create_info(self, uuid_obj: uuid.UUID) -> Optional[List]:
+    def flowchart_create_info(self, uuid_obj: uuid.UUID) -> list | None:
         images_dir = flowchart_pipeline(
             xlsx_path=self.file_path,
             output_images_dir=Path(os.path.join(self.output_images_dir, str(uuid_obj))),
@@ -595,13 +591,13 @@ class ExcelLoader(BaseLoader):
             return flowchart_info
         return None
 
-    def flowchart_loader(self) -> Optional[List]:
+    def flowchart_loader(self) -> list | None:
         uuid_obj = uuid.uuid4()
         data = self.flowchart_create_info(uuid_obj)
         if data is None:
             return None
 
-        if isinstance(data, List):
+        if isinstance(data, list):
             documents = []
             for sheet_info in data:
                 content = self.agent.extract(sheet_info["presigned_url"])
@@ -661,30 +657,38 @@ def _unmerge_cells(sheet: Worksheet):
         )
         # Border needs to be copied side by side
         cell_border = Border(
-            left=Side(
-                style=top_left_cell.border.left.style,
-                color=top_left_cell.border.left.color,
-            )
-            if top_left_cell.border.left
-            else None,
-            right=Side(
-                style=top_left_cell.border.right.style,
-                color=top_left_cell.border.right.color,
-            )
-            if top_left_cell.border.right
-            else None,
-            top=Side(
-                style=top_left_cell.border.top.style,
-                color=top_left_cell.border.top.color,
-            )
-            if top_left_cell.border.top
-            else None,
-            bottom=Side(
-                style=top_left_cell.border.bottom.style,
-                color=top_left_cell.border.bottom.color,
-            )
-            if top_left_cell.border.bottom
-            else None,
+            left=(
+                Side(
+                    style=top_left_cell.border.left.style,
+                    color=top_left_cell.border.left.color,
+                )
+                if top_left_cell.border.left
+                else None
+            ),
+            right=(
+                Side(
+                    style=top_left_cell.border.right.style,
+                    color=top_left_cell.border.right.color,
+                )
+                if top_left_cell.border.right
+                else None
+            ),
+            top=(
+                Side(
+                    style=top_left_cell.border.top.style,
+                    color=top_left_cell.border.top.color,
+                )
+                if top_left_cell.border.top
+                else None
+            ),
+            bottom=(
+                Side(
+                    style=top_left_cell.border.bottom.style,
+                    color=top_left_cell.border.bottom.color,
+                )
+                if top_left_cell.border.bottom
+                else None
+            ),
         )
         cell_number_format = top_left_cell.number_format
         # Unmerge the cells
@@ -851,7 +855,7 @@ def crop_whitespace(
     image_path: Path,
     bg_color: tuple = (255, 255, 255),
     padding: int = 20,
-    footer_ratio: Optional[int | float] = 0.08,
+    footer_ratio: int | float | None = 0.08,
 ) -> None:
     """
     Crop whitespace around the content of an image while preserving some padding.
@@ -965,7 +969,7 @@ def convert_sheet_to_image(
         logger.error(f"Error processing flowchart in file {xlsx_path} : {e}")
 
 
-def get_sheet_xml_path(zf: ZipFile, sheet_name: str) -> Optional[str]:
+def get_sheet_xml_path(zf: ZipFile, sheet_name: str) -> str | None:
     # Find the sheet's internal ID from workbook.xml
     with zf.open("xl/workbook.xml") as f:
         tree = ET.parse(f)
@@ -999,7 +1003,7 @@ def get_sheet_xml_path(zf: ZipFile, sheet_name: str) -> Optional[str]:
                 break
 
 
-def detect_generic_shapes_xml(filepath: Path) -> List:
+def detect_generic_shapes_xml(filepath: Path) -> list:
     """
     Detects generic shapes (rectangles, ovals, text boxes, etc.) in an XLSX file
     by directly parsing its underlying XML. This is more involved than using
@@ -1081,7 +1085,7 @@ def flowchart_pipeline(
     xlsx_path: Path,
     output_images_dir: Path,
     output_tmp_dir: Path,
-) -> Optional[Path]:
+) -> Path | None:
     """
     Full pipeline to extract and convert flowchart-containing sheets from an XLSX file
     into cropped PNG images.

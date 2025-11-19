@@ -1,5 +1,5 @@
 # src/services/knowledge_base_service.py
-from typing import List, Optional, Sequence
+from collections.abc import Sequence
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -39,7 +39,7 @@ class KnowledgeBaseService:
         return await self.kb_repository.list_all(skip, limit)
 
     async def create_knowledge_base(
-        self, name: str, description: Optional[str], user_id: str
+        self, name: str, description: str | None, user_id: str
     ):
         """Create a new knowledge base."""
         logger.info(f"Creating knowledge base: {name}")
@@ -48,7 +48,7 @@ class KnowledgeBaseService:
         )
 
     async def get_knowledge_base_by_id(
-        self, kb_id: str, user_id: Optional[str] = None
+        self, kb_id: str, user_id: str | None = None
     ) -> KnowledgeBaseResponse:
         """Get a knowledge base by its ID."""
         logger.info(f"Fetching knowledge base with ID: {kb_id}")
@@ -57,7 +57,7 @@ class KnowledgeBaseService:
             raise HTTPException(status_code=404, detail="Knowledge base not found")
         return kb
 
-    async def query_knowledge_base(self, kb_id: str, query: str) -> List[Document]:
+    async def query_knowledge_base(self, kb_id: str, query: str) -> list[Document]:
         """Query a knowledge base by its ID."""
         logger.info(f"Querying knowledge base {kb_id} with query: {query}")
 
@@ -116,9 +116,9 @@ class KnowledgeBaseService:
     async def update_knowledge_base(
         self,
         kb_id: UUID,
-        name: Optional[str],
-        description: Optional[str],
-        is_active: Optional[bool],
+        name: str | None,
+        description: str | None,
+        is_active: bool | None,
         user_id: str,
     ):
         """Update a knowledge base."""

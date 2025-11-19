@@ -1,6 +1,5 @@
 # src/agents/basic/summary_agent.py
 
-from typing import List
 
 from langchain_core.messages import HumanMessage, SystemMessage, get_buffer_string
 
@@ -8,7 +7,6 @@ from src.agents.basic.base import BaseAgent
 from src.domain.schemas.chat import Message
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
-
 
 SUMMARY_PROMPT_TEMPLATE = """You are a conversation summary expert. Your task is to summarize a conversation history into a single comprehensive paragraph that preserves all important context.
 
@@ -40,11 +38,11 @@ class SummaryAgent(BaseAgent):
         super().__init__()
         logger.info("Summary Agent initialized successfully.")
 
-    def count_tokens(self, messages: List[Message]) -> int:
+    def count_tokens(self, messages: list[Message]) -> int:
         """Count tokens in conversation history."""
         return self.llm.get_num_tokens(get_buffer_string(messages))
 
-    async def ainvoke(self, messages: List[Message]) -> str:
+    async def ainvoke(self, messages: list[Message]) -> str:
         """Summarize conversation history to preserve key context while reducing tokens."""
         try:
             conversation_text = get_buffer_string(messages)

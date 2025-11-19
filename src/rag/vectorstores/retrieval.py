@@ -1,6 +1,6 @@
 # src/rag/vectorstores/retrieval.py
 from copy import deepcopy
-from typing import Dict, List, Optional, cast
+from typing import cast
 
 from langchain_core.documents import Document
 from qdrant_client import models
@@ -89,7 +89,7 @@ class VectorRetrieval:
         query: str,
         top_k: int,
         top_n: int,
-        filters: Optional[models.Filter] = None,
+        filters: models.Filter | None = None,
     ) -> list[Document]:
         """
         Retrieves the top-k most similar vectors from the vector store.
@@ -104,7 +104,7 @@ class VectorRetrieval:
             A list of the top-k similar vectors.
         """
         try:
-            must_filters: List[models.Condition] = [
+            must_filters: list[models.Condition] = [
                 models.FieldCondition(
                     key="metadata.kb_id", match=models.MatchValue(value=kb_id)
                 ),
@@ -115,14 +115,14 @@ class VectorRetrieval:
                 else:
                     must_filters.extend(filters.must)
 
-            should_filters: List[models.Condition] = []
+            should_filters: list[models.Condition] = []
             if filters and filters.should:
                 if not isinstance(filters.should, list):
                     should_filters.append(filters.should)
                 else:
                     should_filters.extend(filters.should)
 
-            must_not_filters: List[models.Condition] = [
+            must_not_filters: list[models.Condition] = [
                 models.FieldCondition(
                     key="inactive",
                     match=models.MatchValue(value=True),
@@ -172,7 +172,7 @@ class VectorRetrieval:
             logger.error("Error retrieving documents from vector store")
             raise e
 
-    async def retrieve_by_ids(self, chunk_ids: List[str]) -> List[Document]:
+    async def retrieve_by_ids(self, chunk_ids: list[str]) -> list[Document]:
         """
         Retrieves documents from the vector store by their chunk IDs.
 
@@ -190,7 +190,7 @@ class VectorRetrieval:
                 chunk_ids,
             )
             # Reorder documents to match the order of chunk_ids
-            docs_dict: Dict[str, Document] = {
+            docs_dict: dict[str, Document] = {
                 cast(str, doc.metadata.get("_id")): doc for doc in docs
             }
             docs = [
@@ -199,7 +199,7 @@ class VectorRetrieval:
                 if chunk_id in docs_dict
             ]
 
-            return cast(List[Document], docs) if docs else []
+            return cast(list[Document], docs) if docs else []
         except Exception as e:
             logger.error(f"Error retrieving documents by IDs {chunk_ids}: {e}")
             return []

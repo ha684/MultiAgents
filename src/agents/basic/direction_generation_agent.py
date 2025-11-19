@@ -1,5 +1,5 @@
 # src/agents/basic/router_agent.py
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from langchain_core.messages import (
     AIMessage,
@@ -22,7 +22,7 @@ class DirectionGenerationAgent(BaseAgent):
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):
         super().__init__(provider)
 
-    async def ainvoke(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    async def ainvoke(self, state: dict[str, Any]) -> dict[str, Any]:
         learnings = state.get("learnings", [])
         knowledge = state.get("accumulated_context", "")
         execution_history = state.get("execution_history", [])
@@ -68,7 +68,7 @@ class DirectionGenerationAgent(BaseAgent):
 
         conversation_text = get_buffer_string(state["conversation"])
 
-        messages: List[BaseMessage] = [
+        messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.REFLECTION_PROMPT),
             AIMessage(
                 content="\n\n".join(
@@ -98,7 +98,7 @@ class DirectionGenerationAgent(BaseAgent):
         return reflection_result
 
 
-def parse_reflection_result(content: str) -> Optional[Dict[str, Any]]:
+def parse_reflection_result(content: str) -> dict[str, Any] | None:
     """Parse reflection result from content"""
     try:
         parsed = parse_response(content)

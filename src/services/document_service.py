@@ -1,9 +1,10 @@
 # src/services/document_service.py
-from datetime import datetime
 import io
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
 import uuid
+from collections.abc import Sequence
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import UploadFile
@@ -56,7 +57,7 @@ class DocumentService:
             logger.error(f"Error verifying knowledge base: {str(e)}")
             raise e
 
-    async def _get_file_info(self, file: UploadFile) -> Tuple[str, str]:
+    async def _get_file_info(self, file: UploadFile) -> tuple[str, str]:
         """Extract file information without saving to disk."""
         if not file.filename:
             raise ValidationError(message="Invalid file upload. Filename is required.")
@@ -72,7 +73,7 @@ class DocumentService:
         file: UploadFile,
         knowledge_base_id: uuid.UUID,
         unique_filename: str,
-    ) -> Tuple[str, int]:
+    ) -> tuple[str, int]:
         """Upload file directly to MinIO without temporary file."""
         bucket_name = settings.minio_bucket
         minio_object_path = f"{knowledge_base_id}/{unique_filename}"
@@ -98,9 +99,9 @@ class DocumentService:
         self,
         knowledge_base_id: uuid.UUID,
         file: UploadFile,
-        tenant_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> Tuple[Document, str]:
+        tenant_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> tuple[Document, str]:
         """Upload a document and queue it for processing with retry support for failed documents."""
         await self._verify_knowledge_base_exists(knowledge_base_id)
         content_hash = await calculate_hash_from_stream(file)
@@ -198,14 +199,14 @@ class DocumentService:
 
     async def get_document_status(
         self, document_id: uuid.UUID
-    ) -> Optional[DocumentProcessingStatusResponse]:
+    ) -> DocumentProcessingStatusResponse | None:
         """Get document processing status."""
         status = await self.document_repository.get_status(document_id)
         if not status:
             raise DocumentNotFoundError(message="Document not found")
         return status
 
-    async def get_multiple_document_status(self, document_ids: List[uuid.UUID]):
+    async def get_multiple_document_status(self, document_ids: list[uuid.UUID]):
         """Get processing status for multiple documents."""
         if not document_ids:
             raise ValidationError(message="Document IDs are required")
@@ -221,7 +222,7 @@ class DocumentService:
         self,
         knowledge_base_id: uuid.UUID,
         pagination: PaginationParams,
-        search: Optional[SearchParams] = None,
+        search: SearchParams | None = None,
     ) -> DocumentListResponse:
         """List documents in a knowledge base."""
         await self._verify_knowledge_base_exists(knowledge_base_id)
@@ -452,9 +453,9 @@ class DocumentService:
         score_threshold: float = 0.5,
         embed_top: int = 10,
         rerank_top: int = 0,
-        filters: Optional[models.Filter] = None,
+        filters: models.Filter | None = None,
         **kwargs: Any,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Get related document IDs using metadata-based filtering + vector search
         """

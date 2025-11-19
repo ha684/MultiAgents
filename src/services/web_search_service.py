@@ -1,5 +1,5 @@
 # src/services/web_search_service.py
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Union
 
 from langchain_core.documents import Document
 
@@ -42,7 +42,7 @@ class WebSearchService:
 
     def __init__(self):
         """Initialize the unified search service with all available providers."""
-        self._providers: Dict[SearchProvider, BaseSearchService] = {
+        self._providers: dict[SearchProvider, BaseSearchService] = {
             SearchProvider.TAVILY: TavilyService(),
             SearchProvider.FIRECRAWL: FireCrawlService(),
         }
@@ -51,10 +51,10 @@ class WebSearchService:
         self,
         query: str,
         provider: Provider,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         max_results: int = 5,
         **kwargs: Any,
-    ) -> Optional[List[Document]]:
+    ) -> list[Document] | None:
         """
         Search using the specified provider.
         """
@@ -73,7 +73,7 @@ class WebSearchService:
             logger.error(f"Error with provider {target_provider.value}")
             raise e
 
-    def get_available_providers(self) -> List[SearchProvider]:
+    def get_available_providers(self) -> list[SearchProvider]:
         """Get list of available search providers."""
         return list(self._providers.keys())
 

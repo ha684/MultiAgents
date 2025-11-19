@@ -1,5 +1,4 @@
 # src/rag/rerankers/api_inference.py
-from typing import List
 
 import httpx
 from pydantic.type_adapter import TypeAdapter
@@ -17,8 +16,8 @@ class InferenceAPIReranker(BaseReranker):
         return {"Authorization": f"Bearer {self.api_key}"}
 
     async def rerank(
-        self, query: str, documents: List[str], limit: int = 32
-    ) -> List[Rank]:
+        self, query: str, documents: list[str], limit: int = 32
+    ) -> list[Rank]:
         scored_documents = []
 
         for idx in range(0, len(documents), limit):
@@ -32,7 +31,7 @@ class InferenceAPIReranker(BaseReranker):
                 response.raise_for_status()
                 data = response.json()
 
-                ta = TypeAdapter(List[Rank])
+                ta = TypeAdapter(list[Rank])
                 batch_ranks = ta.validate_python(data)
 
                 for rank in batch_ranks:

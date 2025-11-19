@@ -1,5 +1,5 @@
 # src/agents/executors/sql_query.py
-from typing import Any, Dict, List
+from typing import Any
 
 from src.agents.graph.sql_graph import SqlGraph
 from src.database.sql_database import AsyncSQLDatabase
@@ -15,7 +15,7 @@ def _stringify_cell(v: Any, max_len: int = 160) -> str:
     return s
 
 
-def _format_table_preview(rows: List[Dict[str, Any]]) -> str:
+def _format_table_preview(rows: list[dict[str, Any]]) -> str:
     """Render a compact, readable table preview without json.dumps."""
     if not rows:
         return "  (no rows)\n"
@@ -23,7 +23,7 @@ def _format_table_preview(rows: List[Dict[str, Any]]) -> str:
     first_cols = list(rows[0].keys())
     other_keys = []
     for r in rows:
-        for k in r.keys():
+        for k in r:
             if k not in first_cols and k not in other_keys:
                 other_keys.append(k)
     cols = first_cols + other_keys
@@ -38,7 +38,7 @@ def _format_table_preview(rows: List[Dict[str, Any]]) -> str:
     return "".join(lines)
 
 
-async def _run_sql_query(state: Dict, sql_db: AsyncSQLDatabase) -> SubgraphOutput:
+async def _run_sql_query(state: dict, sql_db: AsyncSQLDatabase) -> SubgraphOutput:
     """Execute SQL query subgraph and format comprehensive context without overloading the LLM."""
     sql_state = SqlState(conversation=state["conversation"])
     sql_graph = SqlGraph(sql_db)
@@ -46,7 +46,7 @@ async def _run_sql_query(state: Dict, sql_db: AsyncSQLDatabase) -> SubgraphOutpu
 
     results_text = ""
     error_text = ""
-    response_metadata: Dict[str, Any] = result.state.get("response_metadata", {}) or {}
+    response_metadata: dict[str, Any] = result.state.get("response_metadata", {}) or {}
 
     no_content = not result.state.get("query_results", [])
     if result.status != "success" and no_content:
@@ -69,7 +69,7 @@ async def _run_sql_query(state: Dict, sql_db: AsyncSQLDatabase) -> SubgraphOutpu
         )
 
     if result.state.get("is_relevant"):
-        query_results: List[Dict[str, Any]] = (
+        query_results: list[dict[str, Any]] = (
             result.state.get("query_results", []) or []
         )
 
@@ -158,5 +158,5 @@ class SqlQueryExecutor:
     def __init__(self, sql_db: AsyncSQLDatabase):
         self.sql_db = sql_db
 
-    async def __call__(self, state: Dict) -> SubgraphOutput:
+    async def __call__(self, state: dict) -> SubgraphOutput:
         return await _run_sql_query(state, self.sql_db)

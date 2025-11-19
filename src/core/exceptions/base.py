@@ -1,5 +1,4 @@
 # src/core/exceptions/base.py
-from typing import Optional
 
 
 class BaseException(Exception):
@@ -8,7 +7,7 @@ class BaseException(Exception):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
+        error_code: str | None = None,
         status_code: int = 500,
     ):
         self.message = message

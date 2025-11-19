@@ -1,5 +1,4 @@
 # src/agents/basic/citation_agent.py
-from typing import List
 
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -13,7 +12,7 @@ from src.utils.logger_conf import logger
 
 CITATION_PROMPT_TEMPLATE = """
 <role>
-You are a document filter. Identify documents that might help answer the user's query. 
+You are a document filter. Identify documents that might help answer the user's query.
 Be permissive - when in doubt, include the document. A second filter will refine later.
 </role>
 
@@ -40,16 +39,16 @@ You are the FIRST of two filters:
 
 1. **Direct Questions** ("What is X?", "How does Y work?")
    - Include: Documents discussing the topic or related concepts
-   
+
 2. **Negative/Absence Queries** ("Which ones DON'T...", "NOT", "haven't")
    - Be VERY permissive - include ALL documents about relevant entities
-   
+
 3. **Comparisons** ("Compare A vs B", "difference between")
    - Include: Documents about ANY comparison subjects
-   
+
 4. **Lists** ("List all...", "What are the...", "Show me...")
    - Be BROAD - include all documents that might contain items
-   
+
 5. **Conversational Only** ("Hello", "Thank you", "I see")
    - Return: {"indexes": []}
 
@@ -112,7 +111,7 @@ class CitationAgent(BaseAgent):
         super().__init__()
         logger.info("Citation Agent initialized successfully.")
 
-    async def ainvoke(self, query: str, reference: List[Document]) -> CitationIndexes:
+    async def ainvoke(self, query: str, reference: list[Document]) -> CitationIndexes:
         """Extracts citations from the provided context based on the user query."""
         if not reference:
             return CitationIndexes(indexes=[])
@@ -120,7 +119,7 @@ class CitationAgent(BaseAgent):
         try:
             formatted_context = format_context_for_response(reference)
 
-            messages: List[BaseMessage] = [
+            messages: list[BaseMessage] = [
                 SystemMessage(content=CITATION_PROMPT_TEMPLATE),
                 AIMessage(content=f"Retrieved documents:\n\n{formatted_context}"),
                 HumanMessage(

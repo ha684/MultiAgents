@@ -4,7 +4,8 @@ Main Orchestrator Graph - Entry Point with Delegation
 Routes to NormalGraph (fast path) or ThinkingGraph (iterative research)
 """
 
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain_core.runnables.schema import StreamEvent
@@ -15,17 +16,17 @@ from src.agents.basic import response_agent
 from src.agents.graph.base import GraphAgentBase
 from src.agents.graph.normal_graph import NormalGraph
 from src.agents.graph.thinking_graph import ThinkingGraph
+from src.agents.prompts.agent_prompts import PromptTemplates
 from src.agents.shared.manager import execution_manager
 from src.agents.shared.registry import enable_sql, seed_base_subgraphs
-from src.domain.entities.graph import RunConfig
-from src.domain.entities.state import NormalGraphState, MainGraphState, ThinkingState
-from src.domain.schemas.chat import Message, RetrievalContext, TextPart
-from src.services.conversation_service import ConversationService
-from src.agents.prompts.agent_prompts import PromptTemplates
 from src.agents.tools.server.mcp_retrieve_tools import (
     use_normal_mode,
     use_thinking_mode,
 )
+from src.domain.entities.graph import RunConfig
+from src.domain.entities.state import MainGraphState, NormalGraphState, ThinkingState
+from src.domain.schemas.chat import Message, RetrievalContext, TextPart
+from src.services.conversation_service import ConversationService
 from src.utils.logger_conf import logger
 
 
@@ -66,7 +67,7 @@ class MainGraph(GraphAgentBase[MainGraphState]):
             timeout_seconds=600,
         )
 
-    async def direct_response_node(self, state: MainGraphState) -> Dict[str, Any]:
+    async def direct_response_node(self, state: MainGraphState) -> dict[str, Any]:
         """
         Entry point with intelligent routing.
         LLM decides: direct response / normal mode / thinking mode
@@ -133,7 +134,7 @@ class MainGraph(GraphAgentBase[MainGraphState]):
 
         return "end"
 
-    async def execute_normal_node(self, state: MainGraphState) -> Dict[str, Any]:
+    async def execute_normal_node(self, state: MainGraphState) -> dict[str, Any]:
         """
         Execute NormalGraph and return results.
         Delegates to NormalGraph for fast path execution.
@@ -169,7 +170,7 @@ class MainGraph(GraphAgentBase[MainGraphState]):
                 },
             }
 
-    async def execute_thinking_node(self, state: MainGraphState) -> Dict[str, Any]:
+    async def execute_thinking_node(self, state: MainGraphState) -> dict[str, Any]:
         """
         Execute ThinkingGraph and return results.
         Delegates to ThinkingGraph for iterative research.
@@ -228,8 +229,8 @@ class MainGraph(GraphAgentBase[MainGraphState]):
         return workflow.compile(name=self.graph_name)
 
     async def astream(
-        self, conversation: List[BaseMessage]
-    ) -> AsyncGenerator[StreamEvent, None]:
+        self, conversation: list[BaseMessage]
+    ) -> AsyncGenerator[StreamEvent]:
         """Run the main graph on the entire conversation (streaming)."""
         meta = conversation[-1].additional_kwargs or {}
         conversation_id = meta.get("conversation_id")
@@ -267,9 +268,7 @@ class MainGraph(GraphAgentBase[MainGraphState]):
         finally:
             execution_manager.finish_execution(conversation_id)
 
-    async def ainvoke(
-        self, conversation: List[BaseMessage]
-    ) -> Optional[Dict[str, Any]]:
+    async def ainvoke(self, conversation: list[BaseMessage]) -> dict[str, Any] | None:
         """Non-streaming execution."""
         try:
             initial_state = MainGraphState(

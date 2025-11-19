@@ -2,8 +2,9 @@
 Unit tests for authentication endpoints.
 """
 
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, patch, ANY, AsyncMock
 from fastapi import HTTPException
 
 from src.database.models.user import UserRole, UserStatus

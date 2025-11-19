@@ -1,15 +1,15 @@
 # src/agents/shared/registry.py
-from typing import Dict, List, Optional, Literal
+from typing import Literal
 
 from src.database.sql_database import AsyncSQLDatabase
 from src.domain.entities.graph import (
-    SubgraphProfile,
-    SubgraphBehavior,
-    RoutingCondition,
     RoutingAction,
+    RoutingCondition,
+    SubgraphBehavior,
     SubgraphJourney,
+    SubgraphProfile,
 )
-from src.domain.entities.state import SqlState, SimpleSearchState
+from src.domain.entities.state import SimpleSearchState, SqlState
 
 
 class SubgraphRegistry:
@@ -17,7 +17,7 @@ class SubgraphRegistry:
     Enhanced registry with Parlant-inspired design principles.
     """
 
-    _profiles: Dict[str, SubgraphProfile] = {}
+    _profiles: dict[str, SubgraphProfile] = {}
 
     @classmethod
     def register(cls, profile: SubgraphProfile):
@@ -30,18 +30,18 @@ class SubgraphRegistry:
         cls._profiles.pop(name, None)
 
     @classmethod
-    def get_profile(cls, name: str) -> Optional[SubgraphProfile]:
+    def get_profile(cls, name: str) -> SubgraphProfile | None:
         """Get a specific profile."""
         return cls._profiles.get(name)
 
     @classmethod
     def resolve_active(
         cls,
-        allow: Optional[List[str]] = None,
-        block: Optional[List[str]] = None,
-        extras: Optional[Dict[str, SubgraphProfile]] = None,
-        tags: Optional[List[str]] = None,
-    ) -> Dict[str, SubgraphProfile]:
+        allow: list[str] | None = None,
+        block: list[str] | None = None,
+        extras: dict[str, SubgraphProfile] | None = None,
+        tags: list[str] | None = None,
+    ) -> dict[str, SubgraphProfile]:
         """
         Resolve active subgraphs with filtering.
         Similar to Parlant's dynamic context management.
@@ -69,7 +69,7 @@ class SubgraphRegistry:
     @classmethod
     def generate_routing_prompt(
         cls,
-        active_profiles: Dict[str, SubgraphProfile],
+        active_profiles: dict[str, SubgraphProfile],
         format: Literal["detailed", "compact"] = "detailed",
     ) -> str:
         """
@@ -83,7 +83,7 @@ class SubgraphRegistry:
     @classmethod
     def _generate_detailed_prompt(
         cls,
-        profiles: Dict[str, SubgraphProfile],
+        profiles: dict[str, SubgraphProfile],
     ) -> str:
         """Generate detailed routing instructions."""
         sections = []
@@ -136,7 +136,7 @@ class SubgraphRegistry:
         return "\n".join(sections)
 
     @classmethod
-    def _generate_compact_prompt(cls, profiles: Dict[str, SubgraphProfile]) -> str:
+    def _generate_compact_prompt(cls, profiles: dict[str, SubgraphProfile]) -> str:
         """Generate compact routing instructions for low-latency routing."""
         tools = []
         for name, profile in profiles.items():
@@ -155,8 +155,8 @@ class SubgraphRegistry:
     def get_subgraph_executor(
         cls,
         name: str,
-        active_map: Dict[str, SubgraphProfile],
-    ) -> Optional[any]:
+        active_map: dict[str, SubgraphProfile],
+    ) -> any | None:
         """Get executor for a subgraph."""
         profile = active_map.get(name)
         return profile.executor if profile else None
@@ -167,12 +167,12 @@ def create_simple_subgraph(
     display_name: str,
     capability: str,
     trigger: str,
-    signals: List[str],
+    signals: list[str],
     router_instruction: str,
-    examples: List[tuple[str, str]],
-    exclude_when: Optional[List[str]] = None,
+    examples: list[tuple[str, str]],
+    exclude_when: list[str] | None = None,
     executor: any = None,
-    entry_state_type: Optional[type] = None,
+    entry_state_type: type | None = None,
 ) -> SubgraphProfile:
     """
     Helper to create a simple subgraph profile.
@@ -204,14 +204,14 @@ def create_journey_subgraph(
     display_name: str,
     capability: str,
     trigger: str,
-    signals: List[str],
+    signals: list[str],
     router_instruction: str,
     journey_name: str,
     journey_description: str,
-    flow_steps: List[str],
-    examples: List[tuple[str, str]],
+    flow_steps: list[str],
+    examples: list[tuple[str, str]],
     executor: any = None,
-    entry_state_type: Optional[type] = None,
+    entry_state_type: type | None = None,
 ) -> SubgraphProfile:
     """
     Helper to create a subgraph with a defined journey.

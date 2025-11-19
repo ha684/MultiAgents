@@ -1,6 +1,6 @@
 # src/database/models/user.py
-from datetime import datetime
 import enum
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import (

@@ -1,6 +1,7 @@
 import re
-from typing import List
+
 from langchain_core.documents import Document
+
 from src.utils.logger_conf import logger
 
 
@@ -72,10 +73,10 @@ def normalize_ref_table(document: Document) -> Document:
 
 
 def normalize_ref(
-    documents: List[Document],
+    documents: list[Document],
     normalize_images: bool = True,
     normalize_table: bool = True,
-) -> List[Document]:
+) -> list[Document]:
     """
     Normalize references in the documents by replacing image tokens and formatting table references.
 

@@ -1,5 +1,4 @@
 # src/agents/basic/chunk_contextual_agent.py
-from typing import List
 
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -75,9 +74,9 @@ class ChunkContextualAgent:
 
     def _prepare_batch_messages(
         self,
-        chunks: List[Document],
+        chunks: list[Document],
         total_context_chunks: int = 16,
-    ) -> List[List[SystemMessage | HumanMessage]]:
+    ) -> list[list[SystemMessage | HumanMessage]]:
         """
         Prepare all messages for batch processing.
         """
@@ -145,10 +144,10 @@ class ChunkContextualAgent:
 
     async def contextualize_chunks(
         self,
-        chunks: List[Document],
+        chunks: list[Document],
         total_context_chunks: int = 16,
         batch_size: int = 10,
-    ) -> List[Document]:
+    ) -> list[Document]:
         """
         Contextualizes all chunks in batches
         """
@@ -173,7 +172,7 @@ class ChunkContextualAgent:
                 contextualized_chunks.extend(chunk_slice)
                 continue
 
-            for chunk, response in zip(chunk_slice, batch_responses):
+            for chunk, response in zip(chunk_slice, batch_responses, strict=False):
                 context = (
                     response.content.strip()
                     if hasattr(response, "content")

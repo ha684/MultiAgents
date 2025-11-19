@@ -1,9 +1,10 @@
-import httpx
-import webbrowser
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse, parse_qs
 import threading
 import time
+import webbrowser
+from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import parse_qs, urlparse
+
+import httpx
 
 
 class CallbackHandler(BaseHTTPRequestHandler):
@@ -18,23 +19,27 @@ class CallbackHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
-            self.wfile.write(b"""
+            self.wfile.write(
+                b"""
             <html><body>
             <h2>Authorization successful!</h2>
             <p>You can close this window and return to the application.</p>
             </body></html>
-            """)
+            """
+            )
         else:
             # Handle error
             self.send_response(400)
             self.send_header("Content-type", "text/html")
             self.end_headers()
-            self.wfile.write(b"""
+            self.wfile.write(
+                b"""
             <html><body>
             <h2>Authorization failed!</h2>
             <p>No authorization code received.</p>
             </body></html>
-            """)
+            """
+            )
 
     def log_message(self, format, *args):
         # Suppress server logs

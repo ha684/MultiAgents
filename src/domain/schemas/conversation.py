@@ -1,6 +1,7 @@
 # src/domain/schemas/conversation.py
-from pydantic import BaseModel
 import uuid
+
+from pydantic import BaseModel
 
 
 class ConversationUpdate(BaseModel):

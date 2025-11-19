@@ -1,7 +1,7 @@
 # src/agents/graph/thinking_graph.py
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -59,7 +59,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             timeout_seconds=300,
         )
 
-    async def generate_direction_node(self, state: ThinkingState) -> Dict[str, Any]:
+    async def generate_direction_node(self, state: ThinkingState) -> dict[str, Any]:
         """
         Generate next research direction using direction_generation_agent.
         Returns: direction, action, selected_subgraph, reasoning
@@ -102,7 +102,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             logger.info("[Route] → Execute Subgraph")
             return "execute"
 
-    async def execute_subgraph_node(self, state: ThinkingState) -> Dict[str, Any]:
+    async def execute_subgraph_node(self, state: ThinkingState) -> dict[str, Any]:
         """
         Execute selected subgraph and return documents.
 
@@ -248,7 +248,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
                 "_failure_reason": str(e),
             }
 
-    async def pure_reasoning_node(self, state: ThinkingState) -> Dict[str, Any]:
+    async def pure_reasoning_node(self, state: ThinkingState) -> dict[str, Any]:
         """
         Pure reasoning path - no tool execution.
         Collect reasoning in separate field, will be added to context at synthesis.
@@ -277,7 +277,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             "internal_reasoning": internal_reasoning,
         }
 
-    async def extract_learnings_node(self, state: ThinkingState) -> Dict[str, Any]:
+    async def extract_learnings_node(self, state: ThinkingState) -> dict[str, Any]:
         """
         Process results from execute_subgraph_node.
 
@@ -371,7 +371,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             "citation_map": citation_map,
         }
 
-    async def evaluate_sufficiency_node(self, state: ThinkingState) -> Dict[str, Any]:
+    async def evaluate_sufficiency_node(self, state: ThinkingState) -> dict[str, Any]:
         """Evaluate if research is sufficient with failure detection."""
         accumulated_context = state.get("accumulated_context", "")
         internal_reasoning = state.get("internal_reasoning", "")
@@ -467,7 +467,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             logger.info("[Route] → Synthesize Response")
             return "synthesize"
 
-    async def continue_iteration_node(self, state: ThinkingState) -> Dict[str, Any]:
+    async def continue_iteration_node(self, state: ThinkingState) -> dict[str, Any]:
         """
         Increment iteration counter BEFORE next iteration.
         This ensures iteration starts from 1, not 0.
@@ -483,7 +483,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             "iteration_count": next_iteration,
         }
 
-    async def synthesize_response_node(self, state: ThinkingState) -> Dict[str, Any]:
+    async def synthesize_response_node(self, state: ThinkingState) -> dict[str, Any]:
         """
         Finalize research and generate response.
 

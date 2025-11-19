@@ -1,6 +1,7 @@
 # src/services/web_search/base.py
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 from langchain_core.documents import Document
 
 
@@ -12,7 +13,7 @@ class BaseSearchService(ABC):
     @abstractmethod
     async def search(
         self, api_key: str, query: str, max_results: int = 5, **kwargs: Any
-    ) -> Optional[List[Document]]:
+    ) -> list[Document] | None:
         """
         Performs a search and returns a list of Document objects.
 
@@ -27,7 +28,7 @@ class BaseSearchService(ABC):
         """
         pass
 
-    def _format_to_documents(self, results: List[Dict[str, Any]]) -> List[Document]:
+    def _format_to_documents(self, results: list[dict[str, Any]]) -> list[Document]:
         """
         Helper method to format a standardized list of dicts into Document objects.
         """

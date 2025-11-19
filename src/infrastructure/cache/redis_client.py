@@ -1,27 +1,27 @@
 # src/infrastructure/cache/redis_client.py
-from datetime import datetime
 import hashlib
 import json
-from json import loads
 import time
-from typing import Any, Dict, Optional, Tuple
+from datetime import datetime
+from json import loads
+from typing import Any
 from zoneinfo import ZoneInfo
 
-from langchain_core.caches import BaseCache, RETURN_VAL_TYPE
-from langchain_core.load.dump import dumps
 import redis.asyncio as aioredis
+from langchain_core.caches import RETURN_VAL_TYPE, BaseCache
+from langchain_core.load.dump import dumps
 from redis.commands.json.path import Path as JSONPath
 
 from src.utils.logger_conf import logger
 
 
 class Redis(BaseCache):
-    _client: Optional[aioredis.Redis] = None
+    _client: aioredis.Redis | None = None
 
     def __init__(
         self,
         uri: str,
-        ttl: Optional[int] = 3600,
+        ttl: int | None = 3600,
     ):
         self.ttl = ttl
         self._client = aioredis.from_url(uri, decode_responses=True)
@@ -56,7 +56,7 @@ class Redis(BaseCache):
         return await self.get().json().get(key)
 
     async def set_obj(
-        self, prefix: str, value: Any, *parts: str, ttl: Optional[int] = None
+        self, prefix: str, value: Any, *parts: str, ttl: int | None = None
     ):
         json_value = json.loads(dumps(value))
         key = self._key(prefix, *parts)
@@ -67,7 +67,7 @@ class Redis(BaseCache):
         key = self._key(prefix, *parts)
         await self.get().delete(key)
 
-    async def lookup(self, prompt: str, llm_string: str) -> Optional[RETURN_VAL_TYPE]:
+    async def lookup(self, prompt: str, llm_string: str) -> RETURN_VAL_TYPE | None:
         """Look up the result of a previous language model call in the Redis cache.
 
         This method checks if there's a cached result for the given prompt and language
@@ -79,7 +79,7 @@ class Redis(BaseCache):
             return [loads(json.dumps(result))]
         return None
 
-    async def alookup(self, prompt: str, llm_string: str) -> Optional[RETURN_VAL_TYPE]:
+    async def alookup(self, prompt: str, llm_string: str) -> RETURN_VAL_TYPE | None:
         return await self.lookup(prompt, llm_string)
 
     async def update(
@@ -100,7 +100,7 @@ class Redis(BaseCache):
 
     async def rate_limit(
         self, key: str, limit: int, window_seconds: int
-    ) -> Tuple[bool, Dict[str, Any]]:
+    ) -> tuple[bool, dict[str, Any]]:
         """
         Check if request is allowed under rate limit using Redis
 
@@ -131,11 +131,14 @@ class Redis(BaseCache):
                 return False, {
                     "limit": limit,
                     "remaining": 0,
-                    "reset_time": datetime.fromtimestamp(
-                        oldest_time + window_seconds, tz=ZoneInfo("Asia/Ho_Chi_Minh")
-                    )
-                    if oldest_requests
-                    else datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
+                    "reset_time": (
+                        datetime.fromtimestamp(
+                            oldest_time + window_seconds,
+                            tz=ZoneInfo("Asia/Ho_Chi_Minh"),
+                        )
+                        if oldest_requests
+                        else datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+                    ),
                     "retry_after": retry_after,
                 }
             unique_score = now + (time.time_ns() % 1000000) / 1000000000

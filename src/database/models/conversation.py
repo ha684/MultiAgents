@@ -1,19 +1,19 @@
 # src/database/models/conversation.py
-from datetime import datetime
 import enum
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Enum,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
 )
-from sqlalchemy import Enum
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 from uuid_extensions import uuid7

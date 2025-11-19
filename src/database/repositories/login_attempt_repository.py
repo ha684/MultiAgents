@@ -1,6 +1,5 @@
 # src/database/repositories/login_attempt_repository.py
 from datetime import datetime
-from typing import Optional
 from zoneinfo import ZoneInfo
 
 from src.database.models.user import LoginAttempt
@@ -15,7 +14,7 @@ class LoginAttemptRepository:
         self,
         email: str,
         success: bool,
-        failure_reason: Optional[str] = None,
+        failure_reason: str | None = None,
     ) -> LoginAttempt:
         """Record a login attempt"""
         try:

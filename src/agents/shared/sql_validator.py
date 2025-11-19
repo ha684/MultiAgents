@@ -4,7 +4,7 @@ SQL Validator - Ensures only safe SELECT queries are executed
 """
 
 import re
-from typing import Any, Dict, List
+from typing import Any
 
 import sqlparse
 from sqlparse.sql import Identifier, IdentifierList
@@ -50,7 +50,7 @@ class SqlValidator:
     ]
 
     @staticmethod
-    def validate_query(sql_query: str) -> Dict[str, Any]:
+    def validate_query(sql_query: str) -> dict[str, Any]:
         """
         Validates a SQL query to ensure it's safe for execution.
 
@@ -157,7 +157,7 @@ class SqlValidator:
         return result
 
     @staticmethod
-    def extract_table_names(sql_query: str) -> List[str]:
+    def extract_table_names(sql_query: str) -> list[str]:
         """
         Extracts table names from a SQL query.
 
@@ -185,7 +185,7 @@ class SqlValidator:
         return table_names
 
     @staticmethod
-    def validate_and_sanitize(sql_query: str) -> Dict[str, Any]:
+    def validate_and_sanitize(sql_query: str) -> dict[str, Any]:
         """
         Convenience method that validates and returns sanitized query.
 

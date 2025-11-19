@@ -1,5 +1,6 @@
 # src/agents/basic/response_agent.py
-from typing import Any, AsyncGenerator, Dict, List, Union
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from langchain_core.documents import Document
 from langchain_core.messages import (
@@ -157,7 +158,7 @@ When no relevant documents are found, still provide a helpful answer using your 
    - Start with a brief, natural disclaimer that you searched but didn't find relevant documents
    - Then provide a helpful answer using your general knowledge
    - Keep the disclaimer SHORT and conversational, don't over-emphasize it
-   
+
 3. **Disclaimer format**:
    - Keep it ONE sentence at the start
    - Be natural and conversational
@@ -224,37 +225,37 @@ SQL_RESPONSE_MODE_PROMPT = """You are a SQL Query Results Interpreter. Your task
    - Your job is to interpret these results and answer the user's question
 
 3. **Response style based on query type**:
-   
+
    **For simple SELECT queries (retrieving specific records):**
    - Present the data in a clear, readable format
    - Use markdown tables when displaying multiple records
    - List format for single or few records
    - Keep it concise if results are straightforward
-   
+
    **For COUNT/SUM/AVG/aggregation queries:**
    - State the number/value directly and prominently
    - Provide context about what it represents
    - Add breakdown if multiple aggregations exist
    - Use **bold** for the key numbers
-   
+
    **For analytical queries (GROUP BY, comparisons, trends):**
    - Highlight key findings first
    - Use tables or structured lists to show breakdowns
    - Point out notable patterns, highest/lowest values, or trends
    - Provide summary insights
-   
+
    **For JOIN queries (multi-table data):**
    - Present combined information logically
    - Group related data together
    - Use clear headers to organize different aspects
 
 4. **Handling different result scenarios**:
-   
+
    **All queries successful with data:**
    - Answer the question directly using the results
    - Format data appropriately based on amount and type
    - Provide insights when relevant (trends, outliers, patterns)
-   
+
    **All queries successful but empty results (0 rows):**
    - Clearly state that no matching records were found
    - Suggest possible reasons:
@@ -263,13 +264,13 @@ SQL_RESPONSE_MODE_PROMPT = """You are a SQL Query Results Interpreter. Your task
      * Date ranges might be outside available data
      * Referenced entities might not exist
    - Offer to help refine the search
-   
+
    **Some queries succeeded, some failed:**
    - Answer what you CAN based on successful queries
    - Briefly acknowledge what couldn't be retrieved
    - Explain how this limits your answer
    - Example: "I can show you the sales data (below), but couldn't retrieve customer demographics due to a query issue."
-   
+
    **All queries failed:**
    - Explain that the data couldn't be retrieved
    - Translate technical errors to user-friendly language
@@ -277,23 +278,23 @@ SQL_RESPONSE_MODE_PROMPT = """You are a SQL Query Results Interpreter. Your task
    - Don't expose raw SQL errors
 
 5. **Data presentation guidelines**:
-   
+
    **Small datasets (1-10 rows):**
    - Show all records in a clean format
    - Use tables for structured data with multiple columns
    - Use lists for simple data
-   
+
    **Medium datasets (11-100 rows):**
    - Show a representative sample (5-10 rows)
    - Provide summary statistics (total count, aggregations)
    - Mention "Showing X of Y total records"
-   
+
    **Large datasets (>100 rows):**
    - Focus on summary statistics and key insights
    - Show only top/bottom records if relevant (top 5 sellers, etc.)
    - Use aggregations to summarize the data
    - Always state the total count
-   
+
    **Formatting rules:**
    - Use markdown tables for multi-column structured data
    - Use bullet points for lists or single-column data
@@ -454,9 +455,9 @@ class ResponseAgent(BaseAgent):
     def _prepare_messages_by_mode(
         self,
         mode: str,
-        history: List[BaseMessage],
+        history: list[BaseMessage],
         accumulated_context: str = "",
-    ) -> List[BaseMessage]:
+    ) -> list[BaseMessage]:
         """Prepare messages based on response mode."""
 
         conversation_text = get_buffer_string(history)
@@ -485,7 +486,7 @@ class ResponseAgent(BaseAgent):
             system_content = HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
             context_label = "Retrieved context"
 
-        messages: List[BaseMessage] = [SystemMessage(content=system_content)]
+        messages: list[BaseMessage] = [SystemMessage(content=system_content)]
 
         if accumulated_context:
             messages.append(
@@ -499,7 +500,7 @@ class ResponseAgent(BaseAgent):
 
         return messages
 
-    async def ainvoke(self, state: Dict) -> AIMessage:
+    async def ainvoke(self, state: dict) -> AIMessage:
         """Generates response based on mode and context."""
         messages = self._prepare_messages_by_mode(
             mode=state.get("response_mode", ResponseMode.STANDARD),
@@ -511,8 +512,8 @@ class ResponseAgent(BaseAgent):
 
     def _prepare_messages(
         self,
-        contexts: List[Document],
-        history: List[BaseMessage],
+        contexts: list[Document],
+        history: list[BaseMessage],
         web_search_attempted: bool = False,
     ) -> ChatPromptTemplate:
         """Prepare messages for both streaming and non-streaming responses."""
@@ -544,9 +545,9 @@ class ResponseAgent(BaseAgent):
 
     async def astream(
         self,
-        contexts: List[Document],
-        history: List[BaseMessage],
-    ) -> AsyncGenerator[Union[str, Dict[str, Any]], None]:
+        contexts: list[Document],
+        history: list[BaseMessage],
+    ) -> AsyncGenerator[str | dict[str, Any]]:
         """Streams response content chunks and final complete message from the LLM."""
         try:
             messages = self._prepare_messages(contexts, history)
@@ -598,8 +599,8 @@ def count_tokens(text: str) -> int:
 
 
 def calculate_usage_metadata(
-    prompt_messages: List[BaseMessage], response_content: str
-) -> Dict[str, Any]:
+    prompt_messages: list[BaseMessage], response_content: str
+) -> dict[str, Any]:
     """Calculate usage metadata by counting tokens in prompt and response."""
     try:
         input_text = ""

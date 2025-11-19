@@ -1,15 +1,18 @@
 # src/rag/processors/strategy/naive.py
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from langchain.text_splitter import MarkdownTextSplitter
-from langchain_community.document_loaders import DirectoryLoader, UnstructuredFileLoader
-from langchain_community.document_loaders import UnstructuredWordDocumentLoader
-from langchain_community.document_loaders import UnstructuredMarkdownLoader
-from langchain_community.document_loaders import UnstructuredPowerPointLoader
-from langchain_community.document_loaders import UnstructuredXMLLoader
-from langchain_community.document_loaders import UnstructuredRSTLoader
+from langchain_community.document_loaders import (
+    DirectoryLoader,
+    UnstructuredFileLoader,
+    UnstructuredMarkdownLoader,
+    UnstructuredPowerPointLoader,
+    UnstructuredRSTLoader,
+    UnstructuredWordDocumentLoader,
+    UnstructuredXMLLoader,
+)
 from langchain_community.document_loaders.base import BaseLoader
 from langchain_community.document_loaders.csv_loader import CSVLoader
 from langchain_core.documents import Document as LangchainDocument
@@ -45,7 +48,7 @@ class NaiveStrategy(BaseStrategy):
         "csv",
     ]
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """
         Initialize the naive strategy.
 
@@ -60,7 +63,7 @@ class NaiveStrategy(BaseStrategy):
         self.chunk_size = config.get("chunk_size", 1800)
         self.chunk_overlap = config.get("chunk_overlap", 180)
 
-    def _get_loader(self, file_path: str, document: Optional[DBDocument]) -> BaseLoader:
+    def _get_loader(self, file_path: str, document: DBDocument | None) -> BaseLoader:
         """
         Get the appropriate document loader based on the file type.
 
@@ -97,8 +100,8 @@ class NaiveStrategy(BaseStrategy):
         )
 
     def _add_citation_metadata(
-        self, documents: List[LangchainDocument], full_text: str
-    ) -> List[LangchainDocument]:
+        self, documents: list[LangchainDocument], full_text: str
+    ) -> list[LangchainDocument]:
         """
         Add start and end character indices to document metadata for deep citation.
 
@@ -133,7 +136,7 @@ class NaiveStrategy(BaseStrategy):
 
     def chunk(
         self, file_path: str, document: DBDocument
-    ) -> Tuple[List[LangchainDocument], str]:
+    ) -> tuple[list[LangchainDocument], str]:
         """
         Process a file using Langchain's document loaders with deep citation support.
 
@@ -167,8 +170,8 @@ class NaiveStrategy(BaseStrategy):
                 chunk_size=self.chunk_size, chunk_overlap=self.chunk_overlap
             )
 
-            document_spliter: List[LangchainDocument] = []
-            unsplit_documents: List[LangchainDocument] = []
+            document_spliter: list[LangchainDocument] = []
+            unsplit_documents: list[LangchainDocument] = []
 
             for doc in docs:
                 splitter_value = doc.metadata.get("splitter", None)

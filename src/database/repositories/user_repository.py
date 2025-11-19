@@ -1,9 +1,9 @@
 # src/database/repositories/user_repository.py
 
 import asyncio
-from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
 import uuid
+from datetime import datetime, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, delete, func, update
@@ -16,7 +16,7 @@ from src.core.exceptions.auth_exceptions import (
     UserAlreadyExistsException,
     UserNotFoundException,
 )
-from src.core.security import TokenManager, PasswordManager
+from src.core.security import PasswordManager, TokenManager
 from src.database.models.user import (
     Permission,
     User,
@@ -74,7 +74,7 @@ class UserRepository:
                 raise
             raise DatabaseException("Failed to create user")
 
-    async def get_user_by_email(self, email: str) -> Optional[User]:
+    async def get_user_by_email(self, email: str) -> User | None:
         """Get user by email"""
         email_l = email.lower().strip()
 
@@ -110,7 +110,7 @@ class UserRepository:
             await asyncio.sleep(0.05)
             return await self.get_user_by_email(email)
 
-    async def get_user_by_id(self, user_id: str) -> Optional[User]:
+    async def get_user_by_id(self, user_id: str) -> User | None:
         """Get user by ID"""
         uid = str(user_id)
 
@@ -142,7 +142,7 @@ class UserRepository:
             await asyncio.sleep(0.05)
             return await self.get_user_by_id(user_id)
 
-    async def get_user_with_permissions(self, user_id: str) -> Optional[User]:
+    async def get_user_with_permissions(self, user_id: str) -> User | None:
         """Get user with their permissions"""
         try:
             async with DatabaseSession() as session:
@@ -160,7 +160,7 @@ class UserRepository:
             logger.error(f"Error getting user with permissions: {str(e)}")
             raise DatabaseException("Failed to retrieve user with permissions")
 
-    async def update_user(self, user_id: str, update_data: Dict[str, Any]) -> User:
+    async def update_user(self, user_id: str, update_data: dict[str, Any]) -> User:
         """Update user information"""
         try:
             async with DatabaseSession() as session:
@@ -209,7 +209,7 @@ class UserRepository:
             logger.error(f"Error deleting user: {str(e)}")
             raise DatabaseException("Failed to delete user")
 
-    async def verify_email(self, token: str) -> Optional[User]:
+    async def verify_email(self, token: str) -> User | None:
         """Verify user email with token"""
         try:
             async with DatabaseSession() as session:
@@ -350,7 +350,7 @@ class UserRepository:
             logger.error(f"Error counting users: {str(e)}")
             raise DatabaseException("Failed to count users")
 
-    async def get_users(self, offset: int, limit: int, order_by: Any) -> List[User]:
+    async def get_users(self, offset: int, limit: int, order_by: Any) -> list[User]:
         """Get users with pagination"""
         try:
             async with DatabaseSession() as session:
@@ -410,13 +410,15 @@ def _user_to_cache(u: User) -> dict:
         "email_verified": u.email_verified,
         "created_at": u.created_at.isoformat() if u.created_at else None,
         "updated_at": u.updated_at.isoformat() if u.updated_at else None,
-        "last_login_at": u.last_login_at.isoformat()
-        if getattr(u, "last_login_at", None)
-        else None,
+        "last_login_at": (
+            u.last_login_at.isoformat() if getattr(u, "last_login_at", None) else None
+        ),
         "failed_login_attempts": u.failed_login_attempts,
-        "account_locked_until": u.account_locked_until.isoformat()
-        if getattr(u, "account_locked_until", None)
-        else None,
+        "account_locked_until": (
+            u.account_locked_until.isoformat()
+            if getattr(u, "account_locked_until", None)
+            else None
+        ),
     }
 
 
@@ -441,6 +443,6 @@ def _user_from_cache(d: dict) -> User:
     )
 
 
-async def _invalidate_user_cache(user: User, old_email: Optional[str] = None):
+async def _invalidate_user_cache(user: User, old_email: str | None = None):
     await redis_client.del_key(USER_BY_ID, str(user.id))
     await redis_client.del_key(USER_BY_EMAIL, (old_email or user.email).lower())

@@ -1,16 +1,11 @@
 # src/rag/vectorstores/custom_qdrantvectorstore.py
+import uuid
+from collections.abc import AsyncGenerator, Iterable, Sequence
 from itertools import islice
 from typing import (
     Any,
-    AsyncGenerator,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
     override,
 )
-import uuid
 
 from langchain_core.documents import Document
 from langchain_qdrant import QdrantVectorStore, RetrievalMode
@@ -32,14 +27,14 @@ class CustomQdrantVectorStore(QdrantVectorStore):
         self,
         query: str,
         k: int = 4,
-        filter: Optional[models.Filter] = None,
-        search_params: Optional[models.SearchParams] = None,
+        filter: models.Filter | None = None,
+        search_params: models.SearchParams | None = None,
         offset: int = 0,
-        score_threshold: Optional[float] = None,
-        consistency: Optional[models.ReadConsistency] = None,
-        hybrid_fusion: Optional[models.FusionQuery] = None,
+        score_threshold: float | None = None,
+        consistency: models.ReadConsistency | None = None,
+        hybrid_fusion: models.FusionQuery | None = None,
         **kwargs: Any,
-    ) -> List[Tuple[Document, float]]:
+    ) -> list[tuple[Document, float]]:
         """Return docs most similar to query.
 
         Returns:
@@ -125,7 +120,7 @@ class CustomQdrantVectorStore(QdrantVectorStore):
     async def _build_vectors(
         self,
         texts: Iterable[str],
-    ) -> List[models.VectorStruct]:
+    ) -> list[models.VectorStruct]:
         if self.retrieval_mode == RetrievalMode.DENSE:
             batch_embeddings = await self.embeddings.embed_documents(list(texts))
             return [
@@ -166,7 +161,7 @@ class CustomQdrantVectorStore(QdrantVectorStore):
                     ),
                 }
                 for dense_vector, sparse_vector in zip(
-                    dense_embeddings, sparse_embeddings
+                    dense_embeddings, sparse_embeddings, strict=False
                 )
             ]
 
@@ -179,8 +174,8 @@ class CustomQdrantVectorStore(QdrantVectorStore):
     async def _generate_batches(
         self,
         texts: Iterable[str],
-        metadatas: Optional[List[dict]] = None,
-        ids: Optional[Sequence[str | int]] = None,
+        metadatas: list[dict] | None = None,
+        ids: Sequence[str | int] | None = None,
         batch_size: int = 64,
     ) -> AsyncGenerator[tuple[list[str | int], list[models.PointStruct]], Any]:
         texts_iterator = iter(texts)
@@ -210,6 +205,7 @@ class CustomQdrantVectorStore(QdrantVectorStore):
                     batch_ids,
                     vectors,
                     payloads,
+                    strict=False,
                 )
             ]
             yield batch_ids, points
@@ -218,11 +214,11 @@ class CustomQdrantVectorStore(QdrantVectorStore):
     async def add_texts(
         self,
         texts: Iterable[str],
-        metadatas: Optional[List[dict]] = None,
-        ids: Optional[Sequence[str | int]] = None,
+        metadatas: list[dict] | None = None,
+        ids: Sequence[str | int] | None = None,
         batch_size: int = 64,
         **kwargs: Any,
-    ) -> List[str | int]:
+    ) -> list[str | int]:
         """Add texts with embeddings to the vectorstore.
 
         Returns:
@@ -242,9 +238,9 @@ class CustomQdrantVectorStore(QdrantVectorStore):
     @override
     async def add_documents(
         self,
-        documents: List[Document],
+        documents: list[Document],
         **kwargs: Any,
-    ) -> List[str | int]:
+    ) -> list[str | int]:
         if "ids" not in kwargs:
             ids = [doc.id for doc in documents]
             if any(ids):
@@ -258,9 +254,9 @@ class CustomQdrantVectorStore(QdrantVectorStore):
     async def delete(
         self,
         collection_name: str,
-        ids: Optional[List[str | int]] = None,
+        ids: list[str | int] | None = None,
         **kwargs: Any,
-    ) -> Optional[bool]:
+    ) -> bool | None:
         """Delete documents by their ids.
 
         Args:
@@ -277,7 +273,7 @@ class CustomQdrantVectorStore(QdrantVectorStore):
         return result.status == models.UpdateStatus.COMPLETED
 
     @override
-    async def get_by_ids(self, ids: Sequence[str | int], /) -> List[Document]:
+    async def get_by_ids(self, ids: Sequence[str | int], /) -> list[Document]:
         results = await self.client.retrieve(
             collection_name=self.collection_name,
             ids=ids,

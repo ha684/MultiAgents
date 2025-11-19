@@ -1,8 +1,9 @@
 # src/domain/schemas/chat.py
 from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, List, Literal, Optional, Self
+from typing import Annotated, Any, Literal, Self
 from zoneinfo import ZoneInfo
 
 from langchain_core.documents import Document
@@ -55,7 +56,7 @@ class Message(BaseModel):
     role: Literal["user", "agent"]
     parts: list[Part]
     metadata: dict[str, Any] | None = None
-    retrieval_context: Optional[RetrievalContext] = None
+    retrieval_context: RetrievalContext | None = None
 
 
 # Retrieval Context Schemas
@@ -69,12 +70,12 @@ class RetrievalContext(BaseModel):
     )
     total_retrieved: int
     total_cited: int
-    cited_chunks: List[Document]
+    cited_chunks: list[Document]
     search_method: Literal["rag", "web"]
     model_config = {"arbitrary_types_allowed": True}
 
     @field_serializer("cited_chunks")
-    def serialize_documents(self, documents: List[Document]) -> List[dict]:
+    def serialize_documents(self, documents: list[Document]) -> list[dict]:
         """Serialize LangChain Document objects to dicts"""
         return [
             {"page_content": doc.page_content, "metadata": doc.metadata}
@@ -132,14 +133,14 @@ class Citation(BaseModel):
 
 
 class SupportCitation(BaseModel):
-    support_citation: List[Citation] = Field(
+    support_citation: list[Citation] = Field(
         ...,
         description="A list of citations that support the answer to the query.",
     )
 
 
 class CitationIndexes(BaseModel):
-    indexes: List[int | str]
+    indexes: list[int | str]
 
 
 class Reference(BaseModel):

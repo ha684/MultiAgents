@@ -1,11 +1,9 @@
 # src/services/chunks_service.py
-from typing import List
 
 from langchain_core.documents import Document
 
 from src.core.exceptions.chunk_exceptions import ChunkNotFoundError
-from src.rag.vectorstores import vector_retrieval
-from src.rag.vectorstores import vector_storage
+from src.rag.vectorstores import vector_retrieval, vector_storage
 from src.utils.decorators import singleton
 from src.utils.reference import normalize_ref
 
@@ -19,7 +17,7 @@ class ChunksService:
             raise ChunkNotFoundError(f"Chunk with ID {chunk_id} not found")
         return documents[0]
 
-    async def get_chunks_by_ids(self, chunk_ids: List[str]) -> List[Document]:
+    async def get_chunks_by_ids(self, chunk_ids: list[str]) -> list[Document]:
         """
         Retrieve multiple chunks by their IDs and group them by document.
 
@@ -37,7 +35,7 @@ class ChunksService:
 
         return formatted_documents
 
-    async def get_chunks_by_doc_id(self, doc_id: str) -> List[Document]:
+    async def get_chunks_by_doc_id(self, doc_id: str) -> list[Document]:
         """Get chunks by document ID.
 
         Args:
@@ -51,7 +49,7 @@ class ChunksService:
             raise ChunkNotFoundError(f"No chunks found for document ID {doc_id}")
         return chunks
 
-    async def get_chunk_ids_by_doc_id(self, doc_id: str) -> List[str]:
+    async def get_chunk_ids_by_doc_id(self, doc_id: str) -> list[str]:
         """Get chunk IDs by document ID.
 
         Args:

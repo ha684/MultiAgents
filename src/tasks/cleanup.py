@@ -1,5 +1,5 @@
 # src/tasks/cleanup.py
-from typing import Any, Dict
+from typing import Any
 
 from celery import shared_task
 
@@ -20,7 +20,7 @@ from src.utils.logger_conf import logger
     time_limit=10 * 60,  # 10 minutes
     acks_late=True,
 )
-def cleanup_timeout_documents(self) -> Dict[str, Any]:
+def cleanup_timeout_documents(self) -> dict[str, Any]:
     """
     Cleanup documents that have been stuck in processing status for more than 1 hour.
     Sets them to timeout status and publishes events.

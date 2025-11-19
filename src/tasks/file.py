@@ -1,22 +1,22 @@
 # src/tasks/file.py
 import asyncio
-from contextlib import asynccontextmanager
-from datetime import datetime
 import json
 import os
-from pathlib import Path
 import random
 import time
-from typing import Any, Dict, List
 import uuid
+from contextlib import asynccontextmanager
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
+import httpx
+import requests
 from celery import Task, shared_task
 from celery.exceptions import SoftTimeLimitExceeded, WorkerLostError
 from celery.signals import worker_process_init, worker_process_shutdown
-import httpx
 from langchain_core.documents import Document as LangchainDocument
-import requests
 
 from src.core.config.settings import settings
 from src.database import document_repository
@@ -32,7 +32,6 @@ from src.rag.vectorstores import vector_storage
 from src.tasks.qac import generate_qa_pairs_async
 from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 from src.utils.logger_conf import logger
-
 
 _loop = None
 _temp_files_cache = set()
@@ -105,7 +104,7 @@ async def temp_file_manager(document_id: uuid.UUID, filename: str):
 
 async def _process_document_async(
     document_id: uuid.UUID, retry_count: int = 0
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Optimized async document processing with better error handling and resource management"""
     start_time = time.time()
     logger.info(f"Processing document {document_id} (attempt {retry_count + 1})")
@@ -228,8 +227,8 @@ async def _process_document_async(
 
 
 async def _prepare_chunks_with_metadata(
-    chunks: List[LangchainDocument], document: DBDocument
-) -> List[LangchainDocument]:
+    chunks: list[LangchainDocument], document: DBDocument
+) -> list[LangchainDocument]:
     """Process chunks and extract metadata for the document"""
     # try:
     #     extracted_metadata = extract_metadata_from_text_or_document(chunks)
@@ -260,7 +259,7 @@ async def _prepare_chunks_with_metadata(
 
 
 async def _generate_qa_pairs_with_error_handling(
-    document_id: uuid.UUID, kb_id: uuid.UUID, chunks: List[LangchainDocument]
+    document_id: uuid.UUID, kb_id: uuid.UUID, chunks: list[LangchainDocument]
 ):
     """Generate QA pairs with error handling - don't fail main processing"""
     try:
@@ -350,7 +349,7 @@ async def _update_document_status(
     max_retries=3,
     queue="document_processing",
 )
-def process_document(self: Task, document_id: str) -> Dict[str, Any]:
+def process_document(self: Task, document_id: str) -> dict[str, Any]:
     """
     Process a document using the specified strategy.
 

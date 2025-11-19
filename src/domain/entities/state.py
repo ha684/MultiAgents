@@ -1,5 +1,5 @@
 # src/agents/graph/state.py
-from typing import Any, Dict, List, Literal, Optional, Set, TypedDict
+from typing import Any, Literal, TypedDict
 
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
@@ -20,14 +20,14 @@ class VerificationResult(TypedDict):
 
     sufficient: bool
     confidence: float
-    missing_aspects: List[str]
+    missing_aspects: list[str]
 
 
 class SearchResult(TypedDict):
     """Search result from search operations"""
 
     query: str
-    documents: List[Document]
+    documents: list[Document]
     search_type: Literal["rag", "web"]
 
 
@@ -38,7 +38,7 @@ class RetrievalContext(TypedDict):
     contextualized_query: str
     total_retrieved: int
     total_cited: int
-    cited_chunks: List[Document]
+    cited_chunks: list[Document]
     search_method: Literal["rag", "web"]
 
 
@@ -46,20 +46,20 @@ class ExecutionRecord(TypedDict):
     """Record of a subgraph execution attempt"""
 
     subgraph: str
-    error: Optional[str]
+    error: str | None
     timestamp: str
-    result_summary: Optional[str]
+    result_summary: str | None
 
 
 class ReflectionResult(TypedDict):
     """Result from reflection agent"""
 
     is_sufficient: bool
-    missing_aspects: List[str]
+    missing_aspects: list[str]
     reasoning: str
     suggested_next_action: str  # "search_more" | "switch_strategy" | "respond"
-    refined_query: Optional[str]
-    subgraphs_to_retry: List[str]
+    refined_query: str | None
+    subgraphs_to_retry: list[str]
 
 
 class SearchIteration(TypedDict):
@@ -72,18 +72,18 @@ class SearchIteration(TypedDict):
     documents_count: int
     timestamp: str
     success: bool  # Whether this subgraph returned useful results
-    error: Optional[str]  # Error message if subgraph failed
+    error: str | None  # Error message if subgraph failed
 
 
 class MainGraphState(TypedDict):
     """Enhanced state for agentic orchestrator"""
 
-    conversation: List[BaseMessage]
-    main_context: Optional[str]
-    cited_documents: Optional[List[Document]]
+    conversation: list[BaseMessage]
+    main_context: str | None
+    cited_documents: list[Document] | None
 
-    final_answer: Optional[str]
-    response_metadata: Optional[Dict[str, Any]]
+    final_answer: str | None
+    response_metadata: dict[str, Any] | None
 
     accumulated_context: str
     route_mode: str
@@ -92,13 +92,13 @@ class MainGraphState(TypedDict):
 class SimpleSearchState(TypedDict):
     """State for simple search operations"""
 
-    conversation: List[BaseMessage]
+    conversation: list[BaseMessage]
     direction: str
-    cited_documents: List[Document]
-    response_metadata: Dict[str, Any]
+    cited_documents: list[Document]
+    response_metadata: dict[str, Any]
 
-    seen_urls: Set[str]
-    seen_doc_ids: Set[str]
+    seen_urls: set[str]
+    seen_doc_ids: set[str]
     duplicate_skip_ratio: float
     early_terminate: bool
 
@@ -110,9 +110,9 @@ class ThinkingState(TypedDict, total=False):
     """
 
     # ===== Core Input/Output =====
-    conversation: List[BaseMessage]  # User conversation history
+    conversation: list[BaseMessage]  # User conversation history
     final_answer: str  # Final synthesized response
-    response_metadata: Dict[str, Any]  # Metadata for response
+    response_metadata: dict[str, Any]  # Metadata for response
 
     # ===== Current Iteration Context =====
     iteration_count: int  # Current iteration number (0-indexed)
@@ -123,25 +123,25 @@ class ThinkingState(TypedDict, total=False):
 
     # ===== Accumulated Research =====
     accumulated_context: str  # Compressed knowledge from all iterations
-    learnings: List[str]  # SIMPLIFIED: Human-readable log of learnings
+    learnings: list[str]  # SIMPLIFIED: Human-readable log of learnings
 
     # ===== Citation Management =====
     citation_counter: int  # Next citation number to use
-    cited_documents: List[Document]  # All documents cited so far
-    citation_map: List[Dict[str, Any]]  # Map of citation index -> metadata
+    cited_documents: list[Document]  # All documents cited so far
+    citation_map: list[dict[str, Any]]  # Map of citation index -> metadata
 
     # ===== Deduplication Tracking =====
-    seen_content_hashes: List[str]
+    seen_content_hashes: list[str]
 
     # ===== Response Mode =====
     response_mode: str  # ResponseMode enum value
 
     # ===== Flags for Path Tracking =====
     has_tool_results: bool  # Track if we've executed ANY tools (not just reasoning)
-    execution_history: List[Dict[str, Any]] = []  # Track all attempts
+    execution_history: list[dict[str, Any]] = []  # Track all attempts
     consecutive_failures: int = 0
     # ===== Internal Control (private, prefixed with _) =====
-    _temp_documents: List[Document]  # Temporary docs from current iteration
+    _temp_documents: list[Document]  # Temporary docs from current iteration
     _sql_result: str  # Temporary SQL result from current iteration
     _is_sql_iteration: bool  # Flag to indicate SQL iteration
     _should_continue: bool  # Should continue iterating?
@@ -152,29 +152,29 @@ class ThinkingState(TypedDict, total=False):
 class SqlState(TypedDict):
     """State for SQL query operations"""
 
-    conversation: List[BaseMessage]
+    conversation: list[BaseMessage]
 
-    is_relevant: Optional[bool]
-    irrelevance_reason: Optional[str]
-    suggested_rephrase: Optional[str]
+    is_relevant: bool | None
+    irrelevance_reason: str | None
+    suggested_rephrase: str | None
 
-    analysis: Optional[Dict]
+    analysis: dict | None
 
-    generated_queries: Optional[List[Dict]]
-    query_results: Optional[List[Dict]]
-    chart_spec: Optional[Dict]
+    generated_queries: list[dict] | None
+    query_results: list[dict] | None
+    chart_spec: dict | None
 
-    response_metadata: Dict
+    response_metadata: dict
 
 
 class NormalGraphState(TypedDict):
     """State for normal graph operations"""
 
     final_answer: str
-    response_metadata: Dict
-    conversation: List[BaseMessage]
+    response_metadata: dict
+    conversation: list[BaseMessage]
     selected_subgraph: str
     direction: str
-    cited_documents: List[Document]
+    cited_documents: list[Document]
     response_mode: ResponseMode
     accumulated_context: str

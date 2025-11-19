@@ -1,5 +1,5 @@
 # src/middlewares/rate_limit.py
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from fastapi import Request, Response, status
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -94,12 +94,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         ):
             return True
 
-        if request.method == "OPTIONS":
-            return True
+        return request.method == "OPTIONS"
 
-        return False
-
-    def _get_rate_config(self, request: Request) -> Optional[dict]:
+    def _get_rate_config(self, request: Request) -> dict | None:
         """Get rate limit configuration for the current route"""
         path = request.url.path
 

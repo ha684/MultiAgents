@@ -1,13 +1,15 @@
 # src/agents/basic/base.py
 from __future__ import annotations
-from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, Iterable, List, Optional, Union
 
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Iterable
+from typing import Any
+
+import tiktoken
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import Tool
-import tiktoken
 
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.core.config.llm_config import SupportedLLMProviders
@@ -37,14 +39,14 @@ class BaseAgent(ABC):
 
     async def iterative_llm_call_text(
         self,
-        messages: List[BaseMessage],
+        messages: list[BaseMessage],
         llm_with_tools: BaseChatModel,
-        available_tools: Dict[str, Tool],
+        available_tools: dict[str, Tool],
         max_iterations: int,
         retry_prompt: str,
         fallback_value: str = "",
         error_context: str = "Agent",
-    ) -> Union[str]:
+    ) -> str:
         iteration = 0
 
         while iteration < max_iterations:
@@ -84,14 +86,14 @@ class BaseAgent(ABC):
 
     async def iterative_llm_call_structured(
         self,
-        messages: List[BaseMessage],
+        messages: list[BaseMessage],
         llm_with_tools: BaseChatModel,
-        available_tools: Dict[str, Tool],
+        available_tools: dict[str, Tool],
         max_iterations: int,
-        parse_fn: Callable[[str], Optional[Dict[str, Any]]],
+        parse_fn: Callable[[str], dict[str, Any] | None],
         retry_prompt: str,
         error_context: str = "Agent",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         iteration = 0
         while iteration < max_iterations:
             iteration += 1

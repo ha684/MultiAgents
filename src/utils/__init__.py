@@ -2,7 +2,7 @@
 import json
 import re
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
@@ -79,7 +79,7 @@ def get_last_message_id(m: Message | None) -> str | None:
         return None
 
 
-def format_context_for_response(documents: List[Document]) -> str:
+def format_context_for_response(documents: list[Document]) -> str:
     if not documents:
         return ""
 
@@ -90,12 +90,12 @@ def format_context_for_response(documents: List[Document]) -> str:
 
 
 def truncate_docs_by_tokens(
-    documents: List[Document],
+    documents: list[Document],
     max_tokens: int,
     tokenizer: tiktoken.Encoding,
     min_tokens_per_doc: int = 0,
     add_ellipsis: bool = True,
-) -> List[Document]:
+) -> list[Document]:
     if not documents:
         return []
 
@@ -108,7 +108,7 @@ def truncate_docs_by_tokens(
 
     quotas = [max(min_tokens_per_doc, max_tokens * (L / total)) for L in lens]
     floors = [int(q) for q in quotas]
-    floors = [min(f, L) for f, L in zip(floors, lens)]
+    floors = [min(f, L) for f, L in zip(floors, lens, strict=False)]
     allocated = floors[:]
     leftover = max_tokens - sum(allocated)
 
@@ -138,7 +138,7 @@ def truncate_docs_by_tokens(
     return final_docs
 
 
-def normalize_url(meta: Dict[str, Any]) -> str:
+def normalize_url(meta: dict[str, Any]) -> str:
     """Normalize URL by removing tracking params and fragments."""
     url = (
         meta.get("url")

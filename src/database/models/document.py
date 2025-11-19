@@ -1,7 +1,6 @@
 # src/database/models/document.py
-from datetime import datetime
-from typing import List, Optional
 import uuid
+from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
@@ -28,8 +27,8 @@ class KnowledgeBase(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid7
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    user_id: Mapped[Optional[str]] = mapped_column(String(255))
+    description: Mapped[str | None] = mapped_column(Text)
+    user_id: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -38,11 +37,11 @@ class KnowledgeBase(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    documents: Mapped[List["Document"]] = relationship(
+    documents: Mapped[list["Document"]] = relationship(
         "Document", back_populates="knowledge_base", cascade="all, delete-orphan"
     )
 
-    qa_pairs: Mapped[List["DocumentQA"]] = relationship(
+    qa_pairs: Mapped[list["DocumentQA"]] = relationship(
         "DocumentQA", back_populates="knowledge_base", cascade="all, delete-orphan"
     )
 
@@ -66,14 +65,14 @@ class Document(Base):
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(500), nullable=False)  # Path in MinIO
-    file_size: Mapped[Optional[int]] = mapped_column(Integer)  # File size in bytes
+    file_size: Mapped[int | None] = mapped_column(Integer)  # File size in bytes
     file_type: Mapped[str] = mapped_column(
         String(50), nullable=False
     )  # pdf, docx, txt, etc.
-    mime_type: Mapped[Optional[str]] = mapped_column(String(100))
-    doc_metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    mime_type: Mapped[str | None] = mapped_column(String(100))
+    doc_metadata: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    is_inactive: Mapped[Optional[bool]] = mapped_column(
+    is_inactive: Mapped[bool | None] = mapped_column(
         Boolean, default=False
     )  # Flag to indicate if the document is deactivated
 
@@ -81,7 +80,7 @@ class Document(Base):
     status: Mapped[str] = mapped_column(
         String(50), default="pending"
     )  # uploaded, processing, processed, failed
-    processing_error: Mapped[Optional[str]] = mapped_column(
+    processing_error: Mapped[str | None] = mapped_column(
         Text
     )  # Error message if processing failed
 
@@ -92,7 +91,7 @@ class Document(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
-    uploaded_by: Mapped[Optional[str]] = mapped_column(
+    uploaded_by: Mapped[str | None] = mapped_column(
         String(255)
     )  # User ID or username who uploaded the document
 
@@ -100,16 +99,16 @@ class Document(Base):
     total_chunks: Mapped[int] = mapped_column(
         Integer, default=0
     )  # Number of chunks created from this document
-    processed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    full_text_content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    full_text_content: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Relationships
     knowledge_base: Mapped["KnowledgeBase"] = relationship(
         "KnowledgeBase", back_populates="documents"
     )
 
-    qa_pairs: Mapped[List["DocumentQA"]] = relationship(
+    qa_pairs: Mapped[list["DocumentQA"]] = relationship(
         "DocumentQA", back_populates="document", cascade="all, delete-orphan"
     )
 

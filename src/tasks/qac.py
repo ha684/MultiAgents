@@ -1,5 +1,4 @@
 # src/tasks/qac.py
-from typing import List
 from uuid import UUID
 
 from src.agents.basic import qac_agent
@@ -9,7 +8,7 @@ from src.utils.logger_conf import logger
 
 
 async def generate_qa_pairs_async(
-    document_id: UUID, kb_id: UUID, contexts: List[str]
+    document_id: UUID, kb_id: UUID, contexts: list[str]
 ) -> None:
     """
     Generate QA pairs asynchronously.

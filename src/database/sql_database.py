@@ -4,7 +4,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Iterable, List, Literal, Optional, Sequence, Union
+from collections.abc import Iterable, Sequence
+from typing import Any, Literal
 
 from sqlalchemy import (
     MetaData,
@@ -14,10 +15,10 @@ from sqlalchemy import (
 )
 from sqlalchemy.engine import URL, Result
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.schema import CreateTable
 from sqlalchemy.sql.expression import Executable
 from sqlalchemy.types import NullType
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 
 from src.dependencies.database_session import DatabaseSession
 from src.utils.logger_conf import logger
@@ -57,13 +58,13 @@ class AsyncSQLDatabase:
     def __init__(
         self,
         engine: AsyncEngine,
-        schema: Optional[str] = None,
-        metadata: Optional[MetaData] = None,
-        ignore_tables: Optional[List[str]] = None,
-        include_tables: Optional[List[str]] = None,
+        schema: str | None = None,
+        metadata: MetaData | None = None,
+        ignore_tables: list[str] | None = None,
+        include_tables: list[str] | None = None,
         sample_rows_in_table_info: int = 3,
         indexes_in_table_info: bool = False,
-        custom_table_info: Optional[dict] = None,
+        custom_table_info: dict | None = None,
         view_support: bool = False,
         max_string_length: int = 300,
     ):
@@ -146,11 +147,11 @@ class AsyncSQLDatabase:
                 intersection = set(self._custom_table_info).intersection(
                     self._all_tables
                 )
-                self._custom_table_info = dict(
-                    (table, self._custom_table_info[table])
+                self._custom_table_info = {
+                    table: self._custom_table_info[table]
                     for table in self._custom_table_info
                     if table in intersection
-                )
+                }
 
             await conn.run_sync(
                 lambda sync_conn: self._metadata.reflect(
@@ -165,10 +166,10 @@ class AsyncSQLDatabase:
 
     @staticmethod
     def from_uri(
-        database_uri: Union[str, URL],
-        engine_args: Optional[dict] = None,
+        database_uri: str | URL,
+        engine_args: dict | None = None,
         **kwargs: Any,
-    ) -> "AsyncSQLDatabase":
+    ) -> AsyncSQLDatabase:
         """Construct an async SQLAlchemy engine from URI."""
         _engine_args = engine_args or {}
         return AsyncSQLDatabase(
@@ -192,7 +193,7 @@ class AsyncSQLDatabase:
         return await self.get_table_info()
 
     async def get_table_info(
-        self, table_names: Optional[List[str]] = None, get_col_comments: bool = False
+        self, table_names: list[str] | None = None, get_col_comments: bool = False
     ) -> str:
         """Get information about specified tables."""
         await self._initialize()
@@ -230,11 +231,11 @@ class AsyncSQLDatabase:
                 continue
 
             try:
-                for k, v in table.columns.items():
+                for _k, v in table.columns.items():
                     if type(v.type) is NullType:
                         table._columns.remove(v)
             except AttributeError:
-                for k, v in dict(table.columns).items():
+                for _k, v in dict(table.columns).items():
                     if type(v.type) is NullType:
                         table._columns.remove(v)
 
@@ -280,8 +281,9 @@ class AsyncSQLDatabase:
         """Get table indexes asynchronously."""
         async with self._engine.connect() as conn:
             result = await conn.execute(
-                text("""
-                    SELECT 
+                text(
+                    """
+                    SELECT
                         i.relname as name,
                         ix.indisunique as unique,
                         ARRAY_AGG(a.attname ORDER BY a.attnum) as column_names
@@ -292,7 +294,8 @@ class AsyncSQLDatabase:
                     WHERE t.relname = :table_name
                     AND t.relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = :schema)
                     GROUP BY i.relname, ix.indisunique
-                """),
+                """
+                ),
                 {"table_name": table.name, "schema": self._schema or "public"},
             )
             indexes = []
@@ -312,12 +315,9 @@ class AsyncSQLDatabase:
         try:
             async with self._engine.connect() as connection:
                 sample_rows_result = await connection.execute(command)
-                sample_rows = list(
-                    map(
-                        lambda ls: [str(i)[:100] for i in ls],
-                        sample_rows_result.fetchall(),
-                    )
-                )
+                sample_rows = [
+                    [str(i)[:100] for i in ls] for ls in sample_rows_result.fetchall()
+                ]
 
             sample_rows_str = "\n".join(["\t".join(row) for row in sample_rows])
 
@@ -332,12 +332,12 @@ class AsyncSQLDatabase:
 
     async def _execute(
         self,
-        command: Union[str, Executable],
+        command: str | Executable,
         fetch: Literal["all", "one", "cursor"] = "all",
         *,
-        parameters: Optional[Dict[str, Any]] = None,
-        execution_options: Optional[Dict[str, Any]] = None,
-    ) -> Union[Sequence[Dict[str, Any]], Result]:
+        parameters: dict[str, Any] | None = None,
+        execution_options: dict[str, Any] | None = None,
+    ) -> Sequence[dict[str, Any]] | Result:
         """Execute SQL command through DatabaseSession."""
         parameters = parameters or {}
         execution_options = execution_options or {}
@@ -378,13 +378,13 @@ class AsyncSQLDatabase:
 
     async def run(
         self,
-        command: Union[str, Executable],
+        command: str | Executable,
         fetch: Literal["all", "one", "cursor"] = "all",
         include_columns: bool = False,
         *,
-        parameters: Optional[Dict[str, Any]] = None,
-        execution_options: Optional[Dict[str, Any]] = None,
-    ) -> Union[str, Sequence[Dict[str, Any]], Result[Any]]:
+        parameters: dict[str, Any] | None = None,
+        execution_options: dict[str, Any] | None = None,
+    ) -> str | Sequence[dict[str, Any]] | Result[Any]:
         """Execute a SQL command and return a string representing the results."""
         result = await self._execute(
             command, fetch, parameters=parameters, execution_options=execution_options
@@ -410,7 +410,7 @@ class AsyncSQLDatabase:
             return res
 
     async def get_table_info_no_throw(
-        self, table_names: Optional[List[str]] = None
+        self, table_names: list[str] | None = None
     ) -> str:
         """Get information about specified tables without throwing exceptions."""
         try:
@@ -424,9 +424,9 @@ class AsyncSQLDatabase:
         fetch: Literal["all", "one"] = "all",
         include_columns: bool = False,
         *,
-        parameters: Optional[Dict[str, Any]] = None,
-        execution_options: Optional[Dict[str, Any]] = None,
-    ) -> Union[str, Sequence[Dict[str, Any]], Result[Any]]:
+        parameters: dict[str, Any] | None = None,
+        execution_options: dict[str, Any] | None = None,
+    ) -> str | Sequence[dict[str, Any]] | Result[Any]:
         """Execute a SQL command and return a string representing the results without throwing exceptions."""
         try:
             return await self.run(
@@ -440,7 +440,7 @@ class AsyncSQLDatabase:
             logger.error(f"Error executing command: {command}, error: {e}")
             return f"Error: {e}"
 
-    async def get_context(self) -> Dict[str, Any]:
+    async def get_context(self) -> dict[str, Any]:
         """Return db context that you may want in agent prompt."""
         await self._initialize()
         table_names = list(self.get_usable_table_names())

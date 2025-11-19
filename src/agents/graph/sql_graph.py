@@ -4,9 +4,11 @@ SQL Graph - Text-to-SQL subgraph for database querying with natural language
 """
 
 from __future__ import annotations
-import json
-from typing import Any, Dict, List, Optional
 
+import json
+from typing import Any
+
+import pandas as pd
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -16,7 +18,6 @@ from langchain_core.messages import (
 )
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-import pandas as pd
 
 from src.agents.graph.base import GraphAgentBase
 from src.agents.prompts.agent_prompts import PromptTemplates
@@ -75,7 +76,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         conversation_text = get_buffer_string(state["conversation"])
 
-        messages: List[BaseMessage] = [
+        messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.RELEVANCE_VALIDATION_SYSTEM_PROMPT),
             AIMessage(
                 content=f"Available tables: {available_tables}\n\nDatabase schema:\n{schema_info}"
@@ -147,7 +148,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         )
         return "analyze_query"
 
-    async def analyze_query_node(self, state: SqlState) -> Dict[str, Any]:
+    async def analyze_query_node(self, state: SqlState) -> dict[str, Any]:
         """
         Analyzes user query to determine:
         1. What data is needed
@@ -160,7 +161,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         conversation_text = get_buffer_string(state["conversation"])
 
-        messages: List[BaseMessage] = [
+        messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.SQL_ANALYSIS_SYSTEM_PROMPT),
             AIMessage(content=f"Database schema:\n{schema_info}"),
             HumanMessage(
@@ -199,7 +200,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         return {"analysis": response}
 
-    async def generate_sql_queries_node(self, state: SqlState) -> Dict[str, Any]:
+    async def generate_sql_queries_node(self, state: SqlState) -> dict[str, Any]:
         """
         Generates SQL queries based on the analysis.
         Can generate multiple queries if needed for complex requests.
@@ -225,7 +226,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         conversation_text = get_buffer_string(state["conversation"])
 
-        messages: List[BaseMessage] = [
+        messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.SQL_GENERATION_SYSTEM_PROMPT),
             AIMessage(
                 content=f"Database schema:\n{schema_info}\n\nQuery plan:\n{json.dumps(query_plan, indent=2)}"
@@ -272,7 +273,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
             },
         }
 
-    async def validate_queries_node(self, state: SqlState) -> Dict[str, Any]:
+    async def validate_queries_node(self, state: SqlState) -> dict[str, Any]:
         """
         Validates all generated SQL queries.
         Ensures they are SELECT-only and safe to execute.
@@ -353,7 +354,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         )
         return "execute_queries"
 
-    async def execute_queries_node(self, state: SqlState) -> Dict[str, Any]:
+    async def execute_queries_node(self, state: SqlState) -> dict[str, Any]:
         """
         Executes all validated SQL queries sequentially.
         Uses DatabaseSession for proper transaction management.
@@ -373,9 +374,9 @@ class SqlGraph(GraphAgentBase[SqlState]):
             }
 
         logger.info(f"[execute_queries] Executing {len(validation_results)} queries.")
-        all_results: List[Dict[str, Any]] = []
+        all_results: list[dict[str, Any]] = []
 
-        for idx, validation_info in enumerate(validation_results):
+        for _idx, validation_info in enumerate(validation_results):
             sanitized_query = validation_info["validation"]["sanitized_query"]
             is_valid = validation_info["validation"]["is_valid"]
             purpose = validation_info["purpose"]
@@ -412,7 +413,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 )
                 continue
 
-            rows: List[Dict[str, Any]] = json.loads(result) or []
+            rows: list[dict[str, Any]] = json.loads(result) or []
             total_rows = len(rows)
             truncated = total_rows > MAX_ROWS_PER_QUERY
             preview_rows = rows[:MAX_ROWS_PER_QUERY]
@@ -462,7 +463,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         return END
 
-    async def generate_chart_node(self, state: SqlState) -> Dict[str, Any]:
+    async def generate_chart_node(self, state: SqlState) -> dict[str, Any]:
         """
         Generates Vega-Lite chart specification based on query results.
         Only called when analysis indicates visualization is appropriate.
@@ -493,9 +494,11 @@ class SqlGraph(GraphAgentBase[SqlState]):
                     {
                         "purpose": result["purpose"],
                         "sample_data": result["results"][:3],
-                        "columns": list(result["results"][0].keys())
-                        if result["results"]
-                        else [],
+                        "columns": (
+                            list(result["results"][0].keys())
+                            if result["results"]
+                            else []
+                        ),
                         "statistical_summary": statistical_summary_str,
                     }
                 )
@@ -509,7 +512,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         chart_type = state.get("analysis", {}).get("chart_type", "auto")
         conversation_text = get_buffer_string(state["conversation"])
 
-        messages: List[BaseMessage] = [
+        messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.CHART_GENERATION_SYSTEM_PROMPT),
             AIMessage(
                 content=f"Suggested chart type: {chart_type}\n\nQuery results summary:\n{json.dumps(data_summary, indent=2, default=str)}"
@@ -601,7 +604,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         return workflow.compile(name=self.graph_name)
 
 
-def parse_sql_analysis_response(content: str) -> Optional[SqlAnalysisSchema]:
+def parse_sql_analysis_response(content: str) -> SqlAnalysisSchema | None:
     """Parse SQL analysis response"""
     try:
         parsed = parse_response(content)
@@ -619,7 +622,7 @@ def parse_sql_analysis_response(content: str) -> Optional[SqlAnalysisSchema]:
         return None
 
 
-def parse_sql_generation_response(content: str) -> Optional[SqlGenerationSchema]:
+def parse_sql_generation_response(content: str) -> SqlGenerationSchema | None:
     """Parse SQL generation response"""
     try:
         parsed = parse_response(content)
@@ -637,7 +640,7 @@ def parse_sql_generation_response(content: str) -> Optional[SqlGenerationSchema]
         return None
 
 
-def parse_chart_generation_response(content: str) -> Optional[ChartGenerationSchema]:
+def parse_chart_generation_response(content: str) -> ChartGenerationSchema | None:
     """Parse chart generation response"""
     try:
         parsed = parse_response(content)
@@ -657,7 +660,7 @@ def parse_chart_generation_response(content: str) -> Optional[ChartGenerationSch
 
 def parse_relevance_validation_response(
     content: str,
-) -> Optional[RelevanceValidationSchema]:
+) -> RelevanceValidationSchema | None:
     """Parse relevance validation response"""
     try:
         parsed = parse_response(content)

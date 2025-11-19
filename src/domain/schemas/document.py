@@ -1,9 +1,9 @@
 # src/domain/schemas/document.py
+import json
+import uuid
 from datetime import datetime
 from enum import Enum
-import json
-from typing import Any, List, Optional
-import uuid
+from typing import Any
 
 from pydantic import BaseModel, field_validator
 
@@ -23,26 +23,26 @@ class DocumentResponse(BaseModel):
     id: uuid.UUID
     knowledge_base_id: uuid.UUID
     filename: str
-    description: Optional[str] = None
+    description: str | None = None
     original_filename: str
     file_path: str
-    file_size: Optional[int]
+    file_size: int | None
     file_type: str
-    mime_type: Optional[str]
+    mime_type: str | None
     status: DocumentStatusEnum
-    processing_error: Optional[str]
+    processing_error: str | None
     created_at: datetime
     updated_at: datetime
-    uploaded_by: Optional[str]
+    uploaded_by: str | None
     total_chunks: int
-    processed_at: Optional[datetime]
-    doc_metadata: Optional[dict] = None
+    processed_at: datetime | None
+    doc_metadata: dict | None = None
 
     @field_validator(
         "doc_metadata", mode="before"
     )  # 'before' means it runs before type validation
     @classmethod
-    def parse_config_data(cls, v: Any) -> Optional[dict]:
+    def parse_config_data(cls, v: Any) -> dict | None:
         if v is None:
             return None  # Allow None values
         if isinstance(v, str):
@@ -53,14 +53,14 @@ class DocumentResponse(BaseModel):
                 raise ValueError("Invalid JSON string for config_data")
         return v
 
-    is_inactive: Optional[bool] = False
+    is_inactive: bool | None = False
 
     class Config:
         from_attributes = True
 
 
 class DocumentListResponse(BaseModel):
-    items: List[DocumentResponse]
+    items: list[DocumentResponse]
     total: int
     skip: int
     limit: int
@@ -83,8 +83,8 @@ class DocumentProcessingStatusResponse(BaseModel):
     filename: str
     original_filename: str
     status: DocumentStatusEnum
-    processing_error: Optional[str]
-    processed_at: Optional[datetime]
+    processing_error: str | None
+    processed_at: datetime | None
     total_chunks: int
 
     class Config:
@@ -93,18 +93,18 @@ class DocumentProcessingStatusResponse(BaseModel):
 
 class DocumentUploadRequest(BaseModel):
     knowledge_base_id: uuid.UUID
-    tenant_id: Optional[uuid.UUID] = None
-    doc_metadata: Optional[dict] = None
+    tenant_id: uuid.UUID | None = None
+    doc_metadata: dict | None = None
 
 
 class DocumentProcessingRequest(BaseModel):
     knowledge_base_id: uuid.UUID
-    id: Optional[uuid.UUID] = None
+    id: uuid.UUID | None = None
     file_path: str
     filename: str
-    description: Optional[str] = None
-    tenant_id: Optional[uuid.UUID] = None
-    metadata: Optional[dict] = None
+    description: str | None = None
+    tenant_id: uuid.UUID | None = None
+    metadata: dict | None = None
 
 
 class DocumentProcessingResponse(BaseModel):
@@ -118,31 +118,31 @@ class DocumentProcessingResponse(BaseModel):
 
 # Batch operation models
 class BatchDocumentItem(BaseModel):
-    id: Optional[uuid.UUID] = None
+    id: uuid.UUID | None = None
     filename: str
     file_path: str
-    metadata: Optional[dict] = None
-    description: Optional[str] = None
+    metadata: dict | None = None
+    description: str | None = None
 
 
 class BatchUploadRequest(BaseModel):
     knowledge_base_id: uuid.UUID
-    tenant_id: Optional[uuid.UUID] = None
-    documents: List[BatchDocumentItem]
+    tenant_id: uuid.UUID | None = None
+    documents: list[BatchDocumentItem]
 
 
 class BatchProcessingRequest(BaseModel):
     knowledge_base_id: uuid.UUID
-    tenant_id: Optional[uuid.UUID] = None
-    documents: List[BatchDocumentItem]
+    tenant_id: uuid.UUID | None = None
+    documents: list[BatchDocumentItem]
 
 
 class BatchOperationResult(BaseModel):
-    id: Optional[uuid.UUID]
+    id: uuid.UUID | None
     filename: str
     status: DocumentStatusEnum
-    task_id: Optional[str] = None
-    error: Optional[str] = None
+    task_id: str | None = None
+    error: str | None = None
 
 
 class BatchUploadResponse(BaseModel):
@@ -150,7 +150,7 @@ class BatchUploadResponse(BaseModel):
     total_documents: int
     successful: int
     failed: int
-    results: List[BatchOperationResult]
+    results: list[BatchOperationResult]
 
 
 class BatchProcessingResponse(BaseModel):
@@ -158,7 +158,7 @@ class BatchProcessingResponse(BaseModel):
     total_documents: int
     successful: int
     failed: int
-    results: List[BatchOperationResult]
+    results: list[BatchOperationResult]
 
 
 class PaginationParams(BaseModel):
@@ -167,5 +167,5 @@ class PaginationParams(BaseModel):
 
 
 class SearchParams(BaseModel):
-    query: Optional[str] = None
-    created_by: Optional[str] = None
+    query: str | None = None
+    created_by: str | None = None

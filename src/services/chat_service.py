@@ -1,6 +1,7 @@
 # src/services/chat_service.py
 import uuid
-from typing import Any, AsyncGenerator, Dict, Generator, List, Union
+from collections.abc import AsyncGenerator, Generator
+from typing import Any
 
 import tiktoken
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
@@ -41,7 +42,7 @@ class ChatService:
         self.agent = Agent()
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
 
-    def _format_history(self, history: List[Message]) -> List[BaseMessage]:
+    def _format_history(self, history: list[Message]) -> list[BaseMessage]:
         """Converts simple dict history to LangChain message objects with metadata preserved."""
         formatted_messages = []
         for item in history:
@@ -92,11 +93,11 @@ class ChatService:
 
     async def _manage_conversation_length(
         self,
-        conversation: List[BaseMessage],
+        conversation: list[BaseMessage],
         num_recent_messages: int,
         conversation_details: Conversation,
         user_id: str,
-    ) -> List[BaseMessage]:
+    ) -> list[BaseMessage]:
         """Manage conversation length using token counting and summarization."""
         min_messages_to_keep = 4
         max_conversation_tokens = 4096
@@ -140,7 +141,7 @@ class ChatService:
                 return recent_messages
         return conversation
 
-    async def prepare_conversation(self, user_message: Message) -> List[BaseMessage]:
+    async def prepare_conversation(self, user_message: Message) -> list[BaseMessage]:
         """Prepare conversation history without saving the user message yet."""
         conversation_id = user_message.metadata.get("conversation_id")
         user_id = user_message.metadata.get("user_id")
@@ -189,9 +190,9 @@ class ChatService:
 
     async def _retrieve(
         self,
-        conversation: List[BaseMessage],
+        conversation: list[BaseMessage],
         web_search_config: WebSearchConfig,
-        metadata: Dict[str, Any],
+        metadata: dict[str, Any],
     ) -> RetrievalContext:
         """Retrieves relevant documents based on the query and knowledge base ID."""
         embed_top = 50
@@ -304,10 +305,10 @@ class ChatService:
 
     async def _retrieve_stream(
         self,
-        conversation: List[BaseMessage],
+        conversation: list[BaseMessage],
         web_search_config: WebSearchConfig,
-        metadata: Dict[str, Any],
-    ) -> Generator[Union[str, RetrievalContext], None, None]:
+        metadata: dict[str, Any],
+    ) -> Generator[str | RetrievalContext]:
         """Retrieves relevant documents based on the query and knowledge base ID."""
         embed_top = 50
         rerank_top = 20
@@ -448,9 +449,9 @@ class ChatService:
     async def ask_normal(
         self,
         user_message: Message,
-        conversation: List[BaseMessage],
+        conversation: list[BaseMessage],
         web_search_config: WebSearchConfig,
-        metadata: Dict[str, Any],
+        metadata: dict[str, Any],
     ) -> Message:
         """Handles non-streaming (full text) response."""
         try:
@@ -497,10 +498,10 @@ class ChatService:
     async def ask_stream(
         self,
         user_message: Message,
-        conversation: List[BaseMessage],
+        conversation: list[BaseMessage],
         web_search_config: WebSearchConfig,
-        metadata: Dict[str, Any],
-    ) -> AsyncGenerator[str | BaseMessage, None]:
+        metadata: dict[str, Any],
+    ) -> AsyncGenerator[str | BaseMessage]:
         """Handles streaming response with robust error handling."""
         try:
             yield StreamEventBuilder.message_start()
@@ -585,9 +586,9 @@ class ChatService:
     async def _stream_agentic_workflow(
         self,
         user_message: Message,
-        conversation: List[BaseMessage],
-        metadata: Dict[str, Any],
-    ) -> AsyncGenerator[str, None]:
+        conversation: list[BaseMessage],
+        metadata: dict[str, Any],
+    ) -> AsyncGenerator[str]:
         """Stream agentic workflow with clean, focused updates"""
         try:
             yield StreamEventBuilder.message_start()
@@ -693,9 +694,7 @@ class ChatService:
                 )
             return response
 
-    async def ask_sse(
-        self, request: ChatRequest
-    ) -> AsyncGenerator[str | BaseMessage, None]:
+    async def ask_sse(self, request: ChatRequest) -> AsyncGenerator[str | BaseMessage]:
         """Process a chat request and return a streaming response."""
         request = self.sanitize_request(request)
         web_search_config = _setup_web_search_config(request)

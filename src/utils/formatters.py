@@ -1,7 +1,6 @@
 # src/utils/formatters.py
 import json
-from typing import Any, Dict, Optional, Union
-
+from typing import Any
 
 from src.core.config.graph_configs import GRAPH_CONFIGS
 from src.domain.schemas.stream import StreamEvent, StreamEventType, StreamPhase
@@ -13,9 +12,9 @@ class StreamEventBuilder:
 
     @staticmethod
     def create_sse_event(
-        event_type: Union[StreamEventType, str],
-        data: Dict[str, Any],
-        event_id: Optional[str] = None,
+        event_type: StreamEventType | str,
+        data: dict[str, Any],
+        event_id: str | None = None,
     ) -> str:
         """Create SSE formatted event"""
         if isinstance(event_type, StreamEventType):
@@ -51,10 +50,10 @@ class StreamEventBuilder:
 
     @staticmethod
     def status_update(
-        phase: Union[StreamPhase, str],
+        phase: StreamPhase | str,
         message: str,
-        progress: Optional[float] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        progress: float | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Status update"""
         if isinstance(phase, StreamPhase):
@@ -75,9 +74,9 @@ class StreamEventBuilder:
 
     @staticmethod
     def message_stop(
-        final_message: Optional[str | Dict[str, Any]] = None,
-        references: Optional[list] = None,
-        metadata: Optional[dict] = None,
+        final_message: str | dict[str, Any] | None = None,
+        references: list | None = None,
+        metadata: dict | None = None,
     ) -> str:
         """End of message"""
         data = {}
@@ -94,7 +93,7 @@ class StreamEventBuilder:
         return StreamEventBuilder.create_sse_event(StreamEventType.MESSAGE_STOP, data)
 
     @staticmethod
-    def error(error_type: str, message: str, code: Optional[int] = None) -> str:
+    def error(error_type: str, message: str, code: int | None = None) -> str:
         """Error event"""
         data = {"type": error_type, "message": message}
 
@@ -112,14 +111,14 @@ class AgenticStreamHandler:
     """
 
     def __init__(self):
-        self.current_graph: Optional[str] = None
-        self.current_node: Optional[str] = None
+        self.current_graph: str | None = None
+        self.current_node: str | None = None
         self.graph_stack: list[str] = []
-        self.last_phase: Optional[StreamPhase] = None
-        self.last_emitted_message: Optional[str] = None
+        self.last_phase: StreamPhase | None = None
+        self.last_emitted_message: str | None = None
         self.content_index: int = 0
 
-    async def handle_event(self, event: dict) -> Optional[str]:
+    async def handle_event(self, event: dict) -> str | None:
         """Process a single event and return SSE event if needed"""
         kind = event["event"]
         name = event.get("name", "")
@@ -135,7 +134,7 @@ class AgenticStreamHandler:
 
         return None
 
-    async def _handle_chain_start(self, name: str, event: dict) -> Optional[str]:
+    async def _handle_chain_start(self, name: str, event: dict) -> str | None:
         """Handle chain/node start
 
         Key insight: name here is the node name (e.g., "final_synthesizer")
@@ -185,7 +184,7 @@ class AgenticStreamHandler:
 
         return None
 
-    async def _handle_chain_end(self, name: str, event: dict) -> Optional[str]:
+    async def _handle_chain_end(self, name: str, event: dict) -> str | None:
         """Handle chain/node end"""
         if name in GRAPH_CONFIGS:
             if self.graph_stack:
@@ -208,7 +207,7 @@ class AgenticStreamHandler:
 
         return await self._emit_rich_feedback(output)
 
-    async def _emit_completion_status(self, output: dict) -> Optional[str]:
+    async def _emit_completion_status(self, output: dict) -> str | None:
         """Emit status based on node completion"""
 
         def extract_urls_and_favicons(items):
@@ -285,7 +284,7 @@ class AgenticStreamHandler:
 
         return None
 
-    async def _emit_rich_feedback(self, output: dict) -> Optional[str]:
+    async def _emit_rich_feedback(self, output: dict) -> str | None:
         """Emit rich feedback for certain outputs"""
 
         if "all_search_history" in output:
@@ -312,7 +311,7 @@ class AgenticStreamHandler:
 
         return None
 
-    async def _handle_llm_stream(self, name: str, event: dict) -> Optional[str]:
+    async def _handle_llm_stream(self, name: str, event: dict) -> str | None:
         """Handle LLM streaming
 
         Key insight: name here is the model name (e.g., "ChatOpenAI"),

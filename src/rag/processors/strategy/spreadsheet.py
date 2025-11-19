@@ -1,5 +1,6 @@
 # src/rag/processors/strategy/spreadsheet.py
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from collections.abc import Callable, Iterable
+from typing import Any
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders.base import BaseLoader
@@ -33,7 +34,7 @@ class MarkdownTableChunker:
         chunk_size: int,
         chunk_overlap: int = 0,
         length_function: Callable[[str], int] = len,
-        merge_on_metadata_keys: Optional[List[str]] = None,
+        merge_on_metadata_keys: list[str] | None = None,
     ):
         """
         Initializes the MarkdownTableChunker.
@@ -59,7 +60,7 @@ class MarkdownTableChunker:
     @staticmethod
     def _parse_markdown_table(
         md_table_string: str, header_rows_count: int = 1
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Parses a Markdown table string (without the divider line) into raw header content lines,
         parsed headers (column names), and rows.
@@ -82,7 +83,7 @@ class MarkdownTableChunker:
         # Data rows start after the header content lines
         data_rows_lines = lines[header_rows_count:]
 
-        headers: List[str] = []
+        headers: list[str] = []
         num_columns = 0
 
         # Try to infer number of columns and headers from the first content header line
@@ -131,7 +132,7 @@ class MarkdownTableChunker:
 
     @staticmethod
     def _format_table_chunk(
-        raw_header_content_lines: List[str], rows: List[List[str]], num_columns: int
+        raw_header_content_lines: list[str], rows: list[list[str]], num_columns: int
     ) -> str:
         """
         Formats raw header content lines and rows back into a markdown table string,
@@ -162,7 +163,7 @@ class MarkdownTableChunker:
 
     def chunk_and_merge_documents(
         self, documents: Iterable[Document]
-    ) -> List[Document]:
+    ) -> list[Document]:
         """
         Processes a list of LangChain Document objects.
         - Splits individual large Markdown tables into smaller chunks (row by row, repeating headers).
@@ -176,13 +177,13 @@ class MarkdownTableChunker:
         Returns:
             A new list of processed LangChain Document objects.
         """
-        processed_docs: List[Document] = []
+        processed_docs: list[Document] = []
 
         current_chunk_content: str = ""
-        current_chunk_metadata: Dict = {}
+        current_chunk_metadata: dict = {}
         current_chunk_is_empty: bool = True
 
-        for i, doc in enumerate(documents):
+        for _i, doc in enumerate(documents):
             doc_content_length = self.length_function(doc.page_content)
             # header_rows_count now refers ONLY to content lines, NOT including the divider
             header_rows_count = doc.metadata.get(
@@ -223,7 +224,7 @@ class MarkdownTableChunker:
                 doc_rows = parsed_doc_table["rows"]
                 doc_num_columns = parsed_doc_table["num_columns"]
                 num_rows = len(doc_rows)
-                temp_chunk_rows: List[List[str]] = []
+                temp_chunk_rows: list[list[str]] = []
 
                 for row_idx in range(num_rows):
                     temp_chunk_rows.append(doc_rows[row_idx])
@@ -367,7 +368,7 @@ class MarkdownTableChunker:
 class SpreadsheetStrategy(BaseStrategy):
     _supported_file_types = ["xlsx"]
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(
             config,
         )
@@ -385,7 +386,7 @@ class SpreadsheetStrategy(BaseStrategy):
         """
         return ExcelLoader(file_path)
 
-    def chunk(self, file_path: str, document: DBDocument) -> List[Document]:
+    def chunk(self, file_path: str, document: DBDocument) -> list[Document]:
         """
         Process a file using Langchain's document loaders.
 

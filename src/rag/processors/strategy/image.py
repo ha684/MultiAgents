@@ -1,6 +1,6 @@
 # src/rag/processors/strategy/image.py
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from langchain_core.documents import Document as LangchainDocument
 
@@ -17,7 +17,7 @@ class ImageStrategy(BaseStrategy):
 
     _supported_file_types = ["jpg", "jpeg", "png"]
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(
             config,
         )
@@ -41,7 +41,7 @@ class ImageStrategy(BaseStrategy):
 
     async def chunk(
         self, file_path: str, document: DBDocument
-    ) -> List[LangchainDocument]:
+    ) -> list[LangchainDocument]:
         """
         Process a file using Langchain's LangchainDocument loaders.
 

@@ -1,5 +1,5 @@
 # src/agents/tools/server/mcp_retrieve_tools.py
-from typing import Any, Dict, List
+from typing import Any
 
 from langchain_core.documents import Document
 from langchain_core.tools import tool
@@ -10,7 +10,7 @@ from src.services.web_search_service import web_search_service
 from src.utils.logger_conf import logger
 
 
-async def rag_search(query: str, context_metadata: Dict[str, Any]) -> List[Document]:
+async def rag_search(query: str, context_metadata: dict[str, Any]) -> list[Document]:
     """
     Args:
         query (str): The search query to find relevant content
@@ -33,7 +33,7 @@ async def rag_search(query: str, context_metadata: Dict[str, Any]) -> List[Docum
         raise e
 
 
-async def web_search(query: str) -> List[Document]:
+async def web_search(query: str) -> list[Document]:
     """
     Args:
         query (str): The search query to find relevant content

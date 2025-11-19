@@ -1,9 +1,8 @@
 # src/rag/processors/loader/xlsx_loader.py
 import html
 import os
-from pathlib import Path
 import re
-from typing import List, Tuple, Union
+from pathlib import Path
 
 from html_to_markdown import convert_to_markdown
 from langchain_core.document_loaders.base import BaseLoader
@@ -17,16 +16,16 @@ from src.utils.logger_conf import logger
 class CustomXlsxLoader(BaseLoader):
     def __init__(
         self,
-        file_path: Union[str, Path],
+        file_path: str | Path,
         chunk_size: int = 1900,
     ):
         self.file_path = str(file_path)
         self.chunk_size = chunk_size
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         return self.get_load()
 
-    def get_load(self) -> List[Document]:
+    def get_load(self) -> list[Document]:
         """load and process Excel file into Document chunks"""
         # fix() check if file extension is ppt -> convert to pptx
         if self.file_path.endswith(".xls"):
@@ -37,12 +36,12 @@ class CustomXlsxLoader(BaseLoader):
         elements = partition_xlsx(filename=self.file_path)
         if not elements:
             return []
-        documents: List[Document] = []
+        documents: list[Document] = []
         current_content: str = ""
         sheet_name: str = elements[0].metadata.to_dict()["page_name"]
         first_header: str = ""
 
-        for index, element in enumerate(elements):
+        for _index, element in enumerate(elements):
             dict_el: dict = element.metadata.to_dict()
             # Check if switching to a new sheet
             if dict_el["page_name"] != sheet_name:
@@ -71,7 +70,7 @@ class CustomXlsxLoader(BaseLoader):
         return documents
 
     def _save_document_chunk(
-        self, content: str, sheet_name: str, documents: List[Document]
+        self, content: str, sheet_name: str, documents: list[Document]
     ) -> None:
         """Save a document chunk to the documents list"""
         if content.strip():
@@ -94,7 +93,7 @@ class CustomXlsxLoader(BaseLoader):
         self,
         content: str,
         sheet_name: str,
-        documents: List[Document],
+        documents: list[Document],
         force_save: bool = False,
     ) -> str:
         """Save chunk if size exceeds limit or force_save is True, return empty string if saved"""
@@ -105,7 +104,7 @@ class CustomXlsxLoader(BaseLoader):
 
     def _split_table_by_rows(
         self, table_value: str, header: str, current_content: str
-    ) -> List[str]:
+    ) -> list[str]:
         """Split table by rows to maintain structure and return list of table chunks"""
         lines = table_value.split("\n")
         if len(lines) < 1:
@@ -126,8 +125,8 @@ class CustomXlsxLoader(BaseLoader):
         # Count columns in header for consistent formatting
         header_cols = len([col.strip() for col in header.split("|") if col.strip()])
 
-        chunks: List[str] = []
-        current_chunk_rows: List[str] = []
+        chunks: list[str] = []
+        current_chunk_rows: list[str] = []
 
         for row in data_rows:
             # Build test chunk to check size
@@ -159,7 +158,7 @@ class CustomXlsxLoader(BaseLoader):
 
         return chunks if chunks else [table_value]
 
-    def _build_table_chunk(self, header: str, rows: List[str], header_cols: int) -> str:
+    def _build_table_chunk(self, header: str, rows: list[str], header_cols: int) -> str:
         """Build a properly formatted table chunk with consistent column count"""
         formatted_rows = []
         for row in rows:
@@ -191,8 +190,8 @@ class CustomXlsxLoader(BaseLoader):
         dict_el: dict,
         current_content: str,
         sheet_name: str,
-        documents: List[Document],
-    ) -> Tuple[str, str]:
+        documents: list[Document],
+    ) -> tuple[str, str]:
         """Process table element and return updated content and header"""
         table_html_type = convert_to_markdown(dict_el["text_as_html"])
 
@@ -267,7 +266,7 @@ class CustomXlsxLoader(BaseLoader):
         element: Element,
         current_content: str,
         sheet_name: str,
-        documents: List[Document],
+        documents: list[Document],
     ) -> str:
         """Process text element and return updated content"""
         text_content = f"\n{element.text}"
@@ -409,7 +408,9 @@ class CustomXlsxLoader(BaseLoader):
         # Build cleaned rows, keeping only non-empty columns
         cleaned_rows = []
         for row in rows:
-            cleaned_row = [cell for cell, keep in zip(row, keep_cols) if keep]
+            cleaned_row = [
+                cell for cell, keep in zip(row, keep_cols, strict=False) if keep
+            ]
             if cleaned_row:  # Only add non-empty rows
                 cleaned_rows.append(cleaned_row)
 
@@ -450,7 +451,7 @@ class CustomXlsxLoader(BaseLoader):
                             for col in df.columns
                         ]
 
-                        df.to_excel(writer, sheet_name=sheet_name, index=False)  # type: ignore
+                        df.to_excel(writer, sheet_name=sheet_name, index=False)
 
                 logger.info(f"Converted {file_path} to {xlsx_path}")
                 return xlsx_path

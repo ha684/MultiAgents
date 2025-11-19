@@ -1,5 +1,5 @@
 # src/api/knowledge_base.py
-from typing import List, Sequence
+from collections.abc import Sequence
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -92,7 +92,7 @@ async def get_knowledge_base_by_id(
 
 
 @router.post("/{kb_id}/query")
-async def query_knowledge_base(kb_id: str, query: str) -> List[Document]:
+async def query_knowledge_base(kb_id: str, query: str) -> list[Document]:
     """
     Query a knowledge base by its ID.
 

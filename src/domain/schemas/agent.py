@@ -1,13 +1,12 @@
 # src/domain/schemas/agent.py
 
 from enum import Enum
-from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
 
 class RelevantFolder(BaseModel):
-    relevant_folders: List[str] = Field(
+    relevant_folders: list[str] = Field(
         default_factory=list,
         description="List of relevant folder names identified by the agent.",
     )
@@ -32,21 +31,21 @@ class SearchDecision(BaseModel):
 
     next_action: NextAction = Field(description="The next action to take")
     reasoning: str = Field(description="Reasoning for the decision")
-    search_query: Optional[str] = Field(
+    search_query: str | None = Field(
         description="Modified or new search query if needed"
     )
-    search_type: Optional[SearchType] = Field(description="Type of search to perform")
+    search_type: SearchType | None = Field(description="Type of search to perform")
 
 
 class VerificationResult(BaseModel):
     """Result of verifying search results against user query"""
 
     is_sufficient: bool = Field(description="Whether the search results are sufficient")
-    missing_aspects: List[str] = Field(
+    missing_aspects: list[str] = Field(
         description="What aspects are missing or need deeper search"
     )
     reasoning: str = Field(description="Reasoning for the verification result")
-    suggested_searches: List[str] = Field(
+    suggested_searches: list[str] = Field(
         description="Suggested additional search queries"
     )
 
@@ -60,17 +59,17 @@ class ResponseDecision(BaseModel):
     response_type: str = Field(
         description="Type of response: complete, partial, not_found"
     )
-    key_points: List[str] = Field(description="Key points to include in response")
+    key_points: list[str] = Field(description="Key points to include in response")
 
 
 class ConversationSummary(BaseModel):
     """Structured conversation summary"""
 
     summary: str = Field(description="Detailed summary of the conversation")
-    key_topics: List[str] = Field(description="Key topics discussed")
-    important_context: List[str] = Field(
+    key_topics: list[str] = Field(description="Key topics discussed")
+    important_context: list[str] = Field(
         description="Important context that should be preserved"
     )
-    user_preferences: List[str] = Field(
+    user_preferences: list[str] = Field(
         description="Any user preferences or requirements mentioned"
     )

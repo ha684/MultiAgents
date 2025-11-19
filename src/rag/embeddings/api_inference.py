@@ -1,6 +1,5 @@
 # src/rag/embeddings/api_inference.py
 import asyncio
-from typing import List
 
 import httpx
 from langchain_core.embeddings import Embeddings
@@ -51,7 +50,7 @@ class InferenceAPIEmbeddings(BaseModel, Embeddings):
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self.api_key}"}
 
-    async def embed(self, texts: List[str]) -> List[List[float]]:
+    async def embed(self, texts: list[str]) -> list[list[float]]:
         """Embeds a batch of texts using a single API request with retry mechanism."""
         for attempt in range(self.retries + 1):
             try:
@@ -89,12 +88,12 @@ class InferenceAPIEmbeddings(BaseModel, Embeddings):
 
         return [[]] * len(texts)
 
-    async def embed_query(self, text: str) -> List[float]:
+    async def embed_query(self, text: str) -> list[float]:
         """Embed a single query text."""
         embeddings = await self.embed([text])
         return embeddings[0]
 
-    async def embed_documents(self, texts: List[str]) -> List[List[float]]:
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
         """Embed multiple documents in batches."""
         batch_size = self.batch_size
         all_embeddings = []

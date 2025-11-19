@@ -1,5 +1,5 @@
 # src/services/web_search/tavily.py
-from typing import Any, List, Optional
+from typing import Any
 
 from langchain_core.documents import Document
 from tavily import AsyncTavilyClient
@@ -13,7 +13,7 @@ class TavilyService(BaseSearchService):
 
     async def search(
         self, api_key: str, query: str, max_results: int = 5, **kwargs: Any
-    ) -> Optional[List[Document]]:
+    ) -> list[Document] | None:
         """Searches using Tavily API with a provided key."""
         if not api_key:
             raise ValueError("Tavily API key must be provided for searching.")
@@ -23,12 +23,12 @@ class TavilyService(BaseSearchService):
             search_depth = kwargs.get("search_depth", "basic")
             topic = kwargs.get("topic", "general")
             time_range = kwargs.get("time_range", "day")
-            start_date = kwargs.get("start_date", None)
-            end_date = kwargs.get("end_date", None)
+            start_date = kwargs.get("start_date")
+            end_date = kwargs.get("end_date")
             days = kwargs.get("days", 365)
-            include_answer = kwargs.get("include_answer", None)
+            include_answer = kwargs.get("include_answer")
             include_raw_content = kwargs.get("include_raw_content", "text")
-            country = kwargs.get("country", None)
+            country = kwargs.get("country")
 
             results = await client.search(
                 query=query,
@@ -50,9 +50,11 @@ class TavilyService(BaseSearchService):
                 if url and url not in unique_results:
                     unique_results[url] = {
                         "title": result.get("title"),
-                        "content": result.get("raw_content")
-                        if result.get("raw_content")
-                        else result.get("content"),
+                        "content": (
+                            result.get("raw_content")
+                            if result.get("raw_content")
+                            else result.get("content")
+                        ),
                         "url": url,
                         "favicon": result.get("favicon"),
                     }

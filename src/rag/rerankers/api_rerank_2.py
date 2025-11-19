@@ -1,5 +1,4 @@
 # src/rag/rerankers/api_rerank_2.py
-from typing import List
 
 import httpx
 from pydantic.type_adapter import TypeAdapter
@@ -18,9 +17,9 @@ class InferenceAPIReranker2(BaseReranker):
         return {"Authorization": f"Bearer {self.api_key}"}
 
     async def rerank(
-        self, query: str, documents: List[str], limit: int = 32
-    ) -> List[Rank]:
-        scored_document: List[Rank] = []
+        self, query: str, documents: list[str], limit: int = 32
+    ) -> list[Rank]:
+        scored_document: list[Rank] = []
         for idx in range(0, len(documents), limit):
             batch = documents[idx : idx + limit]
             async with httpx.AsyncClient() as client:
@@ -40,7 +39,7 @@ class InferenceAPIReranker2(BaseReranker):
                     Rank(score=item.get("relevance_score"), index=item.get("index"))
                     for item in data
                 ]
-                ta = TypeAdapter(List[Rank])
+                ta = TypeAdapter(list[Rank])
                 data = ta.validate_python(data)
                 scored_document.extend(data)
 

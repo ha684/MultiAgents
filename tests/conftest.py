@@ -5,12 +5,12 @@ Pytest configuration and fixtures for all tests.
 
 import asyncio
 import os
-from typing import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator, Generator
 
-from fastapi.testclient import TestClient
-from httpx import ASGITransport, AsyncClient
 import pytest
 import pytest_asyncio
+from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 from uuid_extensions import uuid7
@@ -20,7 +20,6 @@ from src.database.models.user import User, UserRole, UserStatus
 from src.dependencies.database_session import DatabaseSession
 from src.infrastructure.cache import redis_client
 from src.main import app
-
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
@@ -43,7 +42,7 @@ def event_loop() -> Generator:
 
 
 @pytest_asyncio.fixture
-async def db_session() -> AsyncGenerator[AsyncSession, None]:
+async def db_session() -> AsyncGenerator[AsyncSession]:
     """Provide a database session for tests."""
     async with DatabaseSession() as session:
         yield session
@@ -51,7 +50,7 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest_asyncio.fixture
-async def async_client() -> AsyncGenerator[AsyncClient, None]:
+async def async_client() -> AsyncGenerator[AsyncClient]:
     """Provide an async HTTP client for testing."""
     transport = ASGITransport(app=app)
     async with AsyncClient(
@@ -63,7 +62,7 @@ async def async_client() -> AsyncGenerator[AsyncClient, None]:
 
 
 @pytest.fixture
-def sync_client() -> Generator[TestClient, None, None]:
+def sync_client() -> Generator[TestClient]:
     """Provide a synchronous test client."""
     with TestClient(app) as client:
         yield client

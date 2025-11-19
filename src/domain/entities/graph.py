@@ -1,12 +1,12 @@
 # src/domain/entities/graph.py
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
-from zoneinfo import ZoneInfo
-from typing import Dict, Optional, List, Any, Protocol
-import asyncio
 from enum import Enum
+from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 from langchain_core.documents import Document
 
@@ -22,8 +22,8 @@ class Execution:
         default_factory=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
     )
     skip_event: asyncio.Event = field(default_factory=asyncio.Event)
-    current_node: Optional[str] = None
-    partial_state: Optional[Dict] = None
+    current_node: str | None = None
+    partial_state: dict | None = None
 
     def should_skip(self) -> bool:
         return self.skip_event.is_set()
@@ -31,7 +31,7 @@ class Execution:
     def signal_skip(self):
         self.skip_event.set()
 
-    def update_partial_state(self, state: Dict):
+    def update_partial_state(self, state: dict):
         """Save current state to fallback when skip"""
         self.partial_state = state
 
@@ -42,9 +42,9 @@ class RunConfig:
     recursion_limit: int = 10
     timeout_seconds: int = 180
     version: str = "v2"
-    extra: Dict[str, Any] = field(default_factory=dict)
+    extra: dict[str, Any] = field(default_factory=dict)
 
-    def as_langgraph_config(self) -> Dict[str, Any]:
+    def as_langgraph_config(self) -> dict[str, Any]:
         base = {"recursion_limit": self.recursion_limit}
         base.update(self.extra)
         return base
@@ -54,14 +54,14 @@ class RunConfig:
 class SubgraphOutput:
     """Result of an execution"""
 
-    main_context: Optional[str] = None
-    cited_documents: Optional[List[Document]] = field(default_factory=list)
-    response_metadata: Optional[Dict[str, Any]] = None
-    subgraph_error: Optional[str] = None
+    main_context: str | None = None
+    cited_documents: list[Document] | None = field(default_factory=list)
+    response_metadata: dict[str, Any] | None = None
+    subgraph_error: str | None = None
 
 
 class SubgraphExecutor(Protocol):
-    async def __call__(self, state: Dict[str, Any]) -> SubgraphOutput: ...
+    async def __call__(self, state: dict[str, Any]) -> SubgraphOutput: ...
 
 
 class ResponseMode(str, Enum):
@@ -88,10 +88,10 @@ class GraphMetadata:
     """Configuration for a graph"""
 
     name: str
-    nodes: Dict[str, NodeMetadata]
+    nodes: dict[str, NodeMetadata]
     default_message: str = "Processing..."
 
-    def get_node_meta(self, node_name: str) -> Optional[NodeMetadata]:
+    def get_node_meta(self, node_name: str) -> NodeMetadata | None:
         """Get metadata for a node"""
         return self.nodes.get(node_name)
 
@@ -105,11 +105,11 @@ class RoutingCondition:
 
     trigger: str
 
-    signals: List[str] = field(default_factory=list)
+    signals: list[str] = field(default_factory=list)
 
-    requires_context: Optional[Dict[str, any]] = None
+    requires_context: dict[str, any] | None = None
 
-    exclude_when: List[str] = field(default_factory=list)
+    exclude_when: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -125,7 +125,7 @@ class RoutingAction:
 
     expected_outcome: str
 
-    query_transformation: Optional[str] = None
+    query_transformation: str | None = None
 
 
 @dataclass
@@ -153,13 +153,13 @@ class SubgraphJourney:
     name: str
     description: str
 
-    activation_conditions: List[str]
+    activation_conditions: list[str]
 
-    typical_flow: List[str]
+    typical_flow: list[str]
 
-    digression_patterns: Dict[str, str] = field(default_factory=dict)
+    digression_patterns: dict[str, str] = field(default_factory=dict)
 
-    prerequisites: List[str] = field(default_factory=list)
+    prerequisites: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -173,16 +173,16 @@ class SubgraphProfile:
 
     primary_behavior: SubgraphBehavior
 
-    secondary_behaviors: List[SubgraphBehavior] = field(default_factory=list)
+    secondary_behaviors: list[SubgraphBehavior] = field(default_factory=list)
 
-    journeys: List[SubgraphJourney] = field(default_factory=list)
+    journeys: list[SubgraphJourney] = field(default_factory=list)
 
-    glossary: Dict[str, str] = field(default_factory=dict)
+    glossary: dict[str, str] = field(default_factory=dict)
 
-    canonical_examples: List[Dict[str, str]] = field(default_factory=list)
+    canonical_examples: list[dict[str, str]] = field(default_factory=list)
 
-    entry_state_type: Optional[type] = None
+    entry_state_type: type | None = None
     executor: any = None
 
-    tags: List[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
     confidence_threshold: float = 0.7

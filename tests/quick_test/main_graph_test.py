@@ -1,12 +1,14 @@
 # tests/intergration_test/main_graph_test.py
-from src.agents.main_graph import MainGraph
-from src.domain.schemas.chat import SearchProvider, WebSearchConfig
-from langchain_core.messages import HumanMessage
-from src.core.config.settings import settings
-from src.utils.logger_conf import logger
-from langchain_core.runnables.schema import StreamEvent
 import asyncio
 import time
+
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables.schema import StreamEvent
+
+from src.agents.main_graph import MainGraph
+from src.core.config.settings import settings
+from src.domain.schemas.chat import SearchProvider, WebSearchConfig
+from src.utils.logger_conf import logger
 
 
 class MainGraphStreamer:

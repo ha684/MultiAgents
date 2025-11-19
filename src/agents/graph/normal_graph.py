@@ -4,24 +4,22 @@ Normal Graph - Fast Path for Straightforward Queries
 Linear flow: Generate Direction → Execute Subgraph → Synthesize Response
 """
 
-from typing import Any, Dict
+from typing import Any
 
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from src.agents.basic import response_agent
+from src.agents.basic import direction_generation_agent, response_agent
 from src.agents.executors import EXECUTORS
 from src.agents.graph.base import GraphAgentBase
 from src.agents.shared.registry import SubgraphRegistry
-from src.domain.entities.graph import RunConfig, SubgraphOutput
+from src.domain.entities.graph import ResponseMode, RunConfig, SubgraphOutput
 from src.domain.entities.state import NormalGraphState
 from src.utils import (
     format_context_for_response,
     truncate_docs_by_tokens,
 )
 from src.utils.logger_conf import logger
-from src.agents.basic import direction_generation_agent
-from src.domain.entities.graph import ResponseMode
 
 
 class NormalGraph(GraphAgentBase[NormalGraphState]):
@@ -50,7 +48,7 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
             graph_name=self.graph_name, recursion_limit=10, timeout_seconds=60
         )
 
-    async def generate_direction_node(self, state: NormalGraphState) -> Dict[str, Any]:
+    async def generate_direction_node(self, state: NormalGraphState) -> dict[str, Any]:
         """
         Generate focused research direction for current depth level.
         Similar to ChatGPT's progressive thinking.
@@ -79,7 +77,7 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
             "reasoning": reasoning,
         }
 
-    async def execute_subgraph_node(self, state: NormalGraphState) -> Dict[str, Any]:
+    async def execute_subgraph_node(self, state: NormalGraphState) -> dict[str, Any]:
         """Execute selected subgraph and return documents."""
         subgraph_name = state.get("selected_subgraph")
         if state.get("action") == "reason_only":
@@ -131,16 +129,18 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
             return {
                 "cited_documents": cited_documents,
                 "accumulated_context": main_context,
-                "response_mode": ResponseMode.SQL_RESPONSE
-                if state.get("selected_subgraph") == "sql_query"
-                else ResponseMode.STANDARD,
+                "response_mode": (
+                    ResponseMode.SQL_RESPONSE
+                    if state.get("selected_subgraph") == "sql_query"
+                    else ResponseMode.STANDARD
+                ),
             }
 
         except Exception as e:
             logger.error(f"[NormalGraph] Error executing {subgraph_name}: {e}")
             return {"cited_documents": []}
 
-    async def synthesize_response_node(self, state: NormalGraphState) -> Dict[str, Any]:
+    async def synthesize_response_node(self, state: NormalGraphState) -> dict[str, Any]:
         """Synthesize final response using response_agent."""
         response = await response_agent.ainvoke(state)
         resp_metadata = response.response_metadata
