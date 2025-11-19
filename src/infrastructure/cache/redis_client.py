@@ -28,7 +28,9 @@ class Redis(BaseCache):
 
     def get(self) -> aioredis.Redis:
         """Get the Redis client."""
-        assert self._client is not None, "Redis not initialized"
+        if self._client is None:
+            raise RuntimeError("Redis not initialized")
+
         return self._client
 
     async def connect(self):

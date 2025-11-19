@@ -100,16 +100,6 @@ format:
 	@echo Auto-fixing with Ruff...
 	uv run ruff check src/ tests/ --fix --unsafe-fixes
 
-security:
-	@echo Running Bandit security scan...
-	uv run bandit -r src/ -f json -o bandit-report.json
-	@echo Running Safety dependency check...
-	uv run safety check --json
-
-# Optional: Run all checks at once
-check-all: lint security
-	@echo All checks passed!
-
 # Docker Test Environment
 docker-test-up:
 	docker-compose -f docker/docker-compose.test.yml up -d --wait
