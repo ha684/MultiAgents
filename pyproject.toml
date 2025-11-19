@@ -63,7 +63,7 @@ dependencies = [
     "opentelemetry-sdk>=1.37.0",
     "opentelemetry-exporter-otlp-proto-http>=1.37.0",
     "opentelemetry-instrumentation-fastapi>=0.58b0",
-    "pyjwt>=2.10.1",
+    "pyjwt[crypto]>=2.10.1",
     "graphiti-core>=0.3.21",
     "fastmcp>=2.12.4",
     "graphviz>=0.21",
@@ -82,6 +82,7 @@ dependencies = [
     "pytest-mock>=3.15.1",
     "types-pyyaml>=6.0.12.20250915",
     "bandit>=1.8.6",
+    "aiosqlite>=0.21.0",
 ]
 
 [project.optional-dependencies]

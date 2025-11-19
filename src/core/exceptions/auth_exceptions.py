@@ -112,7 +112,7 @@ class ResourceAccessDeniedException(BaseException):
 class UserNotFoundException(BaseException):
     def __init__(self, message: str = "User not found"):
         super().__init__(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+            status_code=status.HTTP_404_NOT_FOUND,
             message=message,
             error_code="USER_NOT_FOUND",
         )

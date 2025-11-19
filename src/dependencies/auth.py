@@ -37,17 +37,18 @@ async def get_current_user_token(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> TokenData:
     """Extract and validate JWT token from request"""
-    if APP_ENV == "development" or credentials.credentials == API_KEY:
-        print("--- ⚠️ DEV MODE: Bypassing token auth ---")
-        return TokenData(
-            user_id="hafizh",
-            email="hafizh@gmail.com",
-            role=UserRole.ADMIN,
-            session_id="1234567890",
-            exp=1730150400,
-            iat=1730150400,
-            jti="1234567890",
-        )
+    if credentials and hasattr(credentials, "credentials"):
+        if APP_ENV == "development" or credentials.credentials == API_KEY:
+            print("--- ⚠️ DEV MODE: Bypassing token auth ---")
+            return TokenData(
+                user_id="hafizh",
+                email="hafizh@gmail.com",
+                role=UserRole.ADMIN,
+                session_id="1234567890",
+                exp=1730150400,
+                iat=1730150400,
+                jti="1234567890",
+            )
 
     if not credentials:
         raise TokenNotFoundException()

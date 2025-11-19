@@ -1,4 +1,3 @@
-# tests/conftest.py
 """
 Pytest configuration and fixtures for all tests.
 """
@@ -6,6 +5,8 @@ Pytest configuration and fixtures for all tests.
 import asyncio
 import os
 from collections.abc import AsyncGenerator, Generator
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 import pytest_asyncio
@@ -20,6 +21,7 @@ from src.database.models.user import User, UserRole, UserStatus
 from src.dependencies.database_session import DatabaseSession
 from src.infrastructure.cache import redis_client
 from src.main import app
+from src.middlewares.rate_limit import RateLimitMiddleware
 
 TEST_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL",
@@ -75,11 +77,12 @@ async def test_user(db_session: AsyncSession) -> User:
         email="test@example.com",
         username="testuser",
         full_name="Test User",
-        password_hash=PasswordManager.hash_password("testpassword123"),
+        hashed_password=PasswordManager.hash_password("testpassword123"),
         role=UserRole.USER,
         status=UserStatus.ACTIVE,
         email_verified=True,
         auth_provider="local",
+        last_login_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
     )
     db_session.add(user)
     await db_session.commit()
@@ -94,11 +97,12 @@ async def admin_user(db_session: AsyncSession) -> User:
         email="admin@example.com",
         username="adminuser",
         full_name="Admin User",
-        password_hash=PasswordManager.hash_password("adminpassword123"),
+        hashed_password=PasswordManager.hash_password("adminpassword123"),
         role=UserRole.ADMIN,
         status=UserStatus.ACTIVE,
         email_verified=True,
         auth_provider="local",
+        last_login_at=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")),
     )
     db_session.add(admin)
     await db_session.commit()
@@ -193,6 +197,19 @@ async def test_conversation(db_session: AsyncSession, test_user: User):
     return conversation
 
 
+@pytest.fixture(autouse=True)
+def mock_rate_limit_middleware(monkeypatch):
+    """
+    Tự động bỏ qua RateLimitMiddleware trong tất cả các bài test.
+    Thay thế phương thức `dispatch` (hoặc __call__) để không kết nối Redis.
+    """
+
+    async def mock_dispatch(self, request, call_next):
+        return await call_next(request)
+
+    monkeypatch.setattr(RateLimitMiddleware, "dispatch", mock_dispatch)
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def clear_redis_cache():
     """Clear Redis cache before and after each test."""
@@ -202,7 +219,6 @@ async def clear_redis_cache():
         yield
         await redis.flushdb()
     except Exception:
-        # If Redis is not available, skip
         yield
 
 
