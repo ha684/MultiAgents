@@ -20,7 +20,7 @@ from src.utils import (
     truncate_docs_by_tokens,
 )
 from src.utils.logger_conf import logger
-from src.agents.basic import reflection_agent
+from src.agents.basic import direction_generation_agent
 from src.domain.entities.graph import ResponseMode
 
 
@@ -57,7 +57,7 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
         """
         conversation = state.get("conversation", [])
         try:
-            resp = await reflection_agent.ainvoke(state=state)
+            resp = await direction_generation_agent.ainvoke(state=state)
             direction = resp.get("query", conversation[-1].content)
             action = resp.get("action", "use_tool")
             selected_subgraph = resp.get("subgraph", "web_search")

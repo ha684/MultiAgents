@@ -131,8 +131,7 @@ class ThinkingState(TypedDict, total=False):
     citation_map: List[Dict[str, Any]]  # Map of citation index -> metadata
 
     # ===== Deduplication Tracking =====
-    used_rag_ids: List[str]  # RAG document IDs already used
-    used_web_urls: List[str]  # Web URLs already fetched
+    seen_content_hashes: List[str]
 
     # ===== Response Mode =====
     response_mode: str  # ResponseMode enum value
@@ -147,6 +146,7 @@ class ThinkingState(TypedDict, total=False):
     _is_sql_iteration: bool  # Flag to indicate SQL iteration
     _should_continue: bool  # Should continue iterating?
     _missing_aspects: str  # What's missing (from evaluation)
+    internal_reasoning: str  # Internal reasoning from current iteration
 
 
 class SqlState(TypedDict):

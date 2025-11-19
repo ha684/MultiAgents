@@ -7,7 +7,7 @@ from src.agents.basic.qac_agent import QACAgent
 from src.agents.basic.response_agent import ResponseAgent
 from src.agents.basic.summary_agent import SummaryAgent
 from src.agents.basic.verification_agent import VerificationAgent
-from src.agents.basic.reflection_agent import ReflectionAgent
+from src.agents.basic.direction_generation_agent import DirectionGenerationAgent
 from src.agents.basic.query_context_agent import QueryContextAgent
 
 citation_agent = CitationAgent()
@@ -16,5 +16,5 @@ response_agent = ResponseAgent()
 verification_agent = VerificationAgent()
 qac_agent = QACAgent()
 compress_agent = CompressAgent()
-reflection_agent = ReflectionAgent()
+direction_generation_agent = DirectionGenerationAgent()
 query_context_agent = QueryContextAgent()

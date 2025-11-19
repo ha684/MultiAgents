@@ -15,3 +15,13 @@ async def calculate_hash_from_stream(
     await file.seek(0)
 
     return hasher.hexdigest()
+
+
+def get_content_hash(content: str) -> str:
+    """
+    Create a hash from content.
+    """
+    if not content:
+        return ""
+    cleaned_content = " ".join(content.split())
+    return hashlib.md5(cleaned_content.encode("utf-8")).hexdigest()

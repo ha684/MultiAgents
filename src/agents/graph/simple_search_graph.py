@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-import tiktoken
 from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -26,7 +25,7 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
     """
 
     def __init__(self):
-        self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
+        super().__init__()
         self.graph_name = "SimpleSearchGraph"
         self.compiled_graph = self._build_graph()
 
@@ -123,11 +122,10 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
             "cited_documents": retrieved_docs,
             "response_metadata": response_meta,
             "early_terminate": early_terminate,
+            "direction": direction,
         }
 
     async def filter_citations_node(self, state: SimpleSearchState) -> Dict[str, Any]:
-        logger.info("Simple Search - Filtering citations")
-
         if state.get("early_terminate"):
             logger.info("Early terminate is True -> skip citation filtering")
             cited_docs = []
@@ -145,7 +143,7 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
             return {}
 
         citation_indexes = await citation_agent.ainvoke(
-            history=state["conversation"],
+            query=state["direction"],
             reference=retrieved_docs,
         )
 

@@ -1,13 +1,13 @@
+# src/agents/basic/compress_agent.py
 import textwrap
 from typing import List
 
 from langchain_core.documents import Document
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.basic.base import BaseAgent
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
-from src.utils import format_context_for_response
 
 COMPRESS_PROMPT_TEMPLATE = textwrap.dedent("""\
 You are an information extraction specialist. Extract and summarize key facts from documents that relate to the query.
@@ -15,13 +15,19 @@ You are an information extraction specialist. Extract and summarize key facts fr
 **Your task:** Present ONLY the information found in the documents, organized clearly with citations.
 
 **Citation format:**
-- Each document has: [CITATION: N] and a Source URL
-- Extract a SHORT identifier from the source (domain name, key slug, or doc ID)
+- Each document has: [CITATION: N]
+- For EACH document, create a SHORT identifier (1-3 words) based on the document's main topic or content
 - Cite using: ([identifier][N]) after each fact
-- Example: "Revenue was $50M ([globenewswire][5])"
-- Example: "Market grows ([annual-report-2024][1])"
-- Multiple sources: "Revenue increased ([source1][1])([source2][3])"
-- Keep identifiers SHORT (1-3 words, lowercase, hyphens for spaces)
+- Identifiers should be: lowercase, hyphenated, descriptive
+- Example identifiers: "quarterly-earnings", "market-report", "ceo-interview", "tech-specs"
+- Example citation: "Revenue was $50M ([earnings-q4][2])"
+- Multiple sources: "Market grows ([mckinsey][1])([reuters][3])"
+
+**How to create identifiers:**
+- Read the document content first
+- Extract the main topic or document type
+- Create 1-3 word identifier that describes it
+- Use consistent identifiers for the same document throughout your response
 
 **How to extract information:**
 1. Read the query and identify what information is being requested
@@ -68,16 +74,6 @@ class CompressAgent(BaseAgent):
         logger.info("Compress Agent initialized successfully.")
 
     async def ainvoke(self, query: str, reference: List[Document]) -> str:
-        """
-        Compresses information from relevant documents (simple mode).
-
-        Args:
-            query: The search query that was used
-            reference: All retrieved documents
-
-        Returns:
-            Compressed information as a formatted string
-        """
         if not reference:
             logger.warning("No relevant documents to compress")
             return ""
@@ -85,16 +81,20 @@ class CompressAgent(BaseAgent):
         fallback = "\n\n".join([doc.page_content for doc in reference])
 
         try:
-            formatted_docs = format_context_for_response(reference)
-            system_prompt = SystemMessage(content=COMPRESS_PROMPT_TEMPLATE)
-            user_content = HumanMessage(
-                content=f"""
-                Context: \n{formatted_docs}\n\n User Query: {query}
-                """
-            )
-            messages: List[BaseMessage] = [system_prompt, user_content]
+            parts = ["# Retrieved documents:\n"]
+            for doc in reference:
+                parts.append(f"{doc.page_content}\n")
+            formatted_docs = "\n".join(parts)
+
+            messages: List[BaseMessage] = [
+                SystemMessage(content=COMPRESS_PROMPT_TEMPLATE),
+                AIMessage(content=formatted_docs),
+                HumanMessage(content=f"User query: {query}"),
+            ]
+
             response = await self.simple_llm_call(messages=messages)
             return response.content
+
         except Exception as e:
             logger.error(f"Error compressing information: {e}", exc_info=True)
             return fallback

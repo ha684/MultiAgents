@@ -282,9 +282,9 @@ class PromptTemplates:
 
         **Your process:**
         1. Use 'think' tool to analyze:
-        - What TYPE of question is this? (see below)
-        - What's the minimum we need to give a satisfactory answer?
-        - Do we have that minimum?
+           - What TYPE of question is this? (see below)
+           - What's the minimum we need to give a satisfactory answer?
+           - Do we have that minimum?
 
         2. Answer: **"Can we write an answer that satisfies the user's actual need?"**
 
@@ -314,6 +314,7 @@ class PromptTemplates:
         - TYPE A: Have the exact data/fact requested
         - TYPE B: Have major factors/trends + reasonable supporting evidence (even if not decade-long projections)
         - TYPE C: Have main concepts/points covered
+        - **Important: If sufficient, DO NOT list minor gaps that wouldn't prevent a good answer**
 
         **Say "is_sufficient: false" when:**
         - TYPE A: Missing the specific data point
@@ -326,29 +327,42 @@ class PromptTemplates:
         → Sufficient if: Have info on some key factors + industry direction + SE Asia relevance
         → Insufficient if: No data on future trends OR no SE Asia context OR missing ALL requested factors
 
-        **For "missing_aspects":**
-        - If sufficient but with known gaps, briefly note them anyway (helps improve future searches)
-        - If insufficient, clearly state what's critically missing
+        **For "missing_aspects" field:**
+        
+        **If is_sufficient is TRUE:**
+        - Set missing_aspects to empty string "" or null
+        - Rationale: If you decided we CAN answer satisfactorily, then nothing is "missing" for our purposes
+        - Nice-to-have additions are not "missing" - they're just enhancements
+        
+        **If is_sufficient is FALSE:**
+        - List ONLY the critical gaps that prevent answering the question
         - Be specific: "Decade-long projections and geopolitical analysis" not "more data"
+        - These should be gaps that, if filled, would flip your decision to TRUE
+
+        **Examples:**
+
+        GOOD ✓
+        - is_sufficient: true, missing_aspects: ""
+        - is_sufficient: false, missing_aspects: "No data on SE Asia market specifically, which is core to the question"
+        
+        BAD ✗
+        - is_sufficient: true, missing_aspects: "More detailed case studies would be nice"
+          → If it's sufficient, don't list what would be nice to have
+        - is_sufficient: false, missing_aspects: "Some additional context"
+          → Too vague, what specifically is blocking us?
 
         **Output format:**
         ```json
         {
             "is_sufficient": <boolean>,
-            "missing_aspects": <string>
+            "missing_aspects": <string or empty string>
         }
         ```
 
         **Key principle:**
-        - For analytical questions: Can we make a **reasonable, evidence-based** answer?
-        - If we have industry direction + key factors + regional context → YES, sufficient
-        - If we're forced to pure speculation with no evidence → NO, insufficient
-        """)
-
-    VERIFICATION_HUMAN_PROMPT = textwrap.dedent("""\
-        Context: {accumulated_context}
-        ---
-        Conversation history: {conversation_text}
+        - Sufficient = can write a good answer → missing_aspects should be empty
+        - Insufficient = cannot answer adequately → missing_aspects explains why
+        - No middle ground: either we can answer or we can't
         """)
 
     REFLECTION_PROMPT = textwrap.dedent("""\
@@ -477,15 +491,6 @@ class PromptTemplates:
             "reasoning": null
         }
         </examples>
-        """)
-
-    REFLECTION_HUMAN_PROMPT = textwrap.dedent("""\
-        Learnings: {learnings}
-        Knowledge: {knowledge}
-        Execution history: {execution_history_section}
-        Available Tools: {subgraph_definitions}
-        Missing aspects: {missing_aspects_section}
-        Conversation history: {conversation_text}
         """)
 
     SQL_GENERATION_SYSTEM_PROMPT = textwrap.dedent("""\
@@ -752,14 +757,6 @@ class PromptTemplates:
         }
 
         </examples>
-        """)
-
-    SQL_GENERATION_HUMAN_PROMPT = textwrap.dedent("""\
-        Database schema: {database_schema}
-        Conversation history: {conversation_text}
-        Query plan: {query_plan}
-
-        Based on the query plan and database schema above, generate executable SQL SELECT queries that will answer the user's question.
         """)
 
     SQL_VALIDATION_PROMPT = textwrap.dedent("""\
@@ -1428,16 +1425,6 @@ class PromptTemplates:
         </examples>
         """)
 
-    SQL_ANALYSIS_HUMAN_PROMPT = textwrap.dedent("""\
-        Database schema: {database_schema}
-        Conversation history: {conversation_text}
-
-        Analyze the conversation history and database schema above. Determine:
-        1. What data is needed to answer the question
-        2. Whether visualization would be helpful
-        3. The optimal query strategy and chart type
-        """)
-
     CHART_GENERATION_SYSTEM_PROMPT = textwrap.dedent("""\
         <role>
         You are an expert data visualization specialist with deep knowledge of Vega-Lite grammar. Your task is to create effective, beautiful, and accurate chart specifications that enhance data understanding.
@@ -1905,14 +1892,6 @@ class PromptTemplates:
         </edge_cases>
         """)
 
-    CHART_GENERATION_HUMAN_PROMPT = textwrap.dedent("""\
-        Conversation history: {conversation_text}
-        Suggested chart type: {chart_type}
-        Query results summary: {data_summary}
-
-        Generate a Vega-Lite chart specification that visualizes the query results to answer the user's question.
-        """)
-
     RELEVANCE_VALIDATION_SYSTEM_PROMPT = textwrap.dedent("""\
         <role>
         You are a database query relevance checker. Your task is to quickly determine if a user's question can be answered using the available database tables.
@@ -2061,12 +2040,6 @@ class PromptTemplates:
         }
 
         </examples>
-        """)
-
-    RELEVANCE_VALIDATION_HUMAN_PROMPT = textwrap.dedent("""\
-        Available tables: {available_tables}
-        Database schema: {database_schema}
-        Conversation history : {conversation_text}
         """)
 
     ORCHESTRATOR_REFLECTION_PROMPT = textwrap.dedent("""\

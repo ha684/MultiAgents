@@ -1,4 +1,4 @@
-# src/agents/graph/research_graph.py
+# src/agents/graph/thinking_graph.py
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -8,7 +8,7 @@ from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.basic import (
     compress_agent,
-    reflection_agent,
+    direction_generation_agent,
     response_agent,
     verification_agent,
 )
@@ -17,7 +17,8 @@ from src.agents.graph.base import GraphAgentBase
 from src.agents.shared.registry import SubgraphRegistry
 from src.domain.entities.graph import ResponseMode, RunConfig, SubgraphOutput
 from src.domain.entities.state import ThinkingState
-from src.utils import normalize_url, truncate_docs_by_tokens
+from src.utils import truncate_docs_by_tokens
+from src.utils.hash_calculator import get_content_hash
 from src.utils.logger_conf import logger
 
 
@@ -60,20 +61,20 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
     async def generate_direction_node(self, state: ThinkingState) -> Dict[str, Any]:
         """
-        Generate next research direction using reflection_agent.
+        Generate next research direction using direction_generation_agent.
         Returns: direction, action, selected_subgraph, reasoning
         """
         conversation = state.get("conversation", [])
 
         try:
-            resp = await reflection_agent.ainvoke(state=state)
+            resp = await direction_generation_agent.ainvoke(state=state)
             direction = resp.get("query", conversation[-1].content)
             action = resp.get("action", "use_tool")
             selected_subgraph = resp.get("subgraph", "web_search")
             reasoning = resp.get("reasoning", "")
 
             logger.info(
-                f"[Direction] Iter={state.get('iteration_count', 0)}, Action={action}, Query={direction[:100]}..."
+                f"[Direction] Iter={state.get('iteration_count', 0)}, Action={action}, Query={direction}..."
             )
 
         except Exception as e:
@@ -198,28 +199,24 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             documents = result_obj.cited_documents or []
             logger.info(f"[Execute] Retrieved {len(documents)} documents")
 
-            used_rag_ids = set(state.get("used_rag_ids", []))
-            used_web_urls = set(state.get("used_web_urls", []))
+            seen_hashes = set(state.get("seen_content_hashes", []))
 
             new_docs = []
-            for doc in documents:
-                meta = doc.metadata
-                doc_id = meta.get("document_id")
-                url = normalize_url(meta)
 
-                if doc_id and doc_id in used_rag_ids:
+            for doc in documents:
+                if not doc.page_content:
                     continue
-                if url and url in used_web_urls:
+
+                content_hash = get_content_hash(doc.page_content)
+
+                if content_hash in seen_hashes:
                     continue
 
                 new_docs.append(doc)
-                if doc_id:
-                    used_rag_ids.add(doc_id)
-                if url:
-                    used_web_urls.add(url)
+                seen_hashes.add(content_hash)
 
             logger.info(
-                f"[Execute] {len(new_docs)}/{len(documents)} new documents after dedup"
+                f"[Execute] {len(new_docs)}/{len(documents)} unique documents added (Content Hashing)"
             )
 
             new_docs = truncate_docs_by_tokens(
@@ -228,8 +225,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
             return {
                 "_temp_documents": new_docs,
-                "used_rag_ids": list(used_rag_ids),
-                "used_web_urls": list(used_web_urls),
+                "seen_content_hashes": list(seen_hashes),
                 "has_tool_results": True,
                 "execution_history": execution_history,
                 "consecutive_failures": 0,
@@ -255,7 +251,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
     async def pure_reasoning_node(self, state: ThinkingState) -> Dict[str, Any]:
         """
         Pure reasoning path - no tool execution.
-        Append reasoning to "accumulated_context" and learnings.
+        Collect reasoning in separate field, will be added to context at synthesis.
         """
         reasoning = state.get("reasoning", "")
         iteration = state.get("iteration_count", 0)
@@ -266,17 +262,19 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
         logger.info(f"[Reasoning] Iter {iteration}: {reasoning[:150]}...")
 
-        learning_entry = f"[Iter {iteration}] Pure reasoning: {reasoning[:300]}{'...' if len(reasoning) > 300 else ''}"
+        learning_entry = (
+            f"[Iter {iteration}] Internal reasoning step (no external search)"
+        )
 
         learnings = list(state.get("learnings", []))
         learnings.append(learning_entry)
 
-        accumulated = state.get("accumulated_context", "")
-        accumulated += f"\n\n## Reasoning (Iteration {iteration})\n\n{reasoning}"
+        internal_reasoning = state.get("internal_reasoning", "")
+        internal_reasoning += f"\n\n{reasoning}"
 
         return {
             "learnings": learnings,
-            "accumulated_context": accumulated,
+            "internal_reasoning": internal_reasoning,
         }
 
     async def extract_learnings_node(self, state: ThinkingState) -> Dict[str, Any]:
@@ -284,8 +282,8 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         Process results from execute_subgraph_node.
 
         Two paths:
-        1. SQL result: Just store the SQL result in "accumulated_context"
-        2. Document results: Add citations, compress, store
+        1. SQL result: Store SQL result in accumulated_context
+        2. Document results: Add citations, compress, store in accumulated_context
         """
         iteration = state.get("iteration_count", 0)
         query = state.get("direction", "")
@@ -305,7 +303,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             learnings.append(learning_entry)
 
             accumulated = state.get("accumulated_context", "")
-            accumulated += f"\n\n## SQL Query Result (Iteration {iteration})\n\nQuery: {query}\n\n{sql_result}"
+            accumulated += f"\n\n{sql_result}"
 
             logger.info(f"[Learnings] SQL result stored, {len(sql_result)} chars")
 
@@ -359,7 +357,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         learnings.append(learning_entry)
 
         accumulated = state.get("accumulated_context", "")
-        accumulated += f"\n\n## {query} (Iteration {iteration})\n\n{compressed}"
+        accumulated += f"\n\n{compressed}"
 
         logger.info(
             f"[Learnings] Extracted from {len(docs)} documents, {len(compressed)} chars"
@@ -375,7 +373,12 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
     async def evaluate_sufficiency_node(self, state: ThinkingState) -> Dict[str, Any]:
         """Evaluate if research is sufficient with failure detection."""
-        context = state.get("accumulated_context", "")
+        accumulated_context = state.get("accumulated_context", "")
+        internal_reasoning = state.get("internal_reasoning", "")
+
+        total_context = accumulated_context + "\n\n" + internal_reasoning
+        total_length = len(total_context)
+
         iteration = state.get("iteration_count", 0)
         consecutive_failures = state.get("consecutive_failures", 0)
         execution_failed = state.get("_execution_failed", False)
@@ -427,9 +430,9 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
                 "_missing_aspects": f"Previous tool execution failed: {state.get('_failure_reason', 'Unknown error')}. Try different approach.",
             }
 
-        if not context or len(context) < self.min_knowledge_threshold:
+        if total_length < self.min_knowledge_threshold:
             logger.info(
-                f"[Evaluate] Context too short ({len(context)} chars). CONTINUE."
+                f"[Evaluate] Context too short ({total_length} chars, external: {len(accumulated_context)}, reasoning: {len(internal_reasoning)}). CONTINUE."
             )
             return {
                 "_should_continue": True,
@@ -441,10 +444,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             is_sufficient = resp.get("is_sufficient", False)
             missing = resp.get("missing_aspects", "")
 
-            logger.info(f"[Evaluate] Iteration {iteration}: Sufficient={is_sufficient}")
-            if missing:
-                logger.info(f"[Evaluate] Missing: {missing}")
-
             return {
                 "_should_continue": not is_sufficient,
                 "_missing_aspects": missing,
@@ -453,7 +452,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         except Exception as e:
             logger.error(f"[Evaluate] Verification failed: {e}")
             return {
-                "_should_continue": iteration < 2,
+                "_should_continue": iteration < 3,
                 "_missing_aspects": "Evaluation failed, continuing cautiously.",
             }
 
@@ -469,17 +468,28 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             return "synthesize"
 
     async def continue_iteration_node(self, state: ThinkingState) -> Dict[str, Any]:
-        """Increment iteration counter."""
+        """
+        Increment iteration counter BEFORE next iteration.
+        This ensures iteration starts from 1, not 0.
+        """
         current = state.get("iteration_count", 0)
-        logger.info(f"[Continue] Starting iteration {current + 1}")
+        next_iteration = current + 1
+
+        logger.info(
+            f"[Continue] Completed iteration {current}, starting iteration {next_iteration}"
+        )
 
         return {
-            "iteration_count": current + 1,
+            "iteration_count": next_iteration,
         }
 
     async def synthesize_response_node(self, state: ThinkingState) -> Dict[str, Any]:
         """
         Finalize research and generate response.
+
+        Combine internal_reasoning and accumulated_context into final context:
+        - Put all reasoning at the top with marker
+        - Follow by all external knowledge
 
         Response Mode Selection Priority:
         1. Has SQL + Documents → ADVANCE (citations needed, SQL is part of context)
@@ -498,6 +508,21 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         has_documents = citation_counter > 0
         has_tool_results = state.get("has_tool_results", False)
 
+        internal_reasoning = state.get("internal_reasoning", "").strip()
+        accumulated_context = state.get("accumulated_context", "").strip()
+
+        final_context = ""
+        if internal_reasoning:
+            final_context = f"[INTERNAL_REASONING - DO NOT CITE]\n{internal_reasoning}\n[END_INTERNAL_REASONING]"
+
+        if accumulated_context:
+            if final_context:
+                final_context += f"\n\n{accumulated_context}"
+            else:
+                final_context = accumulated_context
+
+        logger.info(f"Accumulated context: {final_context}")
+
         if has_sql and has_documents:
             response_mode = ResponseMode.ADVANCE
             logger.info("[Synthesize] Using ADVANCE mode (mixed: SQL + documents)")
@@ -513,6 +538,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
         synthesis_state = dict(state)
         synthesis_state["response_mode"] = response_mode
+        synthesis_state["accumulated_context"] = final_context
 
         try:
             resp = await response_agent.ainvoke(synthesis_state)

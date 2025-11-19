@@ -2,6 +2,7 @@
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import (
+    AIMessage,
     BaseMessage,
     HumanMessage,
     SystemMessage,
@@ -17,7 +18,7 @@ from src.utils import parse_response
 from src.utils.logger_conf import logger
 
 
-class ReflectionAgent(BaseAgent):
+class DirectionGenerationAgent(BaseAgent):
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):
         super().__init__(provider)
 
@@ -40,35 +41,50 @@ class ReflectionAgent(BaseAgent):
                     for ex in recent_history
                 ]
             )
-            history_section = f"Execution History:\n{history_text}\n"
+            history_section = f"Execution History:\n{history_text}"
+
+        missing_aspects = state.get("_missing_aspects", "")
+        missing_section = (
+            f"Missing Aspects:\n{missing_aspects}" if missing_aspects else ""
+        )
 
         active_map = SubgraphRegistry.resolve_active(
             allow=state.get("subgraph_policy", {}).get("allow"),
             block=state.get("subgraph_policy", {}).get("block"),
             extras=state.get("subgraph_policy", {}).get("extras"),
         )
+        subgraph_definitions = SubgraphRegistry.generate_routing_prompt(active_map)
 
-        missing_aspects = state.get("_missing_aspects", "")
-        missing_section = (
-            f"Missing Aspects: {missing_aspects}\n" if missing_aspects else ""
+        knowledge_section = (
+            f"Accumulated Knowledge:\n{knowledge[-3000:]}" if knowledge else ""
         )
+
+        learnings_text = (
+            "\n".join(f"- {learning}" for learning in learnings[-3:])
+            if learnings
+            else "None yet"
+        )
+        learnings_section = f"Previous Learnings:\n{learnings_text}"
 
         conversation_text = get_buffer_string(state["conversation"])
 
-        prompt_input = PromptTemplates.REFLECTION_HUMAN_PROMPT.format(
-            conversation_text=conversation_text,
-            learnings="\n".join(f"- {learning}" for learning in learnings[-3:])
-            if learnings
-            else "None yet",
-            knowledge=knowledge[-3000:] if knowledge else "None yet",
-            execution_history_section=history_section,
-            subgraph_definitions=SubgraphRegistry.generate_routing_prompt(active_map),
-            missing_aspects_section=missing_section,
-        )
-
         messages: List[BaseMessage] = [
             SystemMessage(content=PromptTemplates.REFLECTION_PROMPT),
-            HumanMessage(content=prompt_input),
+            AIMessage(
+                content="\n\n".join(
+                    filter(
+                        None,
+                        [
+                            subgraph_definitions,
+                            knowledge_section,
+                            learnings_section,
+                            history_section,
+                            missing_section,
+                        ],
+                    )
+                )
+            ),
+            HumanMessage(content=f"Conversation:\n{conversation_text}"),
         ]
 
         reflection_result = await self.iterative_llm_call_structured(

@@ -2,7 +2,7 @@
 from typing import List
 
 from langchain_core.documents import Document
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.basic.base import BaseAgent
 from src.agents.tools.server.mcp_retrieve_tools import think
@@ -91,11 +91,6 @@ Docs: [Server-A Logs, Server-B Incident, Server-C Metrics, Database Guide, Offic
 Think: "Absence query - need all server docs to determine which lack downtime. Docs 1-4 are server-related. Doc 5 irrelevant."
 Output: {"indexes": [1, 2, 3, 4]}
 
----
-
-Query: "Thank you!"
-Think: "Pure conversational, no info request."
-Output: {"indexes": []}
 </examples>
 
 <critical_rules>
@@ -117,22 +112,21 @@ class CitationAgent(BaseAgent):
         super().__init__()
         logger.info("Citation Agent initialized successfully.")
 
-    async def ainvoke(
-        self, history: List[BaseMessage], reference: List[Document]
-    ) -> CitationIndexes:
+    async def ainvoke(self, query: str, reference: List[Document]) -> CitationIndexes:
         """Extracts citations from the provided context based on the user query."""
         if not reference:
             return CitationIndexes(indexes=[])
 
         try:
             formatted_context = format_context_for_response(reference)
-            system_prompt = SystemMessage(content=CITATION_PROMPT_TEMPLATE)
-            user_content = HumanMessage(
-                content=f"""Here are documents:\n{formatted_context}\n---\nExtract correct citations for the following query: {history[-1].content}"""
-            )
-            messages: List[BaseMessage] = (
-                [system_prompt] + history[:-1] + [user_content]
-            )
+
+            messages: List[BaseMessage] = [
+                SystemMessage(content=CITATION_PROMPT_TEMPLATE),
+                AIMessage(content=f"Retrieved documents:\n\n{formatted_context}"),
+                HumanMessage(
+                    content=f"Extract correct citations for the following query: {query}"
+                ),
+            ]
 
             response = await self.iterative_llm_call_structured(
                 messages=messages,

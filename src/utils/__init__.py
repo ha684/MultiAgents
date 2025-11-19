@@ -1,12 +1,14 @@
 # src/utils/__init__.py
-from datetime import datetime
 import json
 import re
+from datetime import datetime
 from typing import Any, Dict, List
-from zoneinfo import ZoneInfo
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from zoneinfo import ZoneInfo
 
+import tiktoken
 from langchain_core.documents import Document
+
 from src.domain.schemas.chat import Message
 from src.utils.logger_conf import logger
 
@@ -43,7 +45,7 @@ def parse_response(content: str) -> dict | None:
                 content = content[4:]
             content = content.strip()
 
-        parsed = json.loads(content)
+        parsed = json.loads(content, strict=False)
         return parsed
     except (json.JSONDecodeError, ValueError, KeyError) as e:
         logger.debug(f"Failed to parse citation response: {e}")
@@ -83,14 +85,17 @@ def format_context_for_response(documents: List[Document]) -> str:
 
     parts = ["# Retrieved documents:\n"]
     for i, doc in enumerate(documents, start=1):
-        source = doc.metadata.get("original_filename", "Unknown source")
-        parts.append(f"[{i}] Source: {source}\n{doc.page_content}\n")
+        parts.append(f"[CITATION: {i}]\n{doc.page_content}\n")
     return "\n".join(parts)
 
 
 def truncate_docs_by_tokens(
-    documents, max_tokens, tokenizer, min_tokens_per_doc=0, add_ellipsis=True
-):
+    documents: List[Document],
+    max_tokens: int,
+    tokenizer: tiktoken.Encoding,
+    min_tokens_per_doc: int = 0,
+    add_ellipsis: bool = True,
+) -> List[Document]:
     if not documents:
         return []
 

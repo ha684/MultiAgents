@@ -8,6 +8,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import (
+    AIMessage,
     BaseMessage,
     HumanMessage,
     SystemMessage,
@@ -67,28 +68,21 @@ class SqlGraph(GraphAgentBase[SqlState]):
         Validates if user query is relevant to available database tables.
         Fast check before expensive analysis/generation steps.
         """
-        logger.info("[validate_relevance] Checking query relevance to database.")
         max_iterations = 3
-
-        system_prompt = SystemMessage(
-            content=PromptTemplates.RELEVANCE_VALIDATION_SYSTEM_PROMPT
-        )
 
         schema_info = await self.sql_database.get_table_info()
         available_tables = ", ".join(self.sql_database.get_usable_table_names())
 
         conversation_text = get_buffer_string(state["conversation"])
-        user_prompt = HumanMessage(
-            content=PromptTemplates.RELEVANCE_VALIDATION_HUMAN_PROMPT.format(
-                available_tables=available_tables,
-                database_schema=schema_info,
-                conversation_text=conversation_text,
-            )
-        )
 
-        messages: List[BaseMessage] = [system_prompt, user_prompt]
+        messages: List[BaseMessage] = [
+            SystemMessage(content=PromptTemplates.RELEVANCE_VALIDATION_SYSTEM_PROMPT),
+            AIMessage(
+                content=f"Available tables: {available_tables}\n\nDatabase schema:\n{schema_info}"
+            ),
+            HumanMessage(content=f"Conversation:\n{conversation_text}"),
+        ]
 
-        logger.info("[validate_relevance] Calling LLM for relevance check.")
         response = await self.iterative_llm_call_structured(
             messages=messages,
             llm_with_tools=self.thinking_llm,
@@ -160,29 +154,26 @@ class SqlGraph(GraphAgentBase[SqlState]):
         2. Whether visualization is appropriate
         3. How many queries might be needed
         """
-        logger.info("[analyze_query] Starting query analysis node.")
-        logger.debug(
-            f"[analyze_query] Contextualized query: {state['contextualized_query']}"
-        )
         max_iterations = 5
-
-        system_prompt = SystemMessage(
-            content=PromptTemplates.SQL_ANALYSIS_SYSTEM_PROMPT
-        )
 
         schema_info = await self.sql_database.get_table_info()
 
         conversation_text = get_buffer_string(state["conversation"])
-        user_prompt = HumanMessage(
-            content=PromptTemplates.SQL_ANALYSIS_HUMAN_PROMPT.format(
-                database_schema=schema_info,
-                conversation_text=conversation_text,
-            )
-        )
 
-        messages: List[BaseMessage] = [system_prompt, user_prompt]
+        messages: List[BaseMessage] = [
+            SystemMessage(content=PromptTemplates.SQL_ANALYSIS_SYSTEM_PROMPT),
+            AIMessage(content=f"Database schema:\n{schema_info}"),
+            HumanMessage(
+                content=(
+                    f"Conversation:\n{conversation_text}",
+                    "Analyze the conversation and determine:",
+                    "1. What data is needed to answer the question",
+                    "2. Whether visualization would be helpful",
+                    "3. The optimal query strategy and chart type",
+                )
+            ),
+        ]
 
-        logger.info("[analyze_query] Calling LLM for query analysis.")
         response = await self.iterative_llm_call_structured(
             messages=messages,
             llm_with_tools=self.thinking_llm,
@@ -206,12 +197,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 },
             }
 
-        logger.info(
-            f"[analyze_query] Query analysis complete: needs_chart={response.get('needs_chart')}, "
-            f"query_count={len(response.get('required_queries', []))}"
-        )
-        logger.debug(f"[analyze_query] Returning analysis: {response}")
-
         return {"analysis": response}
 
     async def generate_sql_queries_node(self, state: SqlState) -> Dict[str, Any]:
@@ -219,7 +204,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
         Generates SQL queries based on the analysis.
         Can generate multiple queries if needed for complex requests.
         """
-        logger.info("[generate_sql_queries] Starting SQL generation node.")
         max_iterations = 5
         query_plan = state.get("analysis", {}).get("required_queries")
 
@@ -237,26 +221,23 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 },
             }
 
-        logger.debug(f"[generate_sql_queries] Using query plan: {query_plan}")
-
-        system_prompt = SystemMessage(
-            content=PromptTemplates.SQL_GENERATION_SYSTEM_PROMPT
-        )
-
         schema_info = await self.sql_database.get_table_info()
 
         conversation_text = get_buffer_string(state["conversation"])
-        user_prompt = HumanMessage(
-            content=PromptTemplates.SQL_GENERATION_HUMAN_PROMPT.format(
-                conversation_text=conversation_text,
-                database_schema=schema_info,
-                query_plan=json.dumps(query_plan, indent=2),
-            )
-        )
 
-        messages: List[BaseMessage] = [system_prompt, user_prompt]
+        messages: List[BaseMessage] = [
+            SystemMessage(content=PromptTemplates.SQL_GENERATION_SYSTEM_PROMPT),
+            AIMessage(
+                content=f"Database schema:\n{schema_info}\n\nQuery plan:\n{json.dumps(query_plan, indent=2)}"
+            ),
+            HumanMessage(
+                content=(
+                    f"Conversation:\n{conversation_text}",
+                    "Generate executable SQL SELECT queries based on the query plan and schema above.",
+                )
+            ),
+        ]
 
-        logger.info("[generate_sql_queries] Calling LLM to generate SQL.")
         response = await self.iterative_llm_call_structured(
             messages=messages,
             llm_with_tools=self.thinking_llm,
@@ -283,9 +264,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
         logger.info(
             f"[generate_sql_queries] Successfully generated {len(generated_queries)} SQL queries."
         )
-        logger.debug(
-            f"[generate_sql_queries] Returning generated queries: {generated_queries}"
-        )
 
         return {
             "generated_queries": generated_queries,
@@ -299,7 +277,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
         Validates all generated SQL queries.
         Ensures they are SELECT-only and safe to execute.
         """
-        logger.info("[validate_queries] Starting query validation node.")
         generated_queries = state.get("generated_queries")
 
         if not generated_queries:
@@ -323,9 +300,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
         for idx, query_info in enumerate(generated_queries):
             query = query_info.get("query", "")
             purpose = query_info.get("purpose", f"Query {idx + 1}")
-            logger.debug(
-                f"[validate_queries] Validating query for purpose: '{purpose}'"
-            )
             validation = self.validator.validate_query(query)
 
             validation_results.append(
@@ -361,15 +335,11 @@ class SqlGraph(GraphAgentBase[SqlState]):
             }
 
         logger.info("[validate_queries] All SQL queries validated successfully.")
-        logger.debug(
-            f"[validate_queries] Returning validation results: {validation_results}"
-        )
 
         return {"query_results": validation_results}
 
     def route_after_validation(self, state: SqlState) -> str:
         """Routes after SQL validation."""
-        logger.info("[route_after_validation] Deciding route after validation.")
 
         validation_results = state.get("query_results", [])
         if not validation_results:
@@ -388,7 +358,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
         Executes all validated SQL queries sequentially.
         Uses DatabaseSession for proper transaction management.
         """
-        logger.info("[execute_queries] Starting query execution node.")
         MAX_ROWS_PER_QUERY = 5
         validation_results = state.get("query_results", [])
 
@@ -484,7 +453,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
     def route_after_execution(self, state: SqlState) -> str:
         """Routes after query execution."""
-        logger.info("[route_after_execution] Deciding route after execution.")
         analysis = state.get("analysis", {})
         if analysis.get("needs_chart") and analysis.get("chart_type"):
             logger.info(
@@ -499,7 +467,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
         Generates Vega-Lite chart specification based on query results.
         Only called when analysis indicates visualization is appropriate.
         """
-        logger.info("[generate_chart] Starting chart generation node.")
         max_iterations = 5
 
         if not state.get("query_results"):
@@ -507,10 +474,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 "[generate_chart] No query results found in state for chart generation. Skipping."
             )
             return {"chart_spec": None}
-
-        system_prompt = SystemMessage(
-            content=PromptTemplates.CHART_GENERATION_SYSTEM_PROMPT
-        )
 
         data_summary = []
         for result in state["query_results"]:
@@ -543,19 +506,22 @@ class SqlGraph(GraphAgentBase[SqlState]):
             )
             return {"chart_spec": None}
 
-        logger.debug(f"[generate_chart] Prepared data summary for LLM: {data_summary}")
+        chart_type = state.get("analysis", {}).get("chart_type", "auto")
         conversation_text = get_buffer_string(state["conversation"])
-        user_prompt = HumanMessage(
-            content=PromptTemplates.CHART_GENERATION_HUMAN_PROMPT.format(
-                conversation_text=conversation_text,
-                chart_type=state.get("analysis", {}).get("chart_type", "auto"),
-                data_summary=json.dumps(data_summary, indent=2, default=str),
-            )
-        )
 
-        messages: List[BaseMessage] = [system_prompt, user_prompt]
+        messages: List[BaseMessage] = [
+            SystemMessage(content=PromptTemplates.CHART_GENERATION_SYSTEM_PROMPT),
+            AIMessage(
+                content=f"Suggested chart type: {chart_type}\n\nQuery results summary:\n{json.dumps(data_summary, indent=2, default=str)}"
+            ),
+            HumanMessage(
+                content=(
+                    f"Conversation:\n{conversation_text}",
+                    "Generate a Vega-Lite chart specification that visualizes the query results to answer the user's question.",
+                )
+            ),
+        ]
 
-        logger.info("[generate_chart] Calling LLM to generate Vega-Lite spec.")
         response = await self.iterative_llm_call_structured(
             messages=messages,
             llm_with_tools=self.thinking_llm,
@@ -581,9 +547,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
             "has_chart": True,
             "chart_type": chart_type,
         }
-        logger.debug(
-            f"[generate_chart] Returning chart spec and updated metadata: {updated_metadata}"
-        )
 
         return {
             "chart_spec": response["vega_spec"],

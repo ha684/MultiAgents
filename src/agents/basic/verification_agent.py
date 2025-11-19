@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from langchain_core.messages import (
     BaseMessage,
+    AIMessage,
     HumanMessage,
     SystemMessage,
     get_buffer_string,
@@ -33,14 +34,12 @@ class VerificationAgent(BaseAgent):
         """
         max_iterations = 3
         conversation_text = get_buffer_string(state["conversation"])
-        prompt_input = PromptTemplates.VERIFICATION_HUMAN_PROMPT.format(
-            conversation_text=conversation_text,
-            accumulated_context=state["accumulated_context"],
-        )
 
+        total_context = f"Accumulated context:\n{state.get('accumulated_context', '') + '\n\n' + state.get('internal_reasoning', '')}"
         messages: List[BaseMessage] = [
             SystemMessage(content=PromptTemplates.VERIFICATION_PROMPT),
-            HumanMessage(content=prompt_input),
+            AIMessage(content=total_context),
+            HumanMessage(content=f"Conversation: {conversation_text}"),
         ]
 
         verification_llm = self.thinking_llm
