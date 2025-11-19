@@ -465,11 +465,9 @@ async def list_users(
 async def validate_token(current_user: User = Depends(get_current_user)):
     """Validate current token and return user info"""
     return {
-        "data": {
-            "user_id": str(current_user.id),
-            "email": current_user.email,
-            "role": current_user.role.value,
-            "status": current_user.status.value,
-        },
+        "user_id": str(current_user.id),
+        "email": current_user.email,
+        "role": current_user.role.value,
+        "status": current_user.status.value,
         "message": "Token is valid",
     }

@@ -15,6 +15,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.api import ROUTERS
 from src.core.config.settings import settings
+from src.core.exceptions.base import BaseException
 from src.core.monitoring.observability import setup_tracing
 from src.domain.schemas.chat import HealthCheckResponse
 from src.infrastructure.cache import redis_client
@@ -97,9 +98,10 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-app.exception_handler(Exception)(exception_handler)
-app.exception_handler(HTTPException)(exception_handler)
-app.exception_handler(RequestValidationError)(exception_handler)
+app.add_exception_handler(BaseException, exception_handler)
+app.add_exception_handler(HTTPException, exception_handler)
+app.add_exception_handler(RequestValidationError, exception_handler)
+app.add_exception_handler(Exception, exception_handler)
 
 
 @app.get("/health")
