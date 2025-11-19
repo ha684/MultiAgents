@@ -513,15 +513,23 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
         final_context = ""
         if internal_reasoning:
-            final_context = f"[INTERNAL_REASONING - DO NOT CITE]\n{internal_reasoning}\n[END_INTERNAL_REASONING]"
+            final_context = f"""## Your Internal Knowledge
+
+            IMPORTANT: The content below represents your own reasoning and understanding, NOT external sources.
+            - Use this information naturally in your response
+            - DO NOT add citation markers to this content
+            - Only cite the EXTERNAL SOURCES that appear after this section
+
+            {internal_reasoning}
+
+            ## External Sources (CITE THESE):
+            """
 
         if accumulated_context:
             if final_context:
                 final_context += f"\n\n{accumulated_context}"
             else:
                 final_context = accumulated_context
-
-        logger.info(f"Accumulated context: {final_context}")
 
         if has_sql and has_documents:
             response_mode = ResponseMode.ADVANCE
