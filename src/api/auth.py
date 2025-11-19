@@ -364,9 +364,10 @@ async def change_password(
             str(current_user.id), password_data
         )
         if success:
-            return "Password changed successfully"
+            return {"message": "Password changed successfully"}
+
         else:
-            return "Password change failed"
+            return {"message": "Password change failed"}
     except Exception as e:
         raise e
 
@@ -376,7 +377,7 @@ async def request_password_reset(reset_data: PasswordResetRequest):
     """Request password reset"""
     try:
         await auth_service.request_password_reset(reset_data.email)
-        return "If the email exists, a password reset link has been sent"
+        return {"message": "If the email exists, a password reset link has been sent"}
     except Exception as e:
         raise e
 

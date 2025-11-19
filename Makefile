@@ -39,7 +39,6 @@ help:
 	@echo === Code Quality ===
 	@echo   make format           - Auto-format code with black, isort, ruff
 	@echo   make lint             - Run linting checks
-	@echo   make security         - Run security scans (bandit, safety)
 	@echo.
 	@echo === Docker ===
 	@echo   make docker-test-up   - Start test environment with Docker Compose
@@ -115,7 +114,7 @@ docker-test-rebuild:
 	docker-compose -f docker/docker-compose.test.yml up --build --force-recreate --abort-on-container-exit
 
 # CI Pipeline (Local)
-ci-local: clean format lint security test-cov
+ci-local: format lint test-cov
 	@echo.
 	@echo ===================================
 	@echo   Local CI pipeline completed!

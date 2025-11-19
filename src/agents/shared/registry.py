@@ -6,6 +6,7 @@ from src.domain.entities.graph import (
     RoutingAction,
     RoutingCondition,
     SubgraphBehavior,
+    SubgraphExecutor,
     SubgraphJourney,
     SubgraphProfile,
 )
@@ -156,7 +157,7 @@ class SubgraphRegistry:
         cls,
         name: str,
         active_map: dict[str, SubgraphProfile],
-    ) -> any | None:
+    ) -> SubgraphExecutor | None:
         """Get executor for a subgraph."""
         profile = active_map.get(name)
         return profile.executor if profile else None

@@ -38,6 +38,7 @@ class TestAuthEndpoints:
                     "password": "SecurePassword123!",
                     "full_name": "New User",
                 },
+                headers={"Authorization": "Bearer hapt68"},
             )
 
             assert response.status_code == 200
@@ -48,7 +49,7 @@ class TestAuthEndpoints:
             data = response.json()
             assert "data" in data
             assert (
-                data["message"]
+                data["data"]["message"]
                 == "User registered successfully. Please check your email for verification."
             )
 
@@ -68,6 +69,7 @@ class TestAuthEndpoints:
                     "password": "SecurePassword123!",
                     "full_name": "New User",
                 },
+                headers={"Authorization": "Bearer hapt68"},
             )
 
             assert response.status_code == 400
@@ -99,14 +101,15 @@ class TestAuthEndpoints:
                     "email": "test@example.com",
                     "password": "TestPassword123!",
                 },
+                headers={"Authorization": "Bearer hapt68"},
             )
 
             assert response.status_code == 200
             data = response.json()
             assert "data" in data
-            assert "user" in data
-            assert data["message"] == "Login successful"
-            assert data["user"]["email"] == "test@example.com"
+            assert "user" in data["data"]
+            assert data["data"]["message"] == "Login successful"
+            assert data["data"]["user"]["email"] == "test@example.com"
 
     @pytest.mark.asyncio
     async def test_login_invalid_credentials(self, async_client):
@@ -122,6 +125,7 @@ class TestAuthEndpoints:
                     "email": "test@example.com",
                     "password": "WrongPassword",
                 },
+                headers={"Authorization": "Bearer hapt68"},
             )
 
             assert response.status_code == 401
@@ -146,7 +150,7 @@ class TestAuthEndpoints:
             assert response.status_code == 200
             data = response.json()
             assert "data" in data
-            assert data["message"] == "Token refreshed successfully"
+            assert data["data"]["message"] == "Token refreshed successfully"
 
     @pytest.mark.asyncio
     async def test_refresh_token_invalid(self, async_client):
@@ -159,6 +163,7 @@ class TestAuthEndpoints:
             response = await async_client.post(
                 "/auth/refresh",
                 json={"refresh_token": "invalid-token"},
+                headers={"Authorization": "Bearer hapt68"},
             )
 
             assert response.status_code == 401
@@ -172,6 +177,7 @@ class TestAuthEndpoints:
             response = await async_client.post(
                 "/auth/logout",
                 json={"refresh_token": "valid-refresh-token"},
+                headers={"Authorization": "Bearer hapt68"},
             )
 
             assert response.status_code == 200
@@ -190,8 +196,8 @@ class TestAuthEndpoints:
 
             assert response.status_code == 200
             data = response.json()
-            assert data["email"] == test_user.email
-            assert data["username"] == test_user.username
+            assert data["data"]["email"] == test_user.email
+            assert data["data"]["username"] == test_user.username
 
     @pytest.mark.asyncio
     async def test_get_me_unauthorized(self, async_client):
@@ -232,8 +238,8 @@ class TestAuthEndpoints:
 
             assert response.status_code == 200
             data = response.json()
-            assert data["full_name"] == "Updated Name"
-            assert data["username"] == "newusername"
+            assert data["data"]["full_name"] == "Updated Name"
+            assert data["data"]["username"] == "newusername"
 
     @pytest.mark.asyncio
     async def test_change_password_success(self, async_client, test_user, auth_headers):
@@ -255,7 +261,8 @@ class TestAuthEndpoints:
             )
 
             assert response.status_code == 200
-            assert "Password changed successfully" in response.text
+            data = response.json()
+            assert data["data"]["message"] == "Password changed successfully"
 
     @pytest.mark.asyncio
     async def test_request_password_reset(self, async_client):
@@ -266,10 +273,15 @@ class TestAuthEndpoints:
             response = await async_client.post(
                 "/auth/password/reset",
                 json={"email": "test@example.com"},
+                headers={"Authorization": "Bearer hapt68"},
             )
 
             assert response.status_code == 200
-            assert "password reset link" in response.text.lower()
+            data = response.json()
+            assert (
+                data["data"]["message"]
+                == "If the email exists, a password reset link has been sent"
+            )
 
     @pytest.mark.asyncio
     async def test_verify_email_success(self, async_client):
@@ -286,11 +298,12 @@ class TestAuthEndpoints:
             response = await async_client.post(
                 "/auth/email/verify",
                 json={"token": "valid-verification-token"},
+                headers={"Authorization": "Bearer hapt68"},
             )
 
             assert response.status_code == 200
             data = response.json()
-            assert data["email_verified"] is True
+            assert data["data"]["email_verified"] is True
 
     @pytest.mark.asyncio
     async def test_list_users_admin_only(self, async_client, admin_auth_headers):
