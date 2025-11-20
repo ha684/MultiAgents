@@ -69,7 +69,7 @@ class DirectionGenerationAgent(BaseAgent):
         conversation_text = get_buffer_string(state["conversation"])
 
         messages: list[BaseMessage] = [
-            SystemMessage(content=PromptTemplates.REFLECTION_PROMPT),
+            SystemMessage(content=PromptTemplates.DIRECTION_GENERATION_PROMPT),
             AIMessage(
                 content="\n\n".join(
                     filter(

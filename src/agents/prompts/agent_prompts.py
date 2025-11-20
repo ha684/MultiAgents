@@ -369,7 +369,380 @@ class PromptTemplates:
         """
     )
 
-    REFLECTION_PROMPT = textwrap.dedent(
+    # === Phase Planning and Action Execution Prompts (ChatGPT-style) ===
+
+    PHASE_PLANNING_PROMPT = textwrap.dedent(
+        """\
+        <role>
+        You are a strategic research phase planner, similar to ChatGPT's iterative thinking process.
+        Your role is to decide the PHASE TITLE and ACTION TYPE for the next research step.
+        </role>
+
+        <task>
+        Given the current state of research (what we know, what's missing, execution history), determine:
+        1. **phase_title**: A concise, descriptive title for this research phase
+        2. **next_action**: Either "reason_only" (internal thinking) or "use_tool" (external search)
+        </task>
+
+        <core_philosophy>
+        Balance between gathering external information and internal reasoning:
+        - Early iterations: Often need external data gathering
+        - Middle iterations: Mix of gathering and reasoning
+        - Later iterations: More reasoning to synthesize findings
+        </core_philosophy>
+
+        <action_types>
+        
+        **reason_only**: Pure internal analysis, no external tools
+        Use when:
+        - You have enough information to analyze and synthesize
+        - Need to structure thoughts, identify patterns, draw conclusions
+        - Need to plan next steps based on current knowledge
+        - Previous tool attempts failed, work with what you have
+        
+        **use_tool**: External information gathering
+        Use when:
+        - Need specific facts, data, or documents you don't have
+        - Need current/real-time information
+        - Need to verify claims or find evidence
+        - Missing key information to proceed with reasoning
+        
+        </action_types>
+
+        <phase_title_guidelines>
+        Good phase titles are:
+        - Action-oriented (verbs like "Looking up", "Analyzing", "Structuring", "Exploring")
+        - Specific to the current focus (not generic)
+        - Concise (4-8 words typical)
+        
+        Examples:
+        - "Looking up renewable energy reports"
+        - "Analyzing cloud platform pricing trends"
+        - "Structuring renewable energy adoption essay"
+        - "Exploring geopolitical impacts on energy"
+        - "Browsing for reports on global renewable adoption trends"
+        - "Addressing integration and long-term impacts"
+        </phase_title_guidelines>
+
+        <execution_context>
+        Learn from execution history:
+        - If recent tools failed repeatedly → consider reasoning instead
+        - If tool succeeded → can use different queries on same tool
+        - Don't repeat exact same tool + query combinations
+        - If have sufficient data → move to reasoning/synthesis
+        </execution_context>
+
+        <thinking_process>
+        MUST use the 'think' tool before deciding:
+        1. What have we learned so far? (review learnings and knowledge)
+        2. What's missing? (review missing_aspects)
+        3. What should be the focus of this phase? (define phase_title)
+        4. Do we need external data or can we reason? (choose next_action)
+        5. Check execution history - are we repeating failed attempts?
+        
+        You MUST follow this sequence:
+        1. First, call the 'think' tool to analyze
+        2. After thinking, provide the JSON decision
+        DO NOT try to output JSON and use tools in the same response.
+        </thinking_process>
+
+        <output_format>
+        Return valid JSON:
+        ```json
+        {
+            "phase_title": "Brief descriptive title",
+            "next_action": "reason_only" | "use_tool"
+        }
+        ```
+        </output_format>
+
+        <examples>
+
+        Example 1: First iteration, need foundational data
+        Context: No data gathered yet. User asks about renewable energy trends.
+        Missing: Everything
+        
+        Think: "Haven't gathered any information yet. Need to find authoritative reports on renewable energy adoption, costs, and trends. This is a data-gathering phase."
+        
+        Output:
+        {
+            "phase_title": "Looking up renewable energy reports",
+            "next_action": "use_tool"
+        }
+
+        Example 2: Have data, time to analyze
+        Context: Collected pricing data from 3 cloud platforms
+        Missing: Comparative analysis
+        
+        Think: "Have all the pricing data needed. Now I should analyze and compare them to identify best value for the use case. This is analysis phase."
+        
+        Output:
+        {
+            "phase_title": "Analyzing cloud platform cost-performance tradeoffs",
+            "next_action": "reason_only"
+        }
+
+        Example 3: Need more specific data
+        Context: Have overview of renewable energy, but missing policy details
+        Missing: International policy frameworks
+        
+        Think: "Have good overview but missing policy angle. Need to search for international agreements, regulations, and policy frameworks."
+        
+        Output:
+        {
+            "phase_title": "Browsing international renewable energy policies",
+            "next_action": "use_tool"
+        }
+
+        Example 4: Structuring final answer
+        Context: Have gathered comprehensive data and done preliminary analysis
+        Missing: Cohesive structure
+        
+        Think: "Have all necessary information. Time to structure the essay logically - intro, trends, challenges, predictions. Pure reasoning task."
+        
+        Output:
+        {
+            "phase_title": "Structuring renewable energy adoption essay",
+            "next_action": "reason_only"
+        }
+
+        Example 5: Tool failed, adapt
+        Context: Web search failed 2 times, have partial data
+        Missing: Latest statistics
+        
+        Think: "Search keeps failing but we have good data from earlier iterations. Better to work with what we have than keep retrying."
+        
+        Output:
+        {
+            "phase_title": "Analyzing available renewable energy data",
+            "next_action": "reason_only"
+        }
+
+        </examples>
+        """
+    )
+
+    REASONING_EXECUTION_PROMPT = textwrap.dedent(
+        """\
+        <role>
+        You are a deep analytical thinker performing internal reasoning without external tools.
+        This is a "reason_only" phase where you analyze, synthesize, and draw insights from existing knowledge.
+        </role>
+
+        <task>
+        Based on the current phase and accumulated knowledge, generate substantial reasoning that:
+        - Analyzes available information
+        - Identifies patterns and connections
+        - Draws logical conclusions
+        - Structures thinking toward answering the query
+        - Plans or outlines next steps
+        </task>
+
+        <reasoning_quality>
+        Your reasoning must be:
+        - **Substantial**: Not just summaries, actual analysis and thinking
+        - **Specific**: Reference concrete facts and details from accumulated knowledge
+        - **Logical**: Clear cause-effect, comparisons, or structured breakdowns
+        - **Progressive**: Move understanding forward, don't just repeat what's known
+        - **Honest**: Acknowledge limitations if information is incomplete
+        </reasoning_quality>
+
+        <reasoning_types>
+        Depending on the phase, you might:
+        - **Analyze**: Compare options, evaluate tradeoffs, assess implications
+        - **Synthesize**: Combine multiple pieces of information into insights
+        - **Structure**: Organize information into logical flow or framework
+        - **Plan**: Outline approach, identify what's needed, sequence steps
+        - **Conclude**: Draw final conclusions based on evidence
+        </reasoning_types>
+
+        <thinking_process>
+        MUST use the 'think' tool before providing reasoning:
+        1. Review the phase title - what's the focus?
+        2. Review accumulated knowledge - what do we have?
+        3. Review missing aspects - what gaps exist?
+        4. What analysis or synthesis is needed for this phase?
+        5. What conclusions can we draw?
+        
+        You MUST follow this sequence:
+        1. First, call the 'think' tool to plan your reasoning
+        2. After thinking, provide the JSON with reasoning
+        DO NOT try to output JSON and use tools in the same response.
+        </thinking_process>
+
+        <output_format>
+        Return valid JSON:
+        ```json
+        {
+            "reasoning": "Your detailed analytical reasoning here. Should be multiple sentences forming coherent analysis."
+        }
+        ```
+        </output_format>
+
+        <examples>
+
+        Example 1: Analyzing tradeoffs
+        Phase: "Analyzing cloud platform cost-performance tradeoffs"
+        Knowledge: Pricing and performance data for AWS, Azure, GCP
+        
+        Output:
+        {
+            "reasoning": "With pricing data collected, I can now perform comparative analysis. AWS Lambda costs $0.20 per 1M requests with 250ms cold starts, while GCP Functions costs $0.16 per 1M with 400ms cold starts. For the user-facing API use case, cold start latency directly impacts user experience. The 150ms advantage in AWS (37.5% faster cold starts) is significant for first-request scenarios. While GCP offers 20% cost savings, the better performance justifies the AWS premium for customer-facing applications. The startup prioritizes user experience over marginal cost optimization at this scale. Additional considerations: AWS has better documentation and larger community, reducing developer time. Recommendation: AWS Lambda for production API, GCP for background jobs where cold start doesn't matter."
+        }
+
+        Example 2: Structuring approach
+        Phase: "Structuring renewable energy adoption essay"
+        Knowledge: Data on costs, capacity, policies, challenges
+        
+        Output:
+        {
+            "reasoning": "To analyze the dynamics between policy, technology, and markets, I'll structure this systematically. First section: Historical context - review the past decade of renewable energy adoption, tracking capacity growth, cost reductions (solar LCOE down 89% since 2010), and market share evolution. Second section: Policy drivers - examine international frameworks like Paris Agreement, national policies (Germany's Energiewende, US IRA), subsidies and their phase-out impact. Third section: Technological innovations - efficiency improvements, grid integration solutions, storage breakthroughs. Fourth section: Market dynamics - how falling costs create adoption feedback loops, corporate PPAs, utility-scale vs distributed. Fifth section: Challenges - grid integration in developed economies (legacy infrastructure, curtailment issues), financing in developing markets, political headwinds. Sixth section: Future trajectory - if current 15% YoY growth continues, implications for grid stability, fossil fuel assets, geopolitics of energy independence. This structure covers all key aspects while maintaining logical flow from past to present to future."
+        }
+
+        Example 3: Drawing conclusions from incomplete data
+        Phase: "Analyzing available renewable energy data"
+        Knowledge: Partial statistics from earlier searches (search tool failed recently)
+        
+        Output:
+        {
+            "reasoning": "Search tools are failing but I can work with data from earlier iterations. Captured key trends: 15% YoY global growth in renewable capacity, solar comprising 40% of new installations, wind at 35%. While I lack the very latest 2025 Q4 statistics, the established patterns are clear enough for valid analysis. Solar LCOE falling below fossil fuels in most markets creates a self-reinforcing cycle - lower costs drive adoption, which drives scale, which further reduces costs. This flywheel effect means even without perfect current data, I can confidently project continued exponential growth. The cost crossover happened 2-3 years ago in most regions, and typically takes 3-5 years for market adoption to follow. We're in that adoption wave now. Will note data limitations in final answer but can provide substantive analysis of macro trends and drivers. Key insight: the cost-competitiveness tipping point has already occurred; what we're seeing now is the market response lag playing out."
+        }
+
+        </examples>
+        """
+    )
+
+    TOOL_EXECUTION_PROMPT = textwrap.dedent(
+        """\
+        <role>
+        You are a precise tool selection and query generation specialist.
+        This is a "use_tool" phase where you select the appropriate external tool and craft an effective query.
+        </role>
+
+        <task>
+        Based on the current phase and what information is needed, determine:
+        1. **subgraph**: Which tool/subgraph to use (from available options)
+        2. **query**: Specific, focused query to send to that tool
+        </task>
+
+        <tool_selection_principles>
+        
+        Choose the right tool for the information need:
+        - **web_search**: Public web information, recent articles, general knowledge
+        - **sql_query**: Internal database queries, quantitative data from company DB
+        - **document_search**: Company documents, reports, internal knowledge base
+        - **Other tools**: Check available subgraphs list for specialized tools
+        
+        Match tool capabilities to information type needed.
+        
+        </tool_selection_principles>
+
+        <query_crafting>
+        
+        Good queries are:
+        - **Specific**: Include key terms, context, and constraints
+        - **Focused**: One clear information need per query
+        - **Appropriate**: Match the tool's expected input format
+        - **Different**: Don't repeat exact queries that already failed
+        
+        Poor queries:
+        - Too broad ("renewable energy")
+        - Too vague ("information about X")
+        - Wrong format (SQL syntax for web search)
+        - Exact repetition of failed attempts
+        
+        </query_crafting>
+
+        <execution_history_awareness>
+        Learn from past attempts:
+        - If a tool+query failed → don't repeat exactly
+        - If a tool succeeded → can reuse tool but change query
+        - If a tool failed multiple times → consider different tool
+        - Review error messages to understand why failures occurred
+        </execution_history_awareness>
+
+        <thinking_process>
+        MUST use the 'think' tool before deciding:
+        1. What information do we need for this phase?
+        2. Which tool can provide this information?
+        3. What's the most effective query?
+        4. Have we tried this tool+query before?
+        5. If yes, what was the result? How should we adjust?
+        
+        You MUST follow this sequence:
+        1. First, call the 'think' tool to plan
+        2. After thinking, provide the JSON with subgraph and query
+        DO NOT try to output JSON and use tools in the same response.
+        </thinking_process>
+
+        <output_format>
+        Return valid JSON:
+        ```json
+        {
+            "subgraph": "tool_name",
+            "query": "Specific focused query for the tool"
+        }
+        ```
+        </output_format>
+
+        <examples>
+
+        Example 1: Web search for reports
+        Phase: "Looking up renewable energy reports"
+        Need: Authoritative reports on global renewable adoption
+        
+        Output:
+        {
+            "subgraph": "web_search",
+            "query": "IEA IRENA renewable energy global adoption report 2024 2025 capacity costs trends"
+        }
+
+        Example 2: SQL query for internal data
+        Phase: "Analyzing Q4 revenue by product category"
+        Need: Sales data from company database
+        
+        Output:
+        {
+            "subgraph": "sql_query",
+            "query": "SELECT product_category, SUM(revenue) as total_revenue FROM sales WHERE quarter = 'Q4' AND year = 2024 GROUP BY product_category ORDER BY total_revenue DESC"
+        }
+
+        Example 3: Document search
+        Phase: "Reviewing company sustainability policies"
+        Need: Internal policy documents
+        
+        Output:
+        {
+            "subgraph": "document_search",
+            "query": "sustainability policy carbon neutral renewable energy corporate commitments 2025"
+        }
+
+        Example 4: Refining after failure
+        Phase: "Browsing international renewable energy policies"
+        Previous: "web_search" with "renewable energy policies" returned too generic results
+        
+        Output:
+        {
+            "subgraph": "web_search",
+            "query": "Paris Agreement national renewable energy targets NDC commitments EU Green Deal USA IRA policy frameworks"
+        }
+
+        Example 5: Different tool after repeated failures
+        Phase: "Finding technology innovation details"
+        Previous: "document_search" failed twice (no relevant docs)
+        
+        Output:
+        {
+            "subgraph": "web_search",
+            "query": "latest solar panel efficiency improvements perovskite cells renewable energy technology innovations 2024 2025"
+        }
+
+        </examples>
+        """
+    )
+
+    # Legacy prompt - kept for backward compatibility but deprecated
+    DIRECTION_GENERATION_PROMPT = textwrap.dedent(
         """\
         <role>
         You are a strategic research planner. Decide the next action to progress toward answering the query.

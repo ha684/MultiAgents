@@ -7,8 +7,9 @@ from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from src.agents.basic import (
+    action_execution_agent,
     compress_agent,
-    direction_generation_agent,
+    phase_agent,
     response_agent,
     verification_agent,
 )
@@ -24,15 +25,24 @@ from src.utils.logger_conf import logger
 
 class ThinkingGraph(GraphAgentBase[ThinkingState]):
     """
-    Iterative Research Graph with Reflection.
+    Iterative Research Graph with ChatGPT-style Two-Phase Approach.
 
-    Flow:
-    1. Generate Direction → Decide Action Route
-    2a. If "use_tool": Execute Subgraph → Extract Learnings
-    2b. If "reason_only": Pure Reasoning (no tool call)
-    3. Evaluate Sufficiency
-    4. If insufficient: Continue → back to step 1
-    5. If sufficient: Synthesize Response → END
+    Flow (inspired by ChatGPT's iterative thinking):
+    1. Phase Planning → Decide phase title and action type
+    2. Action Execution → Execute the planned action
+       2a. If "reason_only": Generate internal reasoning
+       2b. If "use_tool": Select tool and query
+    3. Route Based on Action Type
+       3a. If "use_tool": Execute Subgraph → Extract Learnings
+       3b. If "reason_only": Store Reasoning → Evaluate
+    4. Evaluate Sufficiency
+    5. If insufficient: Continue → back to step 1
+    6. If sufficient: Synthesize Response → END
+
+    Two-Phase Approach Benefits:
+    - Clearer separation of concerns (what to do vs how to do it)
+    - More transparent reasoning process
+    - Better phase titles for user visibility (like ChatGPT)
 
     Response Mode Selection:
     - If has_tool_results=True: Use ADVANCE (with citations)
@@ -59,43 +69,97 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             timeout_seconds=300,
         )
 
-    async def generate_direction_node(self, state: ThinkingState) -> dict[str, Any]:
+    async def phase_planning_node(self, state: ThinkingState) -> dict[str, Any]:
         """
-        Generate next research direction using direction_generation_agent.
-        Returns: direction, action, selected_subgraph, reasoning
+        Phase Planning Node (Step 1): Decide phase title and action type.
+
+        Similar to ChatGPT's phase titles like:
+        - "Looking up renewable energy reports"
+        - "Analyzing cloud platform tradeoffs"
+        - "Structuring renewable energy adoption essay"
+
+        Returns: phase_title, next_action
         """
+        iteration = state.get("iteration_count", 0)
+
+        try:
+            resp = await phase_agent.ainvoke(state=state)
+            phase_title = resp.get("phase_title", "Research step")
+            next_action = resp.get("next_action", "use_tool")
+
+            logger.info(
+                f"[Phase Planning] Iter={iteration}, Phase='{phase_title}', Action={next_action}"
+            )
+
+            return {
+                "phase_title": phase_title,
+                "next_action": next_action,
+                "action": next_action,  # Legacy field for compatibility
+            }
+
+        except Exception as e:
+            logger.error(f"[Phase Planning] Failed: {e}")
+            return {
+                "phase_title": "Research step",
+                "next_action": "use_tool",
+                "action": "use_tool",
+            }
+
+    async def action_execution_node(self, state: ThinkingState) -> dict[str, Any]:
+        """
+        Action Execution Node (Step 2): Execute the planned action.
+
+        Two paths:
+        1. next_action="reason_only" → Generate reasoning
+        2. next_action="use_tool" → Select subgraph and generate query
+
+        Returns: reasoning OR (selected_subgraph, direction)
+        """
+        next_action = state.get("next_action", "use_tool")
+        iteration = state.get("iteration_count", 0)
         conversation = state.get("conversation", [])
 
         try:
-            resp = await direction_generation_agent.ainvoke(state=state)
-            direction = resp.get("query", conversation[-1].content)
-            action = resp.get("action", "use_tool")
-            selected_subgraph = resp.get("subgraph", "web_search")
-            reasoning = resp.get("reasoning", "")
+            resp = await action_execution_agent.ainvoke(state=state)
 
-            logger.info(
-                f"[Direction] Iter={state.get('iteration_count', 0)}, Action={action}, Query={direction}..."
-            )
+            if next_action == "reason_only":
+                reasoning = resp.get("reasoning", "")
+                logger.info(
+                    f"[Action Execution] Iter={iteration}, Reasoning: {reasoning[:100]}..."
+                )
+                return {
+                    "reasoning": reasoning,
+                    "selected_subgraph": None,
+                    "direction": None,
+                }
+            else:  # use_tool
+                selected_subgraph = resp.get("subgraph", "web_search")
+                query = resp.get(
+                    "query", conversation[-1].content if conversation else ""
+                )
+                logger.info(
+                    f"[Action Execution] Iter={iteration}, Tool={selected_subgraph}, Query={query[:100]}..."
+                )
+                return {
+                    "selected_subgraph": selected_subgraph,
+                    "direction": query,
+                    "reasoning": None,
+                }
 
         except Exception as e:
-            logger.error(f"Failed to generate direction: {e}")
-            direction = conversation[-1].content
-            action = "use_tool"
-            selected_subgraph = "web_search"
-            reasoning = ""
-
-        return {
-            "direction": direction,
-            "action": action,
-            "selected_subgraph": selected_subgraph,
-            "reasoning": reasoning,
-        }
+            logger.error(f"[Action Execution] Failed: {e}")
+            # Fallback to tool execution
+            return {
+                "selected_subgraph": "web_search",
+                "direction": conversation[-1].content if conversation else "",
+                "reasoning": None,
+            }
 
     def decide_action_route(self, state: ThinkingState) -> str:
-        """Route based on action: 'use_tool' or 'reason_only'."""
-        action = state.get("action", "use_tool")
+        """Route based on next_action: 'use_tool' or 'reason_only'."""
+        next_action = state.get("next_action", "use_tool")
 
-        if action == "reason_only":
+        if next_action == "reason_only":
             logger.info("[Route] → Pure Reasoning")
             return "reason"
         else:
@@ -575,10 +639,22 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             }
 
     def _build_graph(self) -> CompiledStateGraph:
-        """Build the thinking graph workflow."""
+        """
+        Build the thinking graph workflow with ChatGPT-style two-phase approach.
+
+        Flow:
+        1. phase_planning → Decide what to do (phase title + action type)
+        2. action_execution → Execute the action (reasoning OR tool selection)
+        3. Route based on action type
+        4. Either execute tool or store reasoning
+        5. Evaluate sufficiency
+        6. Continue or synthesize
+        """
         workflow = StateGraph(ThinkingState)
 
-        workflow.add_node("generate_direction", self.generate_direction_node)
+        # Add nodes
+        workflow.add_node("phase_planning", self.phase_planning_node)
+        workflow.add_node("action_execution", self.action_execution_node)
         workflow.add_node("execute_subgraph", self.execute_subgraph_node)
         workflow.add_node("pure_reasoning", self.pure_reasoning_node)
         workflow.add_node("extract_learnings", self.extract_learnings_node)
@@ -586,10 +662,15 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         workflow.add_node("continue_iteration", self.continue_iteration_node)
         workflow.add_node("synthesize_response", self.synthesize_response_node)
 
-        workflow.set_entry_point("generate_direction")
+        # Entry point: Start with phase planning
+        workflow.set_entry_point("phase_planning")
 
+        # Phase planning → Action execution
+        workflow.add_edge("phase_planning", "action_execution")
+
+        # Action execution → Route based on action type
         workflow.add_conditional_edges(
-            "generate_direction",
+            "action_execution",
             self.decide_action_route,
             {
                 "execute": "execute_subgraph",
@@ -597,11 +678,14 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             },
         )
 
+        # Tool execution path
         workflow.add_edge("execute_subgraph", "extract_learnings")
         workflow.add_edge("extract_learnings", "evaluate_sufficiency")
 
+        # Pure reasoning path
         workflow.add_edge("pure_reasoning", "evaluate_sufficiency")
 
+        # Evaluate → Continue or Synthesize
         workflow.add_conditional_edges(
             "evaluate_sufficiency",
             self.decide_continue_or_synthesize,
@@ -611,8 +695,10 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             },
         )
 
-        workflow.add_edge("continue_iteration", "generate_direction")
+        # Continue → Back to phase planning
+        workflow.add_edge("continue_iteration", "phase_planning")
 
+        # Finish point
         workflow.set_finish_point("synthesize_response")
 
         return workflow.compile(name=self.graph_name)

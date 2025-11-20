@@ -39,6 +39,10 @@ class ThinkingState(TypedDict, total=False):
     """
     State for iterative research with reflection.
     Organized by purpose for clarity.
+
+    ChatGPT-style two-phase approach:
+    1. Phase Agent: Decides phase_title and next_action
+    2. Action Execution: Either generates reasoning OR selects tool+query
     """
 
     conversation: list[BaseMessage]
@@ -46,10 +50,16 @@ class ThinkingState(TypedDict, total=False):
     response_metadata: dict[str, Any]
 
     iteration_count: int
-    direction: str
-    selected_subgraph: str
-    action: str
-    reasoning: str
+
+    # Phase planning (from phase_agent)
+    phase_title: str
+    next_action: str  # "reason_only" or "use_tool"
+
+    # Action execution results
+    direction: str  # query for tool (when next_action="use_tool")
+    selected_subgraph: str  # tool name (when next_action="use_tool")
+    action: str  # legacy field, maps to next_action
+    reasoning: str  # reasoning content (when next_action="reason_only")
 
     accumulated_context: str
     learnings: list[str]
@@ -70,6 +80,8 @@ class ThinkingState(TypedDict, total=False):
     _should_continue: bool
     _missing_aspects: str
     internal_reasoning: str
+    _execution_failed: bool
+    _failure_reason: str
 
 
 class SqlState(TypedDict):
