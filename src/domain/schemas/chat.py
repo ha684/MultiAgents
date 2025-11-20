@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field, field_serializer, model_validator
 from uuid_extensions import uuid7
 
 
-# Message Part Schemas
 class TextPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
@@ -49,7 +48,6 @@ class DataPart(BaseModel):
 Part = Annotated[TextPart | FilePart | DataPart, Field(discriminator="type")]
 
 
-# Core Message Schemas
 class Message(BaseModel):
     id: str = Field(default_factory=lambda: uuid7().hex)
     role: Literal["user", "agent"]
@@ -58,7 +56,6 @@ class Message(BaseModel):
     retrieval_context: RetrievalContext | None = None
 
 
-# Retrieval Context Schemas
 class RetrievalContext(BaseModel):
     """Save all context retrieved for a message"""
 
@@ -75,13 +72,7 @@ class RetrievalContext(BaseModel):
             for doc in documents
         ]
 
-    @field_serializer("retrieved_at")
-    def serialize_datetime(self, dt: datetime) -> str:
-        """Serialize datetime to ISO format string"""
-        return dt.isoformat()
 
-
-# Web Search Schemas
 class SearchProvider(Enum):
     """Enumeration of available search providers."""
 
@@ -99,7 +90,6 @@ class WebSearchConfig(BaseModel):
         return provider.value
 
 
-# API Request Schemas
 class ChatRequest(BaseModel):
     message: Message
     agentic: bool = Field(
@@ -108,7 +98,6 @@ class ChatRequest(BaseModel):
     web_search: bool = Field(default=False)
 
 
-# Health Check Schemas
 class HealthCheckResponse(BaseModel):
     status: str
     timestamp: datetime
