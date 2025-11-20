@@ -4,7 +4,6 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal, Self
-from zoneinfo import ZoneInfo
 
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field, field_serializer, model_validator
@@ -63,15 +62,9 @@ class Message(BaseModel):
 class RetrievalContext(BaseModel):
     """Save all context retrieved for a message"""
 
-    original_query: str
-    contextualized_query: str
-    retrieved_at: datetime = Field(
-        default_factory=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
-    )
     total_retrieved: int
     total_cited: int
     cited_chunks: list[Document]
-    search_method: Literal["rag", "web"]
     model_config = {"arbitrary_types_allowed": True}
 
     @field_serializer("cited_chunks")

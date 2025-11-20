@@ -49,6 +49,14 @@ class StreamEventBuilder:
         )
 
     @staticmethod
+    def thinking_delta(text: str, index: int = 0) -> str:
+        """Thinking chunk delta"""
+        return StreamEventBuilder.create_sse_event(
+            StreamEventType.MESSAGE_DELTA,
+            {"delta": {"type": "thinking_delta", "text": text}, "index": index},
+        )
+
+    @staticmethod
     def status_update(
         phase: StreamPhase | str,
         message: str,
@@ -117,6 +125,7 @@ class AgenticStreamHandler:
         self.last_phase: StreamPhase | None = None
         self.last_emitted_message: str | None = None
         self.content_index: int = 0
+        self.thinking_index: int = 0
 
     async def handle_event(self, event: dict) -> str | None:
         """Process a single event and return SSE event if needed"""
@@ -215,71 +224,51 @@ class AgenticStreamHandler:
             urls = []
             favicons = []
             for item in items:
-                if url := item.metadata.get("original_filename", ""):
+                # Handle both Document objects and dicts
+                metadata = (
+                    item.metadata
+                    if hasattr(item, "metadata")
+                    else item.get("metadata", {})
+                )
+
+                # Try multiple common keys for URL
+                url = (
+                    metadata.get("source")
+                    or metadata.get("url")
+                    or metadata.get("original_filename")
+                    or ""
+                )
+                if url:
                     urls.append(url)
-                if favicon := item.metadata.get("favicon", ""):
+
+                if favicon := metadata.get("favicon", ""):
                     favicons.append(favicon)
             return urls, favicons
 
-        def build_retrieval_status(message, sources_count, urls=None, favicons=None):
-            """Build retrieval status with optional web metadata"""
-            metadata = {"sources_count": sources_count}
-            if urls and favicons:
-                metadata.update({"urls": urls, "favicons": favicons})
+        # Handle ThinkingGraph SQL result
+        if "_sql_result" in output:
+            sql_result = output["_sql_result"]
             return StreamEventBuilder.status_update(
                 phase=StreamPhase.RETRIEVAL,
-                message=message,
-                metadata=metadata,
+                message="Executed SQL Query",
+                metadata={"sql_result_preview": str(sql_result)[:200]},
             )
 
-        if "retrieval_contexts" in output:
-            retrieval = output["retrieval_contexts"]
-            total_cited = retrieval.get("total_cited", 0)
-            total_retrieved = retrieval.get("total_retrieved", 0)
+        # Handle Documents (ThinkingGraph: _temp_documents, NormalGraph: cited_documents)
+        documents = output.get("cited_documents") or output.get("_temp_documents") or []
 
-            if total_cited > 0 and retrieval.get("search_method") == "web":
-                urls, favicons = extract_urls_and_favicons(
-                    retrieval.get("cited_chunks", [])
-                )
-                return build_retrieval_status(
-                    f"Found {total_cited} relevant sources",
-                    total_cited,
-                    urls,
-                    favicons,
-                )
-            elif total_retrieved > 0:
-                return build_retrieval_status(
-                    f"Retrieved total {total_retrieved} documents",
-                    total_retrieved,
-                )
-            else:
-                return build_retrieval_status("No documents found", 0)
-
-        if "search_results" in output:
-            search_results = output["search_results"]
-            documents = search_results.get("documents", [])
-            search_type = search_results.get("search_type", "")
-            doc_count = len(documents)
-
-            if doc_count == 0:
-                return build_retrieval_status("No documents found", 0)
-
-            message = f"Searched: {search_results.get('query', '')}"
-
-            if search_type == "web":
-                urls, favicons = extract_urls_and_favicons(documents)
-                metadata = {
-                    "search_count": doc_count,
-                    "urls": urls,
-                    "favicons": favicons,
-                }
-            else:
-                metadata = {"search_count": doc_count}
+        if documents:
+            count = len(documents)
+            urls, favicons = extract_urls_and_favicons(documents)
 
             return StreamEventBuilder.status_update(
                 phase=StreamPhase.RETRIEVAL,
-                message=message,
-                metadata=metadata,
+                message=f"Found {count} relevant sources",
+                metadata={
+                    "sources_count": count,
+                    "urls": urls,
+                    "favicons": favicons,
+                },
             )
 
         return None
@@ -338,8 +327,8 @@ class AgenticStreamHandler:
                             node_meta = cfg.get_node_meta(self.current_node)
                             break
 
-                if node_meta and node_meta.stream_phase == StreamPhase.SYNTHESIS:
-                    self.last_phase = StreamPhase.SYNTHESIS
+                if node_meta:
+                    self.last_phase = node_meta.stream_phase
 
         if self.last_phase == StreamPhase.SYNTHESIS:
             if chunk.content:
@@ -349,20 +338,40 @@ class AgenticStreamHandler:
                 self.content_index += 1
                 return sse_event
 
-        else:
+        # Handle Analysis/Processing as thinking tokens
+        elif self.last_phase in [StreamPhase.ANALYSIS, StreamPhase.PROCESSING]:
+            # Handle tool calls as status updates if needed (keeping backward compat for thinking tools)
             if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
                 for tc in chunk.tool_call_chunks:
                     tool_name = tc.get("name")
                     if tool_name == "think":
                         args = tc.get("args", "")
                         if args:
-                            return StreamEventBuilder.status_update(
-                                phase=StreamPhase.ANALYSIS,
-                                message=args,
+                            # Stream thinking args as thinking delta too if preferred,
+                            # or keep as status. But user asked for "tokens".
+                            # Often "think" tool streams arguments.
+                            evt = StreamEventBuilder.thinking_delta(
+                                args, index=self.thinking_index
                             )
-            elif chunk.content:
+                            self.thinking_index += 1
+                            return evt
+                            # self.thinking_index += 1 (handled in next calls?)
+                            # Actually if we return, we can't increment here easily unless we do it before return.
+                            # But this is inside loop.
+                            # Let's stick to tokens.
+
+            if chunk.content:
+                sse_event = StreamEventBuilder.thinking_delta(
+                    chunk.content, index=self.thinking_index
+                )
+                self.thinking_index += 1
+                return sse_event
+
+        else:
+            # Fallback for other phases if content appears
+            if chunk.content:
                 return StreamEventBuilder.status_update(
-                    phase=StreamPhase.ANALYSIS,
+                    phase=self.last_phase or StreamPhase.ANALYSIS,
                     message=chunk.content,
                 )
 

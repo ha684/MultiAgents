@@ -1,78 +1,10 @@
 # src/agents/graph/state.py
-from typing import Any, Literal, TypedDict
+from typing import Any, TypedDict
 
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
 
 from src.domain.entities.graph import ResponseMode
-
-
-class SearchQuery(TypedDict):
-    """Search query from search operations"""
-
-    query: str
-    priority: int
-    search_type: Literal["rag", "web"]
-
-
-class VerificationResult(TypedDict):
-    """Verification result from verification operations"""
-
-    sufficient: bool
-    confidence: float
-    missing_aspects: list[str]
-
-
-class SearchResult(TypedDict):
-    """Search result from search operations"""
-
-    query: str
-    documents: list[Document]
-    search_type: Literal["rag", "web"]
-
-
-class RetrievalContext(TypedDict):
-    """Context from retrieval operations"""
-
-    original_query: str
-    contextualized_query: str
-    total_retrieved: int
-    total_cited: int
-    cited_chunks: list[Document]
-    search_method: Literal["rag", "web"]
-
-
-class ExecutionRecord(TypedDict):
-    """Record of a subgraph execution attempt"""
-
-    subgraph: str
-    error: str | None
-    timestamp: str
-    result_summary: str | None
-
-
-class ReflectionResult(TypedDict):
-    """Result from reflection agent"""
-
-    is_sufficient: bool
-    missing_aspects: list[str]
-    reasoning: str
-    suggested_next_action: str  # "search_more" | "switch_strategy" | "respond"
-    refined_query: str | None
-    subgraphs_to_retry: list[str]
-
-
-class SearchIteration(TypedDict):
-    """Record of a single search iteration"""
-
-    iteration: int
-    subgraph: str
-    query: str
-    result_summary: str
-    documents_count: int
-    timestamp: str
-    success: bool  # Whether this subgraph returned useful results
-    error: str | None  # Error message if subgraph failed
 
 
 class MainGraphState(TypedDict):
@@ -109,44 +41,35 @@ class ThinkingState(TypedDict, total=False):
     Organized by purpose for clarity.
     """
 
-    # ===== Core Input/Output =====
-    conversation: list[BaseMessage]  # User conversation history
-    final_answer: str  # Final synthesized response
-    response_metadata: dict[str, Any]  # Metadata for response
+    conversation: list[BaseMessage]
+    final_answer: str
+    response_metadata: dict[str, Any]
 
-    # ===== Current Iteration Context =====
-    iteration_count: int  # Current iteration number (0-indexed)
-    direction: str  # Current research direction/query
-    selected_subgraph: str  # Subgraph to execute (e.g., "web_search")
-    action: str  # "use_tool" or "reason_only"
-    reasoning: str  # Reasoning from reflection_agent
+    iteration_count: int
+    direction: str
+    selected_subgraph: str
+    action: str
+    reasoning: str
 
-    # ===== Accumulated Research =====
-    accumulated_context: str  # Compressed knowledge from all iterations
-    learnings: list[str]  # SIMPLIFIED: Human-readable log of learnings
+    accumulated_context: str
+    learnings: list[str]
 
-    # ===== Citation Management =====
-    citation_counter: int  # Next citation number to use
-    cited_documents: list[Document]  # All documents cited so far
-    citation_map: list[dict[str, Any]]  # Map of citation index -> metadata
+    citation_counter: int
+    cited_documents: list[Document]
+    citation_map: list[dict[str, Any]]
 
-    # ===== Deduplication Tracking =====
     seen_content_hashes: list[str]
 
-    # ===== Response Mode =====
-    response_mode: str  # ResponseMode enum value
-
-    # ===== Flags for Path Tracking =====
-    has_tool_results: bool  # Track if we've executed ANY tools (not just reasoning)
-    execution_history: list[dict[str, Any]] = []  # Track all attempts
-    consecutive_failures: int = 0
-    # ===== Internal Control (private, prefixed with _) =====
-    _temp_documents: list[Document]  # Temporary docs from current iteration
-    _sql_result: str  # Temporary SQL result from current iteration
-    _is_sql_iteration: bool  # Flag to indicate SQL iteration
-    _should_continue: bool  # Should continue iterating?
-    _missing_aspects: str  # What's missing (from evaluation)
-    internal_reasoning: str  # Internal reasoning from current iteration
+    response_mode: str
+    has_tool_results: bool
+    execution_history: list[dict[str, Any]]
+    consecutive_failures: int
+    _temp_documents: list[Document]
+    _sql_result: str
+    _is_sql_iteration: bool
+    _should_continue: bool
+    _missing_aspects: str
+    internal_reasoning: str
 
 
 class SqlState(TypedDict):

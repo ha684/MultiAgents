@@ -278,16 +278,20 @@ class MainGraph(GraphAgentBase[MainGraphState]):
                 accumulated_context="",
             )
             final_result = await super().ainvoke(initial_state)
+
+            cited_documents = final_result.state.get("cited_documents", [])
+            final_answer = final_result.state.get("final_answer", "")
+            response_metadata = final_result.state.get("response_metadata", {})
+
             message = Message(
-                parts=[
-                    TextPart(
-                        type="text", text=final_result.state.get("final_answer", "")
-                    )
-                ],
+                parts=[TextPart(type="text", text=final_answer)],
                 role="agent",
-                metadata=final_result.state.get("response_metadata", {}),
+                metadata=response_metadata,
                 retrieval_context=RetrievalContext(
-                    **final_result.state.get("retrieval_contexts", {})
+                    total_retrieved=len(cited_documents),
+                    total_cited=len(cited_documents),
+                    cited_chunks=cited_documents,
+                    search_method="agentic",
                 ),
             )
             return message

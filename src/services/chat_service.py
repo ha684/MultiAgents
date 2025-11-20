@@ -163,7 +163,7 @@ class ChatService:
                     SystemMessage(content=f"Conversation Summary:\n{summary_text}")
                 )
 
-            conversation_history.append(user_message)  # type: ignore
+            conversation_history.append(user_message)
             formatted_conversation.extend(self._format_history(conversation_history))
 
             managed_conversation = await self._manage_conversation_length(
@@ -604,14 +604,11 @@ class ChatService:
 
                 if (
                     event["event"] == "on_chain_end"
-                    and event.get("name") == "MainOrchestrator"
+                    and event.get("name") == "MainGraph"
                 ):
                     final_state = event.get("data", {}).get("output")
 
-                if (
-                    event["event"] == "on_chain_end"
-                    and event["name"] != "MainOrchestrator"
-                ):
+                if event["event"] == "on_chain_end" and event["name"] != "MainGraph":
                     node_output = event.get("data", {}).get("output")
                     if node_output:
                         last_known_state = node_output
@@ -625,11 +622,8 @@ class ChatService:
             )
 
             response_metadata = final_state.get("response_metadata", {})
-            retrieval_contexts = final_state.get("retrieval_contexts", {})
 
-            cited_chunks = retrieval_contexts.get("cited_chunks", [])
-            if not cited_chunks:
-                cited_chunks = final_state.get("cited_documents", [])
+            cited_chunks = final_state.get("cited_documents", [])
 
             references = [
                 doc.model_dump() if hasattr(doc, "model_dump") else doc
@@ -638,19 +632,12 @@ class ChatService:
 
             agent_message = Message(
                 role="agent",
-                parts=[TextPart(type="text", text=final_state["final_answer"])],
+                parts=[TextPart(type="text", text=final_state.get("final_answer", ""))],
                 metadata=response_metadata,
                 retrieval_context=RetrievalContext(
-                    original_query=retrieval_contexts.get(
-                        "original_query", conversation[-1].content
-                    ),
-                    contextualized_query=retrieval_contexts.get(
-                        "contextualized_query", ""
-                    ),
-                    total_retrieved=retrieval_contexts.get("total_retrieved", 0),
+                    total_retrieved=len(cited_chunks),
                     total_cited=len(cited_chunks),
                     cited_chunks=cited_chunks,
-                    search_method=retrieval_contexts.get("search_method", "rag"),
                 ),
             )
 
