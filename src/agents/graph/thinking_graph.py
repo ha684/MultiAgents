@@ -49,6 +49,10 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
     - If has_tool_results=False: Use REASONING_ONLY (no citations needed)
 
     Safety: max_iterations prevents infinite loops
+
+    Iteration 1 Behavior:
+    - Always starts with "reason_only" to gather initial context
+    - Tool execution begins from iteration 2
     """
 
     def __init__(self):
@@ -57,6 +61,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         self.compiled_graph = self._build_graph()
         self.max_iterations = 30
         self.min_knowledge_threshold = 500
+        self.max_query_length = 400  # Tavily max length
 
     @property
     def graph(self) -> CompiledStateGraph:
@@ -73,6 +78,10 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         """
         Phase Planning Node (Step 1): Decide phase title and action type.
 
+        Special handling for Iteration 1:
+        - Force next_action to "reason_only" on first iteration
+        - This ensures initial context gathering before tool execution
+
         Similar to ChatGPT's phase titles like:
         - "Looking up renewable energy reports"
         - "Analyzing cloud platform tradeoffs"
@@ -87,9 +96,17 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             phase_title = resp.get("phase_title", "Research step")
             next_action = resp.get("next_action", "use_tool")
 
-            logger.info(
-                f"[Phase Planning] Iter={iteration}, Phase='{phase_title}', Action={next_action}"
-            )
+            # Force reasoning on iteration 1
+            if iteration == 0:
+                next_action = "reason_only"
+                phase_title = f"Initial Analysis: {phase_title}"
+                logger.info(
+                    f"[Phase Planning] Iter={iteration}, Phase='{phase_title}', Action=FORCED_REASON_ONLY"
+                )
+            else:
+                logger.info(
+                    f"[Phase Planning] Iter={iteration}, Phase='{phase_title}', Action={next_action}"
+                )
 
             return {
                 "phase_title": phase_title,
@@ -98,10 +115,11 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
         except Exception as e:
             logger.error(f"[Phase Planning] Failed: {e}")
+            next_action = "reason_only" if iteration == 0 else "use_tool"
             return {
                 "phase_title": "Research step",
-                "next_action": "use_tool",
-                "action": "use_tool",
+                "next_action": next_action,
+                "action": next_action,
             }
 
     async def action_execution_node(self, state: ThinkingState) -> dict[str, Any]:
@@ -136,6 +154,18 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
                 query = resp.get(
                     "query", conversation[-1].content if conversation else ""
                 )
+
+                # Validate query length and truncate if needed
+                if len(query) > self.max_query_length:
+                    original_length = len(query)
+                    query = query[: self.max_query_length].rsplit(" ", 1)[
+                        0
+                    ]  # Truncate at last space
+                    logger.warning(
+                        f"[Action Execution] Query too long ({original_length} chars). "
+                        f"Truncated to {len(query)} chars"
+                    )
+
                 logger.info(
                     f"[Action Execution] Iter={iteration}, Tool={selected_subgraph}, Query={query[:100]}..."
                 )
@@ -171,6 +201,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         Special handling:
         - SQL subgraph: Store result in _sql_result, set response_mode
         - Other subgraphs: Deduplicate and return documents
+        - Error details: Capture subgraph_error and pass to missing_aspects
         """
         subgraph_name = state.get("selected_subgraph")
         query = state.get("direction")
@@ -216,6 +247,26 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             logger.info(f"[Execute] {subgraph_name}: {query}")
 
             result_obj: SubgraphOutput = await executor(state)
+
+            # Check for subgraph errors FIRST
+            if result_obj.subgraph_error:
+                logger.error(
+                    f"[Execute] Subgraph returned error: {result_obj.subgraph_error}"
+                )
+                execution_attempt["status"] = "failed"
+                execution_attempt["error"] = result_obj.subgraph_error
+
+                execution_history = list(state.get("execution_history", []))
+                execution_history.append(execution_attempt)
+
+                return {
+                    "_temp_documents": [],
+                    "execution_history": execution_history,
+                    "consecutive_failures": state.get("consecutive_failures", 0) + 1,
+                    "_execution_failed": True,
+                    "_failure_reason": result_obj.subgraph_error,
+                }
+
             documents = result_obj.cited_documents or []
             sql_result = (
                 result_obj.main_context if subgraph_name == "sql_query" else None
@@ -344,7 +395,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         Process results from execute_subgraph_node.
 
         Two paths:
-        1. SQL result: Store SQL result in accumulated_context
+        1. SQL result: Store result in accumulated_context
         2. Document results: Add citations, compress, store in accumulated_context
         """
         iteration = state.get("iteration_count", 0)
@@ -434,7 +485,11 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         }
 
     async def evaluate_sufficiency_node(self, state: ThinkingState) -> dict[str, Any]:
-        """Evaluate if research is sufficient with failure detection."""
+        """
+        Evaluate if research is sufficient with failure detection.
+
+        Now passes detailed error information from subgraph_error to missing_aspects.
+        """
         accumulated_context = state.get("accumulated_context", "")
         internal_reasoning = state.get("internal_reasoning", "")
 
@@ -444,6 +499,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         iteration = state.get("iteration_count", 0)
         consecutive_failures = state.get("consecutive_failures", 0)
         execution_failed = state.get("_execution_failed", False)
+        failure_reason = state.get("_failure_reason", "Unknown error")
 
         if consecutive_failures >= 3:
             logger.error(
@@ -451,7 +507,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             )
             return {
                 "_should_continue": False,
-                "_missing_aspects": f"Unable to proceed after {consecutive_failures} consecutive tool failures.",
+                "_missing_aspects": f"Unable to proceed after {consecutive_failures} consecutive tool failures. Last error: {failure_reason}",
                 "_force_stop_reason": "consecutive_failures",
             }
 
@@ -463,12 +519,13 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
                 and ex.get("status") == "failed"
                 for ex in recent
             ):
+                error_details = recent[0].get("error", "Unknown error")
                 logger.error(
-                    f"[Evaluate] Same subgraph '{recent[0].get('subgraph')}' failed 3 times in a row. STOPPING."
+                    f"[Evaluate] Same subgraph '{recent[0].get('subgraph')}' failed 3 times in a row. Error: {error_details}"
                 )
                 return {
                     "_should_continue": False,
-                    "_missing_aspects": f"Subgraph '{recent[0].get('subgraph')}' repeatedly failing. Unable to proceed.",
+                    "_missing_aspects": f"Subgraph '{recent[0].get('subgraph')}' repeatedly failing with: {error_details}. Unable to proceed.",
                     "_force_stop_reason": "repeated_subgraph_failure",
                 }
 
@@ -485,11 +542,11 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         if execution_failed:
             logger.warning(
                 f"[Evaluate] Execution failed but consecutive_failures={consecutive_failures}. "
-                "Allowing reflection agent to try different approach."
+                f"Error: {failure_reason}. Allowing reflection agent to try different approach."
             )
             return {
                 "_should_continue": True,
-                "_missing_aspects": f"Previous tool execution failed: {state.get('_failure_reason', 'Unknown error')}. Try different approach.",
+                "_missing_aspects": f"Previous tool execution failed with: '{failure_reason}'. Try a different search approach or narrower query.",
             }
 
         if total_length < self.min_knowledge_threshold:
