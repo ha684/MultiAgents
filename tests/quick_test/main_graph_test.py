@@ -12,7 +12,7 @@ from src.utils.logger_conf import logger
 
 
 class MainGraphStreamer:
-    """Helper class to visualize streaming from OrchestratorGraph"""
+    """Helper class to visualize streaming from MainGraph"""
 
     def __init__(self):
         self.colors = {
@@ -36,9 +36,9 @@ class MainGraphStreamer:
         print(f"{c}{'=' * 70}{reset}")
 
     async def stream_orchestrator(self, orchestrator: MainGraph, conversation: list):
-        """Stream orchestrator execution with visual feedback"""
+        """Stream MainGraph execution with visual feedback"""
 
-        self._print_box("🚀 STARTING ORCHESTRATOR", color="cyan")
+        self._print_box("🚀 STARTING MAIN GRAPH", color="cyan")
         print(f"📝 Query: {conversation[-1].content}\n")
 
         llm_buffer = ""
@@ -55,7 +55,7 @@ class MainGraphStreamer:
 
             if kind == "on_chain_start":
                 stats["nodes"].append(name)
-                if name in ["SimpleSearchGraph", "ResearchGraph", "OrchestratorGraph"]:
+                if name in ["ThinkingGraph", "NormalGraph", "MainGraph"]:
                     self._print_box(f"🔄 Graph: {name}", color="cyan")
                 else:
                     self._print_box(f"🔄 NODE: {name}", color="blue")
@@ -63,7 +63,7 @@ class MainGraphStreamer:
             elif kind == "on_chain_end":
                 output = event.get("data", {}).get("output")
 
-                if name == "OrchestratorGraph" and not is_graph_completed:
+                if name == "MainGraph" and not is_graph_completed:
                     is_graph_completed = True
                     final_result = output
                     continue
@@ -120,7 +120,7 @@ async def main():
     orchestrator = MainGraph()
 
     human_message = HumanMessage(
-        content="Evaluate the interplay between international policy frameworks, technological innovation, and market dynamics in shaping the pace of global renewable energy adoption over the past decade. Assess the challenges of integrating variable renewable sources into existing energy infrastructures across developed and developing economies, and predict the long-term macroeconomic, geopolitical, and environmental consequences if current adoption trajectories continue.",
+        content="What is the latest update from Tesla?",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]

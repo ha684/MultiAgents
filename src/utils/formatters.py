@@ -224,14 +224,12 @@ class AgenticStreamHandler:
             urls = []
             favicons = []
             for item in items:
-                # Handle both Document objects and dicts
                 metadata = (
                     item.metadata
                     if hasattr(item, "metadata")
                     else item.get("metadata", {})
                 )
 
-                # Try multiple common keys for URL
                 url = (
                     metadata.get("source")
                     or metadata.get("url")
@@ -245,7 +243,6 @@ class AgenticStreamHandler:
                     favicons.append(favicon)
             return urls, favicons
 
-        # Handle ThinkingGraph SQL result
         if "_sql_result" in output:
             sql_result = output["_sql_result"]
             return StreamEventBuilder.status_update(
@@ -254,7 +251,6 @@ class AgenticStreamHandler:
                 metadata={"sql_result_preview": str(sql_result)[:200]},
             )
 
-        # Handle Documents (ThinkingGraph: _temp_documents, NormalGraph: cited_documents)
         documents = output.get("cited_documents") or output.get("_temp_documents") or []
 
         if documents:
@@ -338,27 +334,16 @@ class AgenticStreamHandler:
                 self.content_index += 1
                 return sse_event
 
-        # Handle Analysis/Processing as thinking tokens
-        elif self.last_phase in [StreamPhase.ANALYSIS, StreamPhase.PROCESSING]:
-            # Handle tool calls as status updates if needed (keeping backward compat for thinking tools)
+        else:
             if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
                 for tc in chunk.tool_call_chunks:
-                    tool_name = tc.get("name")
-                    if tool_name == "think":
-                        args = tc.get("args", "")
-                        if args:
-                            # Stream thinking args as thinking delta too if preferred,
-                            # or keep as status. But user asked for "tokens".
-                            # Often "think" tool streams arguments.
-                            evt = StreamEventBuilder.thinking_delta(
-                                args, index=self.thinking_index
-                            )
-                            self.thinking_index += 1
-                            return evt
-                            # self.thinking_index += 1 (handled in next calls?)
-                            # Actually if we return, we can't increment here easily unless we do it before return.
-                            # But this is inside loop.
-                            # Let's stick to tokens.
+                    args = tc.get("args", "")
+                    if args:
+                        evt = StreamEventBuilder.thinking_delta(
+                            args, index=self.thinking_index
+                        )
+                        self.thinking_index += 1
+                        return evt
 
             if chunk.content:
                 sse_event = StreamEventBuilder.thinking_delta(
@@ -366,13 +351,5 @@ class AgenticStreamHandler:
                 )
                 self.thinking_index += 1
                 return sse_event
-
-        else:
-            # Fallback for other phases if content appears
-            if chunk.content:
-                return StreamEventBuilder.status_update(
-                    phase=self.last_phase or StreamPhase.ANALYSIS,
-                    message=chunk.content,
-                )
 
         return None
