@@ -126,6 +126,10 @@ class AgenticStreamHandler:
         self.last_emitted_message: str | None = None
         self.content_index: int = 0
         self.thinking_index: int = 0
+        self.tool_args_buffer: dict[str, str] = {}
+        self.inside_thought_value: dict[str, bool] = {}
+        self.thought_extracted_length: dict[str, int] = {}
+        self.last_emitted_completion: dict[str, Any] | None = None
 
     async def handle_event(self, event: dict) -> str | None:
         """Process a single event and return SSE event if needed"""
@@ -245,6 +249,12 @@ class AgenticStreamHandler:
 
         if "_sql_result" in output:
             sql_result = output["_sql_result"]
+
+            completion_key = {"type": "sql", "result": str(sql_result)[:200]}
+            if self.last_emitted_completion == completion_key:
+                return None
+            self.last_emitted_completion = completion_key
+
             return StreamEventBuilder.status_update(
                 phase=StreamPhase.RETRIEVAL,
                 message="Executed SQL Query",
@@ -256,6 +266,10 @@ class AgenticStreamHandler:
         if documents:
             count = len(documents)
             urls, favicons = extract_urls_and_favicons(documents)
+            completion_key = {"type": "documents", "urls": tuple(sorted(urls))}
+            if self.last_emitted_completion == completion_key:
+                return None
+            self.last_emitted_completion = completion_key
 
             return StreamEventBuilder.status_update(
                 phase=StreamPhase.RETRIEVAL,
@@ -338,18 +352,76 @@ class AgenticStreamHandler:
             if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
                 for tc in chunk.tool_call_chunks:
                     args = tc.get("args", "")
-                    if args:
+
+                    if not args:
+                        continue
+
+                    tc_id = tc.get("id", "default")
+
+                    if tc_id not in self.tool_args_buffer:
+                        self.tool_args_buffer[tc_id] = ""
+                        self.thought_extracted_length[tc_id] = 0
+
+                    self.tool_args_buffer[tc_id] += args
+
+                    new_text = self._extract_incremental_thinking(tc_id)
+
+                    if new_text:
                         evt = StreamEventBuilder.thinking_delta(
-                            args, index=self.thinking_index
+                            new_text, index=self.thinking_index
                         )
                         self.thinking_index += 1
                         return evt
 
             if chunk.content:
-                sse_event = StreamEventBuilder.thinking_delta(
-                    chunk.content, index=self.thinking_index
+                return StreamEventBuilder.status_update(
+                    phase=StreamPhase.ANALYSIS,
+                    message=chunk.content,
                 )
-                self.thinking_index += 1
-                return sse_event
+
+        return None
+
+    def _extract_incremental_thinking(self, tool_call_id: str) -> str | None:
+        """Extract NEW thinking text from buffered JSON.
+
+        Returns only the new text that hasn't been extracted yet for this tool call.
+        Handles both complete and partial JSON gracefully.
+        """
+        buffer = self.tool_args_buffer.get(tool_call_id, "")
+        previously_extracted = self.thought_extracted_length.get(tool_call_id, 0)
+
+        if not buffer:
+            return None
+
+        try:
+            parsed = json.loads(buffer)
+            if isinstance(parsed, dict):
+                thought_text = parsed.get("thought") or parsed.get("thinking") or ""
+
+                if thought_text and len(thought_text) > previously_extracted:
+                    new_text = thought_text[previously_extracted:]
+                    self.thought_extracted_length[tool_call_id] = len(thought_text)
+                    return new_text
+        except json.JSONDecodeError:
+            import re
+
+            pattern = (
+                r'["\'](?:thought|thinking)["\']:\s*["\']([^"\'\\]*(?:\\.[^"\'\\]*)*)'
+            )
+            match = re.search(pattern, buffer, re.IGNORECASE | re.DOTALL)
+
+            if match:
+                thought_text = match.group(1)
+
+                thought_text = (
+                    thought_text.replace('\\"', '"')
+                    .replace("\\n", "\n")
+                    .replace("\\t", "\t")
+                )
+
+                if len(thought_text) > previously_extracted:
+                    new_text = thought_text[previously_extracted:]
+                    self.thought_extracted_length[tool_call_id] = len(thought_text)
+                    return new_text
 
         return None
