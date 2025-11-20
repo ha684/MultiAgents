@@ -20,11 +20,11 @@ from src.utils.logger_conf import logger
 
 class ActionExecutionAgent(BaseAgent):
     """
-    Action Execution Agent - Thực thi action đã được quyết định bởi Phase Agent.
+    Action Execution Agent - Execute the action decided by Phase Agent.
 
     Hai modes:
     1. action="reason_only" → Generate reasoning (deep analysis)
-    2. action="use_tool" → Select subgraph và generate query
+    2. action="use_tool" → Select subgraph and generate query
     """
 
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):
@@ -35,10 +35,10 @@ class ActionExecutionAgent(BaseAgent):
         Execute action based on next_action.
 
         If action="reason_only":
-            Returns: {"reasoning": str, "subgraph": null, "query": null}
+            Returns: {"reasoning": str, "subgraph": None, "query": None}
 
         If action="use_tool":
-            Returns: {"subgraph": str, "query": str, "reasoning": null}
+            Returns: {"subgraph": str, "query": str, "reasoning": None}
         """
         action = state.get("next_action", "use_tool")
         phase_title = state.get("phase_title", "")
@@ -47,7 +47,6 @@ class ActionExecutionAgent(BaseAgent):
         execution_history = state.get("execution_history", [])
         missing_aspects = state.get("_missing_aspects", "")
 
-        # Build execution history section
         history_section = ""
         if execution_history:
             recent_history = execution_history[-5:]
@@ -64,17 +63,14 @@ class ActionExecutionAgent(BaseAgent):
             )
             history_section = f"Execution History:\n{history_text}"
 
-        # Build missing aspects section
         missing_section = (
             f"Missing Aspects:\n{missing_aspects}" if missing_aspects else ""
         )
 
-        # Build knowledge section
         knowledge_section = (
             f"Accumulated Knowledge:\n{knowledge[-3000:]}" if knowledge else ""
         )
 
-        # Build learnings section
         learnings_text = (
             "\n".join(f"- {learning}" for learning in learnings[-3:])
             if learnings
@@ -82,10 +78,8 @@ class ActionExecutionAgent(BaseAgent):
         )
         learnings_section = f"Previous Learnings:\n{learnings_text}"
 
-        # Build conversation
         conversation_text = get_buffer_string(state["conversation"])
 
-        # Select appropriate prompt based on action
         if action == "reason_only":
             system_prompt = PromptTemplates.REASONING_EXECUTION_PROMPT
             context_parts = [
@@ -97,7 +91,6 @@ class ActionExecutionAgent(BaseAgent):
         else:  # use_tool
             system_prompt = PromptTemplates.TOOL_EXECUTION_PROMPT
 
-            # Get available subgraphs
             active_map = SubgraphRegistry.resolve_active(
                 allow=state.get("subgraph_policy", {}).get("allow"),
                 block=state.get("subgraph_policy", {}).get("block"),
@@ -119,7 +112,7 @@ class ActionExecutionAgent(BaseAgent):
         messages: list[BaseMessage] = [
             SystemMessage(content=system_prompt),
             AIMessage(content=context_content),
-            HumanMessage(content=f"User Query:\n{conversation_text}"),
+            HumanMessage(content=f"Conversation:\n{conversation_text}"),
         ]
 
         result = await self.iterative_llm_call_structured(
@@ -131,7 +124,6 @@ class ActionExecutionAgent(BaseAgent):
             retry_prompt=f"Please provide the execution result in the correct JSON format for action={action}",
         )
 
-        # Add action to result for validation
         result["action"] = action
 
         logger.info(
@@ -148,8 +140,6 @@ def parse_action_execution_result(content: str) -> dict[str, Any] | None:
         if parsed is None:
             return None
 
-        # Note: We validate based on action in the agent's ainvoke method
-        # because we need to know the action type to validate properly
         return parsed
     except Exception as e:
         logger.error(f"Error parsing action execution result: {e}")

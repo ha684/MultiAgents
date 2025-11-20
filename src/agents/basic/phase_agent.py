@@ -19,12 +19,12 @@ from src.utils.logger_conf import logger
 
 class PhaseAgent(BaseAgent):
     """
-    Phase Agent - Quyết định phase tiếp theo trong quá trình research.
+    Phase Agent - Determines the next phase in the research process.
 
-    Giống như ChatGPT, agent này:
-    - Phân tích tình hình hiện tại (missing aspects, learnings, etc.)
-    - Quyết định phase title (VD: "Looking up renewable energy reports")
-    - Quyết định next action: "reason_only" hoặc "use_tool"
+    Like ChatGPT, this agent:
+    - Analyzes the current situation (missing aspects, learnings, etc.)
+    - Decides on the phase title (e.g., "Looking up renewable energy reports")
+    - Decides the next action: "reason_only" or "use_tool"
     """
 
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):
@@ -36,17 +36,15 @@ class PhaseAgent(BaseAgent):
 
         Returns:
             {
-                "phase_title": str,     # VD: "Looking up renewable energy reports"
-                "next_action": str,     # "reason_only" hoặc "use_tool"
+                "phase_title": str,     # Example: "Looking up renewable energy reports"
+                "next_action": str,     # Example: "reason_only" or "use_tool"
             }
         """
         learnings = state.get("learnings", [])
         knowledge = state.get("accumulated_context", "")
         execution_history = state.get("execution_history", [])
         missing_aspects = state.get("_missing_aspects", "")
-        iteration_count = state.get("iteration_count", 0)
 
-        # Build execution history section
         history_section = ""
         if execution_history:
             recent_history = execution_history[-5:]
@@ -63,17 +61,14 @@ class PhaseAgent(BaseAgent):
             )
             history_section = f"Execution History:\n{history_text}"
 
-        # Build missing aspects section
         missing_section = (
             f"Missing Aspects:\n{missing_aspects}" if missing_aspects else ""
         )
 
-        # Build knowledge section
         knowledge_section = (
             f"Accumulated Knowledge:\n{knowledge[-3000:]}" if knowledge else ""
         )
 
-        # Build learnings section
         learnings_text = (
             "\n".join(f"- {learning}" for learning in learnings[-3:])
             if learnings
@@ -81,12 +76,9 @@ class PhaseAgent(BaseAgent):
         )
         learnings_section = f"Previous Learnings:\n{learnings_text}"
 
-        # Build conversation
         conversation_text = get_buffer_string(state["conversation"])
 
-        # Build context message
         context_parts = [
-            f"Current Iteration: {iteration_count}",
             knowledge_section,
             learnings_section,
             history_section,
@@ -97,7 +89,7 @@ class PhaseAgent(BaseAgent):
         messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.PHASE_PLANNING_PROMPT),
             AIMessage(content=context_content),
-            HumanMessage(content=f"User Query:\n{conversation_text}"),
+            HumanMessage(content=f"Conversation:\n{conversation_text}"),
         ]
 
         phase_result = await self.iterative_llm_call_structured(
@@ -107,10 +99,6 @@ class PhaseAgent(BaseAgent):
             max_iterations=3,
             parse_fn=parse_phase_result,
             retry_prompt='Please provide the phase decision in the correct JSON format: {"phase_title": "...", "next_action": "reason_only" or "use_tool"}',
-        )
-
-        logger.info(
-            f"[Phase] Iter={iteration_count}, Title='{phase_result.get('phase_title', 'N/A')}', Action={phase_result.get('next_action', 'N/A')}"
         )
 
         return phase_result
@@ -123,12 +111,10 @@ def parse_phase_result(content: str) -> dict[str, Any] | None:
         if parsed is None:
             return None
 
-        # Validate required fields
         if "phase_title" not in parsed or "next_action" not in parsed:
             logger.error("Missing required fields: phase_title or next_action")
             return None
 
-        # Validate next_action value
         if parsed["next_action"] not in ["reason_only", "use_tool"]:
             logger.error(
                 f"Invalid next_action: {parsed['next_action']}, must be 'reason_only' or 'use_tool'"

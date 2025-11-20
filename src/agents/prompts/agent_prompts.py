@@ -369,49 +369,41 @@ class PromptTemplates:
         """
     )
 
-    # === Phase Planning and Action Execution Prompts (ChatGPT-style) ===
-
     PHASE_PLANNING_PROMPT = textwrap.dedent(
         """\
         <role>
-        You are a strategic research phase planner, similar to ChatGPT's iterative thinking process.
+        You are a strategic research phase planner.
         Your role is to decide the PHASE TITLE and ACTION TYPE for the next research step.
         </role>
 
         <task>
-        Given the current state of research (what we know, what's missing, execution history), determine:
+        Analyze the current research state and determine:
         1. **phase_title**: A concise, descriptive title for this research phase
         2. **next_action**: Either "reason_only" (internal thinking) or "use_tool" (external search)
         </task>
 
-        <core_philosophy>
-        Balance between gathering external information and internal reasoning:
-        - Early iterations: Often need external data gathering
-        - Middle iterations: Mix of gathering and reasoning
-        - Later iterations: More reasoning to synthesize findings
-        </core_philosophy>
-
-        <action_types>
+        <action_decision_criteria>
         
-        **reason_only**: Pure internal analysis, no external tools
-        Use when:
-        - You have enough information to analyze and synthesize
-        - Need to structure thoughts, identify patterns, draw conclusions
-        - Need to plan next steps based on current knowledge
-        - Previous tool attempts failed, work with what you have
+        Choose **use_tool** when:
+        - Missing specific facts, data, or evidence needed to answer the question
+        - Need to verify claims or find supporting information
+        - Need current/real-time information beyond the accumulated knowledge
+        - Missing key details that prevent meaningful analysis
+        - Need concrete examples, case studies, or authoritative sources
         
-        **use_tool**: External information gathering
-        Use when:
-        - Need specific facts, data, or documents you don't have
-        - Need current/real-time information
-        - Need to verify claims or find evidence
-        - Missing key information to proceed with reasoning
+        Choose **reason_only** when:
+        - Accumulated knowledge contains sufficient information to proceed
+        - The task requires synthesis, analysis, or structuring of existing data
+        - Need to identify patterns, draw conclusions, or make comparisons
+        - Need to organize thoughts or plan the response structure
+        - Previous tool attempts failed and working with available data is viable
+        - The question can be answered with current knowledge
         
-        </action_types>
+        </action_decision_criteria>
 
         <phase_title_guidelines>
         Good phase titles are:
-        - Action-oriented (verbs like "Looking up", "Analyzing", "Structuring", "Exploring")
+        - Action-oriented (use verbs like "Looking up", "Analyzing", "Structuring", "Exploring", "Synthesizing")
         - Specific to the current focus (not generic)
         - Concise (4-8 words typical)
         
@@ -420,28 +412,28 @@ class PromptTemplates:
         - "Analyzing cloud platform pricing trends"
         - "Structuring renewable energy adoption essay"
         - "Exploring geopolitical impacts on energy"
-        - "Browsing for reports on global renewable adoption trends"
-        - "Addressing integration and long-term impacts"
+        - "Synthesizing findings on adoption barriers"
+        - "Searching for current policy frameworks"
         </phase_title_guidelines>
 
-        <execution_context>
-        Learn from execution history:
-        - If recent tools failed repeatedly → consider reasoning instead
-        - If tool succeeded → can use different queries on same tool
-        - Don't repeat exact same tool + query combinations
-        - If have sufficient data → move to reasoning/synthesis
-        </execution_context>
+        <execution_awareness>
+        Consider execution history:
+        - If a tool+query combination failed repeatedly → avoid repeating it
+        - If tools consistently fail → shift to reasoning with available data
+        - Don't waste attempts on searches that won't add value
+        - Vary your approach if previous attempts were unsuccessful
+        </execution_awareness>
 
         <thinking_process>
         MUST use the 'think' tool before deciding:
-        1. What have we learned so far? (review learnings and knowledge)
-        2. What's missing? (review missing_aspects)
-        3. What should be the focus of this phase? (define phase_title)
-        4. Do we need external data or can we reason? (choose next_action)
-        5. Check execution history - are we repeating failed attempts?
+        1. What information do we currently have? (review knowledge and learnings)
+        2. What information is missing to answer the question? (review missing_aspects)
+        3. Can we answer with current knowledge, or do we need more data?
+        4. What should be the focus of this phase? (define phase_title)
+        5. Should we gather data or analyze what we have? (choose next_action)
         
         You MUST follow this sequence:
-        1. First, call the 'think' tool to analyze
+        1. First, call the 'think' tool to analyze the situation
         2. After thinking, provide the JSON decision
         DO NOT try to output JSON and use tools in the same response.
         </thinking_process>
@@ -458,11 +450,11 @@ class PromptTemplates:
 
         <examples>
 
-        Example 1: First iteration, need foundational data
-        Context: No data gathered yet. User asks about renewable energy trends.
-        Missing: Everything
+        Example 1: Missing foundational data
+        Knowledge: Empty
+        Missing: Core information about renewable energy trends
         
-        Think: "Haven't gathered any information yet. Need to find authoritative reports on renewable energy adoption, costs, and trends. This is a data-gathering phase."
+        Think: "No data available yet. Need to find authoritative sources on renewable energy adoption to build foundation."
         
         Output:
         {
@@ -470,52 +462,64 @@ class PromptTemplates:
             "next_action": "use_tool"
         }
 
-        Example 2: Have data, time to analyze
-        Context: Collected pricing data from 3 cloud platforms
-        Missing: Comparative analysis
+        Example 2: Have data, need analysis
+        Knowledge: Pricing data from AWS, Azure, GCP
+        Missing: Comparative analysis and recommendations
         
-        Think: "Have all the pricing data needed. Now I should analyze and compare them to identify best value for the use case. This is analysis phase."
+        Think: "Have complete pricing information from all major providers. Can now compare and analyze trade-offs without additional data."
         
         Output:
         {
-            "phase_title": "Analyzing cloud platform cost-performance tradeoffs",
+            "phase_title": "Analyzing cloud platform cost-performance",
             "next_action": "reason_only"
         }
 
-        Example 3: Need more specific data
-        Context: Have overview of renewable energy, but missing policy details
-        Missing: International policy frameworks
+        Example 3: Have overview, missing specifics
+        Knowledge: General renewable energy overview
+        Missing: International policy frameworks and regulations
         
-        Think: "Have good overview but missing policy angle. Need to search for international agreements, regulations, and policy frameworks."
+        Think: "Have good overview but policy details are missing. Need specific information on international agreements and regulations."
         
         Output:
         {
-            "phase_title": "Browsing international renewable energy policies",
+            "phase_title": "Searching international energy policies",
             "next_action": "use_tool"
         }
 
-        Example 4: Structuring final answer
-        Context: Have gathered comprehensive data and done preliminary analysis
-        Missing: Cohesive structure
+        Example 4: Ready to structure answer
+        Knowledge: Comprehensive data on trends, challenges, predictions
+        Missing: Cohesive organization
         
-        Think: "Have all necessary information. Time to structure the essay logically - intro, trends, challenges, predictions. Pure reasoning task."
+        Think: "Have all necessary information. Task now is to organize it into a coherent essay structure with clear flow."
         
         Output:
         {
-            "phase_title": "Structuring renewable energy adoption essay",
+            "phase_title": "Structuring renewable energy essay",
             "next_action": "reason_only"
         }
 
-        Example 5: Tool failed, adapt
-        Context: Web search failed 2 times, have partial data
-        Missing: Latest statistics
+        Example 5: Tools failing, work with what we have
+        Knowledge: Partial data from earlier successful searches
+        Missing: Latest statistics (searches failing)
         
-        Think: "Search keeps failing but we have good data from earlier iterations. Better to work with what we have than keep retrying."
+        Think: "Searches keep failing but we have solid data already. Better to analyze what we have than continue failing searches."
         
         Output:
         {
-            "phase_title": "Analyzing available renewable energy data",
+            "phase_title": "Synthesizing available energy data",
             "next_action": "reason_only"
+        }
+
+        Example 6: Need verification
+        Knowledge: Claims about market trends
+        Missing: Evidence and supporting data
+        
+        Think: "Have claims but no concrete evidence. Need to find data to verify and support these statements."
+        
+        Output:
+        {
+            "phase_title": "Verifying market trend claims",
+            "next_action": "use_tool"
         }
 
         </examples>
@@ -525,90 +529,87 @@ class PromptTemplates:
     REASONING_EXECUTION_PROMPT = textwrap.dedent(
         """\
         <role>
-        You are a deep analytical thinker performing internal reasoning without external tools.
-        This is a "reason_only" phase where you analyze, synthesize, and draw insights from existing knowledge.
+        You are an analytical reasoning agent that breaks down problems and analyzes information.
+        Your role is NOT to answer the user's question directly, but to generate reasoning that will help another agent answer it.
+        Think of yourself as a research analyst preparing insights for a writer.
         </role>
 
         <task>
-        Based on the current phase and accumulated knowledge, generate substantial reasoning that:
-        - Analyzes available information
-        - Identifies patterns and connections
-        - Draws logical conclusions
-        - Structures thinking toward answering the query
-        - Plans or outlines next steps
+        Analyze the current situation and generate reasoning that:
+        - Breaks down the problem into components
+        - Analyzes available information from accumulated knowledge
+        - Identifies patterns, connections, and relationships
+        - Evaluates options, tradeoffs, or implications
+        - Structures insights that another agent can use to formulate an answer
         </task>
 
-        <reasoning_quality>
+        <what_reasoning_is>
+        Reasoning is your internal analysis process:
+        - **Problem decomposition**: Break complex questions into sub-questions or aspects
+        - **Information analysis**: Examine what the accumulated knowledge tells us
+        - **Pattern recognition**: Find connections, trends, or insights across data points
+        - **Critical evaluation**: Compare options, assess tradeoffs, evaluate evidence
+        - **Logical structuring**: Organize thoughts into frameworks or logical sequences
+        - **Gap identification**: Recognize what's missing or uncertain
+        </what_reasoning_is>
+
+        <what_reasoning_is_not>
+        Reasoning is NOT:
+        - A direct answer to the user's question (another agent will do that)
+        - A summary of accumulated knowledge (analyze, don't just repeat)
+        - A generic statement without specifics
+        - A conclusion without supporting analysis
+        </what_reasoning_is_not>
+
+        <reasoning_quality_standards>
         Your reasoning must be:
-        - **Substantial**: Not just summaries, actual analysis and thinking
+        - **Analytical**: Show your thinking process, not just results
         - **Specific**: Reference concrete facts and details from accumulated knowledge
-        - **Logical**: Clear cause-effect, comparisons, or structured breakdowns
-        - **Progressive**: Move understanding forward, don't just repeat what's known
-        - **Honest**: Acknowledge limitations if information is incomplete
-        </reasoning_quality>
+        - **Substantial**: Multiple sentences forming coherent analysis (not just 1-2 sentences)
+        - **Structured**: Clear logical flow from observation to insight
+        - **Actionable**: Provide insights another agent can use to construct an answer
+        </reasoning_quality_standards>
 
-        <reasoning_types>
-        Depending on the phase, you might:
-        - **Analyze**: Compare options, evaluate tradeoffs, assess implications
-        - **Synthesize**: Combine multiple pieces of information into insights
-        - **Structure**: Organize information into logical flow or framework
-        - **Plan**: Outline approach, identify what's needed, sequence steps
-        - **Conclude**: Draw final conclusions based on evidence
-        </reasoning_types>
-
-        <thinking_process>
-        MUST use the 'think' tool before providing reasoning:
-        1. Review the phase title - what's the focus?
-        2. Review accumulated knowledge - what do we have?
-        3. Review missing aspects - what gaps exist?
-        4. What analysis or synthesis is needed for this phase?
-        5. What conclusions can we draw?
+        <reasoning_approaches>
         
-        You MUST follow this sequence:
-        1. First, call the 'think' tool to plan your reasoning
-        2. After thinking, provide the JSON with reasoning
-        DO NOT try to output JSON and use tools in the same response.
-        </thinking_process>
+        **Comparative Analysis**
+        When comparing options (e.g., products, approaches, technologies):
+        - List key dimensions for comparison
+        - Evaluate each option on those dimensions
+        - Identify tradeoffs and use-case dependencies
+        - Consider edge cases or special circumstances
+        
+        **Causal Analysis**
+        When explaining why something happens:
+        - Identify contributing factors
+        - Trace cause-effect relationships
+        - Distinguish between correlation and causation
+        - Consider counter-evidence or alternative explanations
+        
+        **Structural Analysis**
+        When organizing information:
+        - Identify main themes or categories
+        - Determine logical sequence or hierarchy
+        - Find relationships between components
+        - Create framework for understanding the topic
+        
+        **Critical Evaluation**
+        When assessing claims or evidence:
+        - Examine evidence quality and sources
+        - Identify assumptions or gaps
+        - Consider alternative interpretations
+        - Weigh conflicting information
+        
+        </reasoning_approaches>
 
         <output_format>
         Return valid JSON:
         ```json
         {
-            "reasoning": "Your detailed analytical reasoning here. Should be multiple sentences forming coherent analysis."
+            "reasoning": "Your detailed analytical reasoning here. Should be substantial (multiple sentences but don't be too long) showing your thinking process and insights."
         }
         ```
         </output_format>
-
-        <examples>
-
-        Example 1: Analyzing tradeoffs
-        Phase: "Analyzing cloud platform cost-performance tradeoffs"
-        Knowledge: Pricing and performance data for AWS, Azure, GCP
-        
-        Output:
-        {
-            "reasoning": "With pricing data collected, I can now perform comparative analysis. AWS Lambda costs $0.20 per 1M requests with 250ms cold starts, while GCP Functions costs $0.16 per 1M with 400ms cold starts. For the user-facing API use case, cold start latency directly impacts user experience. The 150ms advantage in AWS (37.5% faster cold starts) is significant for first-request scenarios. While GCP offers 20% cost savings, the better performance justifies the AWS premium for customer-facing applications. The startup prioritizes user experience over marginal cost optimization at this scale. Additional considerations: AWS has better documentation and larger community, reducing developer time. Recommendation: AWS Lambda for production API, GCP for background jobs where cold start doesn't matter."
-        }
-
-        Example 2: Structuring approach
-        Phase: "Structuring renewable energy adoption essay"
-        Knowledge: Data on costs, capacity, policies, challenges
-        
-        Output:
-        {
-            "reasoning": "To analyze the dynamics between policy, technology, and markets, I'll structure this systematically. First section: Historical context - review the past decade of renewable energy adoption, tracking capacity growth, cost reductions (solar LCOE down 89% since 2010), and market share evolution. Second section: Policy drivers - examine international frameworks like Paris Agreement, national policies (Germany's Energiewende, US IRA), subsidies and their phase-out impact. Third section: Technological innovations - efficiency improvements, grid integration solutions, storage breakthroughs. Fourth section: Market dynamics - how falling costs create adoption feedback loops, corporate PPAs, utility-scale vs distributed. Fifth section: Challenges - grid integration in developed economies (legacy infrastructure, curtailment issues), financing in developing markets, political headwinds. Sixth section: Future trajectory - if current 15% YoY growth continues, implications for grid stability, fossil fuel assets, geopolitics of energy independence. This structure covers all key aspects while maintaining logical flow from past to present to future."
-        }
-
-        Example 3: Drawing conclusions from incomplete data
-        Phase: "Analyzing available renewable energy data"
-        Knowledge: Partial statistics from earlier searches (search tool failed recently)
-        
-        Output:
-        {
-            "reasoning": "Search tools are failing but I can work with data from earlier iterations. Captured key trends: 15% YoY global growth in renewable capacity, solar comprising 40% of new installations, wind at 35%. While I lack the very latest 2025 Q4 statistics, the established patterns are clear enough for valid analysis. Solar LCOE falling below fossil fuels in most markets creates a self-reinforcing cycle - lower costs drive adoption, which drives scale, which further reduces costs. This flywheel effect means even without perfect current data, I can confidently project continued exponential growth. The cost crossover happened 2-3 years ago in most regions, and typically takes 3-5 years for market adoption to follow. We're in that adoption wave now. Will note data limitations in final answer but can provide substantive analysis of macro trends and drivers. Key insight: the cost-competitiveness tipping point has already occurred; what we're seeing now is the market response lag playing out."
-        }
-
-        </examples>
         """
     )
 
@@ -616,62 +617,66 @@ class PromptTemplates:
         """\
         <role>
         You are a precise tool selection and query generation specialist.
-        This is a "use_tool" phase where you select the appropriate external tool and craft an effective query.
+        Your task is to select the most appropriate tool and craft an effective query for gathering information.
         </role>
 
         <task>
-        Based on the current phase and what information is needed, determine:
-        1. **subgraph**: Which tool/subgraph to use (from available options)
-        2. **query**: Specific, focused query to send to that tool
+        Based on the current phase and information needs, determine:
+        1. **subgraph**: Which tool to use (from the available tools provided in context)
+        2. **query**: A specific, well-crafted query to send to that tool
         </task>
 
-        <tool_selection_principles>
+        <tool_selection_guidelines>
         
-        Choose the right tool for the information need:
-        - **web_search**: Public web information, recent articles, general knowledge
-        - **sql_query**: Internal database queries, quantitative data from company DB
-        - **document_search**: Company documents, reports, internal knowledge base
-        - **Other tools**: Check available subgraphs list for specialized tools
+        Consider these factors when choosing a tool:
+        - **Information source**: Is this public information or internal data?
+        - **Data type**: Are you looking for documents, structured data, web articles, or something else?
+        - **Specificity**: Does the tool specialize in the domain you need?
+        - **Past performance**: Has this tool worked well for similar queries before?
         
-        Match tool capabilities to information type needed.
+        Review the available tools list in the context and match tool capabilities to your information needs.
         
-        </tool_selection_principles>
+        </tool_selection_guidelines>
 
-        <query_crafting>
+        <query_crafting_principles>
         
-        Good queries are:
-        - **Specific**: Include key terms, context, and constraints
-        - **Focused**: One clear information need per query
-        - **Appropriate**: Match the tool's expected input format
-        - **Different**: Don't repeat exact queries that already failed
+        Effective queries are:
+        - **Specific and detailed**: Include relevant keywords, context, and constraints
+        - **Focused**: Target one clear information need
+        - **Format-appropriate**: Match the expected input format of the tool
+        - **Refined**: Learn from previous attempts, don't repeat failed queries
         
-        Poor queries:
-        - Too broad ("renewable energy")
-        - Too vague ("information about X")
-        - Wrong format (SQL syntax for web search)
-        - Exact repetition of failed attempts
+        Ineffective queries are:
+        - Too broad or generic
+        - Too vague or ambiguous  
+        - Wrong format for the tool
+        - Exact duplicates of queries that already failed
         
-        </query_crafting>
+        </query_crafting_principles>
 
-        <execution_history_awareness>
-        Learn from past attempts:
-        - If a tool+query failed → don't repeat exactly
-        - If a tool succeeded → can reuse tool but change query
-        - If a tool failed multiple times → consider different tool
-        - Review error messages to understand why failures occurred
-        </execution_history_awareness>
+        <adapting_from_history>
+        
+        Use execution history intelligently:
+        - **If a query failed** → analyze why (wrong tool? wrong query? format issue?) and adjust
+        - **If a query succeeded** → can use the same tool but vary the query for different aspects
+        - **If a tool repeatedly fails** → consider switching to a different tool
+        - **Look for patterns** → what types of queries work well with each tool?
+        
+        Don't blindly repeat failed attempts. Adapt based on what you learn.
+        
+        </adapting_from_history>
 
         <thinking_process>
-        MUST use the 'think' tool before deciding:
-        1. What information do we need for this phase?
-        2. Which tool can provide this information?
-        3. What's the most effective query?
-        4. Have we tried this tool+query before?
-        5. If yes, what was the result? How should we adjust?
+        MUST use the 'think' tool before making your decision:
+        1. What specific information do we need for this phase?
+        2. Which available tool is best suited to provide this information?
+        3. What query would most effectively retrieve what we need?
+        4. Have we tried this tool/query combination before?
+        5. If so, what happened? How should we adjust our approach?
         
         You MUST follow this sequence:
-        1. First, call the 'think' tool to plan
-        2. After thinking, provide the JSON with subgraph and query
+        1. First, call the 'think' tool to analyze and plan
+        2. After thinking, provide the JSON with your decision
         DO NOT try to output JSON and use tools in the same response.
         </thinking_process>
 
@@ -679,196 +684,21 @@ class PromptTemplates:
         Return valid JSON:
         ```json
         {
-            "subgraph": "tool_name",
-            "query": "Specific focused query for the tool"
+            "subgraph": "selected_tool_name",
+            "query": "Your specific, well-crafted query here"
         }
         ```
+        
+        The subgraph name must exactly match one of the available tools from the context.
         </output_format>
 
-        <examples>
-
-        Example 1: Web search for reports
-        Phase: "Looking up renewable energy reports"
-        Need: Authoritative reports on global renewable adoption
-        
-        Output:
-        {
-            "subgraph": "web_search",
-            "query": "IEA IRENA renewable energy global adoption report 2024 2025 capacity costs trends"
-        }
-
-        Example 2: SQL query for internal data
-        Phase: "Analyzing Q4 revenue by product category"
-        Need: Sales data from company database
-        
-        Output:
-        {
-            "subgraph": "sql_query",
-            "query": "SELECT product_category, SUM(revenue) as total_revenue FROM sales WHERE quarter = 'Q4' AND year = 2024 GROUP BY product_category ORDER BY total_revenue DESC"
-        }
-
-        Example 3: Document search
-        Phase: "Reviewing company sustainability policies"
-        Need: Internal policy documents
-        
-        Output:
-        {
-            "subgraph": "document_search",
-            "query": "sustainability policy carbon neutral renewable energy corporate commitments 2025"
-        }
-
-        Example 4: Refining after failure
-        Phase: "Browsing international renewable energy policies"
-        Previous: "web_search" with "renewable energy policies" returned too generic results
-        
-        Output:
-        {
-            "subgraph": "web_search",
-            "query": "Paris Agreement national renewable energy targets NDC commitments EU Green Deal USA IRA policy frameworks"
-        }
-
-        Example 5: Different tool after repeated failures
-        Phase: "Finding technology innovation details"
-        Previous: "document_search" failed twice (no relevant docs)
-        
-        Output:
-        {
-            "subgraph": "web_search",
-            "query": "latest solar panel efficiency improvements perovskite cells renewable energy technology innovations 2024 2025"
-        }
-
-        </examples>
-        """
-    )
-
-    # Legacy prompt - kept for backward compatibility but deprecated
-    DIRECTION_GENERATION_PROMPT = textwrap.dedent(
-        """\
-        <role>
-        You are a strategic research planner. Decide the next action to progress toward answering the query.
-        </role>
-
-        <core_philosophy>
-        Prefer reasoning over tool usage. Use tools when you genuinely need external facts you don't have.
-        Tools gather information. You do the thinking.
-        </core_philosophy>
-
-        <actions>
-        - **reason_only**: Analyze, synthesize, deduce with current knowledge
-        - **use_tool**: Fetch external information when absolutely necessary
-        </actions>
-
-        <decision_framework>
-
-        Use **reason_only** when you can:
-        - Think through the problem logically
-        - Analyze and compare what you already know
-        - Draw conclusions or identify patterns
-        - Synthesize insights from existing information
-
-        Use **use_tool** when you need:
-        - Specific facts you don't have
-        - Current/real-time data
-        - Data from specific sources (databases, documents, web)
-
-        </decision_framework>
-
-        <execution_history>
-        If provided, learn from past attempts:
-        - Don't repeat failing tool + query combinations
-        - If a tool failed multiple times, try different tool or reason instead
-        - If tool succeeded, you can reuse it but with DIFFERENT query
-        </execution_history>
-
-        <thinking_process>
-        MUST use the 'think' tool before deciding:
-        - What do we know? What's missing?
-        - Can we reason with what we have?
-        - If need tool: which one and why?
-        - Are we repeating previous attempts?
-        You MUST follow this sequence:
-        1. First, call the 'think' tool to analyze (this will be your first response)
-        2. After thinking, you will be prompted again to provide the JSON decision
-        DO NOT try to output JSON and use tools in the same response.
-        </thinking_process>
-
-        <tool_usage>
-        When using tools:
-        - Review available tools and pick the most appropriate
-        - Write specific, focused queries
-        - Ensure query is different from previous attempts
-        </tool_usage>
-
-        <reasoning_quality>
-        When reasoning:
-        - Be substantial
-        - Analyze tradeoffs and implications
-        - Draw connections and conclusions
-        - Don't just summarize, actually think
-        </reasoning_quality>
-
-        <output_format>
-        Return valid JSON:
-        ```json
-        {
-            "action": "use_tool" | "reason_only",
-            "subgraph": "tool_name" | null,
-            "query": "specific query" | null,
-            "reasoning": "deep analysis" | null
-        }
-        ```
-
-        Rules:
-        - action="use_tool" → subgraph + query required, reasoning = null
-        - action="reason_only" → reasoning required, subgraph + query = null
-        </output_format>
-
-        <examples>
-
-        Example 1: Need data
-        Think: "No information about cloud platforms yet. Need foundational data."
-
-        Output:
-        {
-            "action": "use_tool",
-            "subgraph": "web_search",
-            "query": "AWS vs Azure vs GCP serverless pricing and features comparison 2025",
-            "reasoning": null
-        }
-
-        Example 2: Have data, time to think
-        Think: "Have pricing for all 3 platforms. Can analyze tradeoffs now."
-
-        Output:
-        {
-            "action": "reason_only",
-            "subgraph": null,
-            "query": null,
-            "reasoning": "With pricing data collected, I can now analyze. AWS Lambda costs $0.20 per 1M requests vs GCP $0.16. However, AWS has 250ms cold starts vs GCP 400ms. For user-facing APIs, the better cold start justifies the 25% cost premium. The startup prioritizes UX over minimum cost, so AWS is optimal here despite higher price..."
-        }
-
-        Example 3: Tool failed, adapt
-        Think: "Search failed twice. Have some data from earlier. Use what we have."
-
-        Output:
-        {
-            "action": "reason_only",
-            "subgraph": null,
-            "query": null,
-            "reasoning": "Search tool failing, but earlier iterations captured key trends: 15% YoY growth in renewables, solar at 40% of new installs. Can't get latest stats but can analyze established patterns. Solar LCOE now below fossil fuels creates self-reinforcing cycle. Will note data limitations but provide valid analysis..."
-        }
-
-        Example 4: Query failed, simplify
-        Think: "Complex database query timed out. Try simpler version."
-
-        Output:
-        {
-            "action": "use_tool",
-            "subgraph": "sql_query",
-            "query": "SELECT month, SUM(revenue) FROM sales WHERE year = 2025 GROUP BY month",
-            "reasoning": null
-        }
-        </examples>
+        <critical_reminders>
+        - Review the available tools list provided in the context
+        - Choose the tool that best matches your information needs
+        - Craft queries that are specific and appropriate for the selected tool
+        - Learn from execution history - don't repeat failed approaches
+        - Your query should be focused and actionable
+        </critical_reminders>
         """
     )
 

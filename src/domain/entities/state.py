@@ -58,7 +58,6 @@ class ThinkingState(TypedDict, total=False):
     # Action execution results
     direction: str  # query for tool (when next_action="use_tool")
     selected_subgraph: str  # tool name (when next_action="use_tool")
-    action: str  # legacy field, maps to next_action
     reasoning: str  # reasoning content (when next_action="reason_only")
 
     accumulated_context: str

@@ -94,7 +94,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             return {
                 "phase_title": phase_title,
                 "next_action": next_action,
-                "action": next_action,  # Legacy field for compatibility
             }
 
         except Exception as e:
@@ -148,7 +147,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
         except Exception as e:
             logger.error(f"[Action Execution] Failed: {e}")
-            # Fallback to tool execution
             return {
                 "selected_subgraph": "web_search",
                 "direction": conversation[-1].content if conversation else "",
