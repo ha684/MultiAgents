@@ -120,7 +120,7 @@ async def main():
     orchestrator = MainGraph()
 
     human_message = HumanMessage(
-        content="What are the main obstacles preventing large-scale integration of renewable energy sources into national grids, and how might overcoming these barriers impact global energy markets?",
+        content="Bạn có thể cho tôi biết danh sách các sản phẩm đã từng được cập nhật gần nhất trong hệ thống cùng với ngày cập nhật của chúng không?",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]
