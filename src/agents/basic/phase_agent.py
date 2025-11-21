@@ -21,6 +21,10 @@ class PhaseAgent(BaseAgent):
     """
     Phase Agent - Determines the next phase in the research process.
 
+    Supports two modes:
+    1. "thinking" (default): Iterative research with reasoning preference
+    2. "normal": Single-shot execution with direct tool selection
+
     Like ChatGPT, this agent:
     - Analyzes the current situation (missing aspects, learnings, etc.)
     - Decides on the phase title (e.g., "Looking up renewable energy reports")
@@ -30,9 +34,15 @@ class PhaseAgent(BaseAgent):
     def __init__(self, provider: SupportedLLMProviders = "nxchat"):
         super().__init__(provider)
 
-    async def ainvoke(self, state: dict[str, Any]) -> dict[str, Any]:
+    async def ainvoke(
+        self, state: dict[str, Any], mode: str = "thinking"
+    ) -> dict[str, Any]:
         """
         Generate phase title and decide next action type.
+
+        Args:
+            state: Current state with conversation, context, etc.
+            mode: "thinking" (iterative, reasoning-first) or "normal" (single-shot, tool-focused)
 
         Returns:
             {
@@ -40,6 +50,12 @@ class PhaseAgent(BaseAgent):
                 "next_action": str,     # Example: "reason_only" or "use_tool"
             }
         """
+        # Select prompt based on mode
+        if mode == "normal":
+            system_prompt = PromptTemplates.PHASE_PLANNING_NORMAL_PROMPT
+        else:
+            system_prompt = PromptTemplates.PHASE_PLANNING_PROMPT
+
         learnings = state.get("learnings", [])
         knowledge = state.get("accumulated_context", "")
         execution_history = state.get("execution_history", [])
@@ -89,7 +105,7 @@ class PhaseAgent(BaseAgent):
         context_content = "\n\n".join(filter(None, context_parts))
 
         messages: list[BaseMessage] = [
-            SystemMessage(content=PromptTemplates.PHASE_PLANNING_PROMPT),
+            SystemMessage(content=system_prompt),
             AIMessage(content=context_content),
             HumanMessage(content=f"Conversation:\n{conversation_text}"),
         ]

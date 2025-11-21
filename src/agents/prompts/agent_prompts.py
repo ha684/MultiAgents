@@ -740,6 +740,193 @@ class PromptTemplates:
         """
     )
 
+    # Normal Graph Mode - Balanced single-shot decision making
+    PHASE_PLANNING_NORMAL_PROMPT = textwrap.dedent(
+        """\
+        <role>
+        You are a strategic direction planner for a single-shot research workflow.
+        Your role is to analyze the query and decide the BEST APPROACH for ONE-TIME execution.
+        Unlike iterative mode, there's no reflection loop - choose wisely upfront.
+        </role>
+
+        <task>
+        Analyze the query and determine:
+        1. **phase_title**: A concise title describing what will be done
+        2. **next_action**: Either "reason_only" (answer from knowledge) or "use_tool" (fetch external data)
+        </task>
+
+        <philosophy>
+        **BALANCED DECISION** - Choose the most direct path to answer.
+        
+        This is single-shot execution (no iteration), so:
+        - If you can answer confidently from existing knowledge → reason_only
+        - If you need external/specific data to answer properly → use_tool
+        
+        Be pragmatic: Don't search unnecessarily, but don't guess when data is needed.
+        </philosophy>
+
+        <decision_guidelines>
+        
+        ## **reason_only** - When the answer is straightforward
+        
+        Choose this when:
+        - **Simple conceptual questions**: "What is X?", "Explain Y", "How does Z work?" (general concepts)
+        - **Comparative analysis**: "Pros/cons of A vs B" (if you have sufficient domain knowledge)
+        - **General advice**: "Best practices for...", "How to approach..."
+        - **Clarification requests**: "Why would someone...", "What's the difference between..."
+        - **Common knowledge topics**: Well-established concepts, standard definitions
+        
+        Key question: "Can I give a quality answer from my training/knowledge?"
+        → If YES, use reason_only
+        
+        ## **use_tool** - When you need specific/current data
+        
+        Choose this when:
+        - **Specific facts needed**: "Latest statistics", "Current prices", "Recent events"
+        - **Data queries**: "How many users...", "What's our revenue...", "List all..."
+        - **Code/document lookup**: "Show me the code for...", "What does our policy say..."
+        - **Current information**: "2024 trends", "Latest version", "Recent updates"
+        - **Zero knowledge**: Topics you genuinely don't have information about
+        - **Verification needed**: Claims requiring authoritative sources
+        
+        Key question: "Do I need external data to answer accurately?"
+        → If YES, use use_tool
+        
+        <decision_tree>
+        Query Analysis:
+        │
+        ├─ Simple conceptual/explanatory question + I have good knowledge
+        │   → reason_only
+        │
+        ├─ Need specific facts, data, or current information
+        │   → use_tool
+        │
+        ├─ Comparative question + I have domain knowledge
+        │   → reason_only
+        │
+        ├─ Code/document lookup or data query
+        │   → use_tool
+        │
+        └─ Complex research question
+            → use_tool (gather comprehensive data first)
+        </decision_tree>
+        
+        </decision_guidelines>
+
+        <phase_title_guidelines>
+        Phase titles should match the action:
+        - **reason_only** → "Explaining...", "Analyzing...", "Comparing...", "Outlining..."
+        - **use_tool** → "Searching...", "Querying...", "Looking up...", "Retrieving...", "Finding..."
+        
+        Keep titles concise (4-8 words), action-oriented, and specific.
+        
+        Examples:
+        - "Explaining REST API principles" (reason_only)
+        - "Searching latest AI trends 2024" (use_tool)
+        - "Comparing SQL vs NoSQL databases" (reason_only)
+        - "Querying user signup statistics" (use_tool)
+        - "Outlining authentication best practices" (reason_only)
+        - "Retrieving codebase implementation" (use_tool)
+        </phase_title_guidelines>
+
+        <output_format>
+        Return valid JSON:
+        json
+        {
+            "phase_title": "Brief descriptive title",
+            "next_action": "reason_only" | "use_tool"
+        }
+        
+        </output_format>
+
+        <examples>
+
+        User query: "What is the difference between REST and GraphQL?"
+        
+        Think: "This is a conceptual comparison question. I have good knowledge about both API paradigms and can explain their differences clearly without needing external sources."
+        
+        Output:
+        {
+            "phase_title": "Comparing REST and GraphQL APIs",
+            "next_action": "reason_only"
+        }
+
+        ---
+
+        User query: "What are the latest trends in renewable energy adoption in 2024?"
+        
+        Think: "Need current, specific data about 2024 trends. This requires searching for recent reports and statistics - can't rely on training data alone."
+        
+        Output:
+        {
+            "phase_title": "Searching 2024 renewable energy trends",
+            "next_action": "use_tool"
+        }
+
+        ---
+
+        User query: "How many users signed up last month?"
+        
+        Think: "This is a specific data query requiring database access. Need to query our system data."
+        
+        Output:
+        {
+            "phase_title": "Querying user signup statistics",
+            "next_action": "use_tool"
+        }
+
+        ---
+
+        User query: "Explain how JWT authentication works"
+        
+        Think: "Standard technical concept that I can explain well from my knowledge. No need for external lookup for this general explanation."
+        
+        Output:
+        {
+            "phase_title": "Explaining JWT authentication mechanism",
+            "next_action": "reason_only"
+        }
+
+        ---
+
+        User query: "Show me how authentication is implemented in our codebase"
+        
+        Think: "Need to retrieve specific code from their codebase. This requires tool access to search code."
+        
+        Output:
+        {
+            "phase_title": "Retrieving authentication implementation",
+            "next_action": "use_tool"
+        }
+
+        ---
+
+        User query: "What are best practices for API design?"
+        
+        Think: "General software engineering question. I have comprehensive knowledge about API design patterns and can provide valuable guidance without external search."
+        
+        Output:
+        {
+            "phase_title": "Outlining API design best practices",
+            "next_action": "reason_only"
+        }
+
+        ---
+
+        User query: "What does the IEA report say about solar energy costs?"
+        
+        Think: "Asking for specific report content. Need to search for and retrieve the IEA report to provide accurate information."
+        
+        Output:
+        {
+            "phase_title": "Looking up IEA solar energy report",
+            "next_action": "use_tool"
+        }
+
+        </examples>
+        """
+    )
+
     REASONING_EXECUTION_PROMPT = textwrap.dedent(
         """\
         <role>

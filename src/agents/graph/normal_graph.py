@@ -1,7 +1,7 @@
 # src/agents/graph/normal_graph.py
 """
 Normal Graph - Fast Path for Straightforward Queries
-Linear flow: Generate Direction → Execute Subgraph → Synthesize Response
+Linear flow: Phase Planning → Action Execution → Execute Subgraph → Synthesize Response
 """
 
 from typing import Any
@@ -9,7 +9,7 @@ from typing import Any
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from src.agents.basic import direction_generation_agent, response_agent
+from src.agents.basic import action_execution_agent, phase_agent, response_agent
 from src.agents.executors import EXECUTORS
 from src.agents.graph.base import GraphAgentBase
 from src.agents.shared.registry import SubgraphRegistry
@@ -27,11 +27,14 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
     Normal Graph - Fast Path for Clear Queries
 
     Flow:
-    1. Generate Direction: LLM selects subgraph + optimizes query
-    2. Execute Subgraph: Run selected subgraph
-    3. Synthesize Response: Generate final answer
+    1. Phase Planning: Decide phase title and action type (normal mode, balanced)
+    2. Action Execution: Either reason directly OR select tool + generate query
+    3. Execute Subgraph: Run selected subgraph (if use_tool) or skip (if reason_only)
+    4. Synthesize Response: Generate final answer
 
-    Single-shot execution, no iteration.
+    Single-shot execution, no iteration or reflection.
+    Can choose reason_only (answer from knowledge) or use_tool (fetch data) based on query context.
+    Uses "normal" mode for phase_agent (balanced prompt, not reasoning-biased like thinking mode).
     """
 
     def __init__(self):
@@ -48,39 +51,81 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
             graph_name=self.graph_name, recursion_limit=10, timeout_seconds=60
         )
 
-    async def generate_direction_node(self, state: NormalGraphState) -> dict[str, Any]:
+    async def phase_planning_node(self, state: NormalGraphState) -> dict[str, Any]:
         """
-        Generate focused research direction for current depth level.
-        Similar to ChatGPT's progressive thinking.
+        Phase Planning Node - Decide phase title and action type.
+
+        Normal mode provides balanced decision between reason_only and use_tool.
         """
-        conversation = state.get("conversation", [])
         try:
-            resp = await direction_generation_agent.ainvoke(state=state)
-            direction = resp.get("query", conversation[-1].content)
-            action = resp.get("action", "use_tool")
-            selected_subgraph = resp.get("subgraph", "web_search")
-            reasoning = resp.get("reasoning", "")
+            resp = await phase_agent.ainvoke(state=state, mode="normal")
+            phase_title = resp.get("phase_title", "Research query")
+            next_action = resp.get("next_action", "use_tool")
+
+            logger.info(
+                f"[NormalGraph] Phase Planning: '{phase_title}', Action={next_action}"
+            )
+
+            return {
+                "phase_title": phase_title,
+                "next_action": next_action,
+            }
 
         except Exception as e:
-            logger.error(f"Failed to generate direction: {e}")
-            direction = conversation[-1].content
-            action = "use_tool"
-            selected_subgraph = "web_search"
-            reasoning = ""
+            logger.error(f"[NormalGraph] Phase Planning failed: {e}")
+            return {
+                "phase_title": "Research query",
+                "next_action": "use_tool",
+            }
 
-        logger.info(f"[Direction] {direction}")
+    async def action_execution_node(self, state: NormalGraphState) -> dict[str, Any]:
+        """
+        Action Execution Node - Execute the planned action.
 
-        return {
-            "direction": direction,
-            "action": action,
-            "selected_subgraph": selected_subgraph,
-            "reasoning": reasoning,
-        }
+        Two paths:
+        1. reason_only → Generate reasoning to answer directly
+        2. use_tool → Select subgraph and generate query
+        """
+        conversation = state.get("conversation", [])
+
+        try:
+            resp = await action_execution_agent.ainvoke(state=state)
+            next_action = state.get("next_action", "use_tool")
+
+            selected_subgraph = resp.get("subgraph", "web_search")
+            query = resp.get("query", conversation[-1].content if conversation else "")
+            reasoning = resp.get("reasoning", "")
+
+            if next_action == "reason_only":
+                logger.info(
+                    f"[NormalGraph] Action Execution: Reasoning={reasoning[:100]}..."
+                )
+            else:
+                logger.info(
+                    f"[NormalGraph] Action Execution: Tool={selected_subgraph}, Query={query[:100]}..."
+                )
+
+            return {
+                "selected_subgraph": selected_subgraph,
+                "direction": query,
+                "reasoning": reasoning,
+            }
+
+        except Exception as e:
+            logger.error(f"[NormalGraph] Action Execution failed: {e}")
+            return {
+                "selected_subgraph": "web_search",
+                "direction": conversation[-1].content if conversation else "",
+                "reasoning": "",
+            }
 
     async def execute_subgraph_node(self, state: NormalGraphState) -> dict[str, Any]:
-        """Execute selected subgraph and return documents."""
+        """Execute selected subgraph and return documents, or handle reasoning-only mode."""
         subgraph_name = state.get("selected_subgraph")
-        if state.get("action") == "reason_only":
+        next_action = state.get("next_action", "use_tool")
+
+        if next_action == "reason_only":
+            logger.info("[NormalGraph] Reasoning-only mode, skipping tool execution")
             return {
                 "accumulated_context": state.get("reasoning", ""),
                 "response_mode": ResponseMode.REASONING_ONLY,
@@ -152,15 +197,21 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
         }
 
     def _build_graph(self) -> CompiledStateGraph:
-        """Build the normal graph workflow."""
+        """
+        Build the normal graph workflow.
+
+        Flow: phase_planning → action_execution → execute_subgraph → synthesize_response
+        """
         workflow = StateGraph(NormalGraphState)
 
-        workflow.add_node("generate_direction", self.generate_direction_node)
+        workflow.add_node("phase_planning", self.phase_planning_node)
+        workflow.add_node("action_execution", self.action_execution_node)
         workflow.add_node("execute_subgraph", self.execute_subgraph_node)
         workflow.add_node("synthesize_response", self.synthesize_response_node)
 
-        workflow.set_entry_point("generate_direction")
-        workflow.add_edge("generate_direction", "execute_subgraph")
+        workflow.set_entry_point("phase_planning")
+        workflow.add_edge("phase_planning", "action_execution")
+        workflow.add_edge("action_execution", "execute_subgraph")
         workflow.add_edge("execute_subgraph", "synthesize_response")
         workflow.set_finish_point("synthesize_response")
 

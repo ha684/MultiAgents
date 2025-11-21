@@ -100,14 +100,24 @@ class SqlState(TypedDict):
     response_metadata: dict
 
 
-class NormalGraphState(TypedDict):
-    """State for normal graph operations"""
+class NormalGraphState(TypedDict, total=False):
+    """
+    State for normal graph operations.
+    """
 
     final_answer: str
     response_metadata: dict
     conversation: list[BaseMessage]
+
+    phase_title: str
+    next_action: str
+
     selected_subgraph: str
     direction: str
+    reasoning: str
+
     cited_documents: list[Document]
     response_mode: ResponseMode
     accumulated_context: str
+
+    subgraph_policy: dict[str, Any]
