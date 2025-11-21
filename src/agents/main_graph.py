@@ -7,7 +7,7 @@ Routes to NormalGraph (fast path) or ThinkingGraph (iterative research)
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables.schema import StreamEvent
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -26,6 +26,7 @@ from src.agents.tools.server.mcp_retrieve_tools import (
 from src.domain.entities.graph import RunConfig
 from src.domain.entities.state import MainGraphState, NormalGraphState, ThinkingState
 from src.domain.schemas.chat import Message, RetrievalContext, TextPart
+from src.llm.language_detector import detect_language
 from src.services.conversation_service import ConversationService
 from src.utils.logger_conf import logger
 
@@ -75,7 +76,19 @@ class MainGraph(GraphAgentBase[MainGraphState]):
         Handles cases where LLM generates both content AND tool calls.
         """
         conversation = state.get("conversation", [])
-        system_prompt = SystemMessage(content=PromptTemplates.DIRECT_RESPONSE_PROMPT)
+
+        latest_user_query = ""
+        for msg in reversed(conversation):
+            if isinstance(msg, HumanMessage):
+                latest_user_query = msg.content
+                break
+
+        detected_language = detect_language(latest_user_query)
+        language_instruction = f"""**CRITICAL LANGUAGE REQUIREMENT** - Response language: {detected_language} ONLY - NO mixed tokens from other languages"""
+        system_prompt = SystemMessage(
+            content=PromptTemplates.DIRECT_RESPONSE_PROMPT + language_instruction
+        )
+
         messages = [system_prompt] + conversation
         llm_with_tools = self.llm.bind_tools(
             [use_normal_mode, use_thinking_mode], tool_choice="auto"

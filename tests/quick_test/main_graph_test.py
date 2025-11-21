@@ -119,11 +119,28 @@ async def main():
     logger.info("Initializing OrchestratorGraph...")
     orchestrator = MainGraph()
 
-    human_message = HumanMessage(
-        content="Bạn có thể cho tôi biết danh sách các sản phẩm đã từng được cập nhật gần nhất trong hệ thống cùng với ngày cập nhật của chúng không?",
+    human_message_1 = HumanMessage(
+        content="",
         additional_kwargs={"message_metadata": context_metadata},
     )
-    conversation = [human_message]
+
+    # # Mô phỏng response từ model
+    # ai_response_1 = AIMessage(
+    #     content="Tôi không hiểu rõ mục đích của bạn. Bạn có thể nêu cụ thể hơn về điều bạn muốn tìm kiếm hoặc cần hỗ trợ không?"
+    # )
+
+    # # Turn 2: Câu hỏi vague thứ 2 (giống turn 1 nhưng hơi khác)
+    # human_message_2 = HumanMessage(
+    #     content="cứ thử tìm xem",
+    #     additional_kwargs={"message_metadata": context_metadata},
+    # )
+
+    # Xây dựng conversation history
+    conversation = [
+        human_message_1,
+        # ai_response_1,
+        # human_message_2,  # Câu hỏi vague lần 2
+    ]
 
     logger.info("OrchestratorGraph initialized successfully.\n")
     streamer = MainGraphStreamer()

@@ -16,6 +16,7 @@ from src.agents.basic.base import BaseAgent
 from src.agents.prompts.agent_prompts import PromptTemplates
 from src.core.config.llm_config import SupportedLLMProviders
 from src.domain.entities.graph import ResponseMode
+from src.llm.language_detector import detect_language
 from src.utils import format_context_for_response
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
@@ -41,15 +42,13 @@ HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE = """You are a knowledgeable research as
    - **ONLY report numbers exactly as they appear** in the source documents
 
 4. **Inline citation format**:
-   - Use format: `([source_name][number])` where:
-     * `source_name` is a SHORT identifier from the document (e.g., filename, website name, doc title)
-     * `number` is the document index (1, 2, 3, etc.) from the retrieved documents
-   - Examples:
-     * `([report.pdf][1])`
-     * `([company-site][2])`
-     * `([Q3-analysis][3])`
-   - Alternative simple format: `([number])` if source name is not clear or too long
-   - Multiple sources: "Sales grew across regions ([report.pdf][1], [company-site][2], [Q3-analysis][3])"
+    - Each document has: [CITATION: N]
+    - For EACH document, create a SHORT identifier (1-3 words) based on the document's main topic or content
+    - Cite using: ([identifier][N]) after each fact
+    - Identifiers should be: lowercase, hyphenated, descriptive
+    - Example identifiers: "quarterly-earnings", "market-report", "ceo-interview", "tech-specs"
+    - Example citation: "Revenue was $50M ([earnings-q4][2])"
+    - Multiple sources: "Market grows ([mckinsey][1])([reuters][3])"
 
 5. **MANDATORY RICH MARKDOWN FORMATTING**:
    - **NEVER return plain text** - always use rich formatting
@@ -532,9 +531,18 @@ class ResponseAgent(BaseAgent):
 
         conversation_text = get_buffer_string(history)
 
+        latest_user_query = ""
+        for msg in reversed(history):
+            if isinstance(msg, HumanMessage):
+                latest_user_query = msg.content
+                break
+
+        detected_language = detect_language(latest_user_query)
+        language_instruction = f"""**CRITICAL LANGUAGE REQUIREMENT** - Response language: {detected_language} ONLY - NO mixed tokens from other languages"""
+
         if mode == ResponseMode.STANDARD and not accumulated_context:
             system_message = SystemMessage(
-                content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE
+                content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE + language_instruction
             )
             return [system_message] + history
 
@@ -556,16 +564,16 @@ class ResponseAgent(BaseAgent):
             system_content = HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
             context_label = "Retrieved context"
 
-        messages: list[BaseMessage] = [SystemMessage(content=system_content)]
+        messages: list[BaseMessage] = [
+            SystemMessage(content=system_content + language_instruction)
+        ]
 
         if accumulated_context:
             messages.append(
                 AIMessage(content=f"{context_label}:\n{accumulated_context}")
             )
 
-        user_prompt = HumanMessage(
-            content=(f"Conversation history:\n{conversation_text}\n\n")
-        )
+        user_prompt = HumanMessage(content=(f"Conversation:\n{conversation_text}\n\n"))
         messages.append(user_prompt)
 
         return messages
@@ -589,13 +597,27 @@ class ResponseAgent(BaseAgent):
         """Prepare messages for both streaming and non-streaming responses."""
         current_query = history[-1].content
 
+        # Detect language from the current user query
+        detected_language = detect_language(current_query)
+        language_instruction = f"""
+
+**🌍 CRITICAL LANGUAGE REQUIREMENT 🌍**
+- Response language: {detected_language} ONLY
+- Use PURE {detected_language} - no mixed tokens from other languages
+- If {detected_language} is Vietnamese: NO Chinese/Japanese/Korean characters
+- If {detected_language} is English: NO characters from other languages
+- If {detected_language} is Japanese: Use proper Japanese only
+- Every single word must be in {detected_language}
+- Check each word before including it in response
+"""
+        logger.info(f"Detected language for response: {detected_language}")
         if contexts:
             logger.info(
                 f'Response Agent: Preparing response for query: "{current_query}" with {len(contexts)} contexts.'
             )
             formatted_context = format_context_for_response(contexts)
             system_message = SystemMessage(
-                content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE
+                content=HAVE_CONTEXT_GENERATION_PROMPT_TEMPLATE + language_instruction
             )
             new_query = HumanMessage(
                 content=f"{formatted_context}\n---\n{current_query}"
@@ -604,7 +626,7 @@ class ResponseAgent(BaseAgent):
 
         else:
             system_message = SystemMessage(
-                content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE
+                content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE + language_instruction
             )
             new_query = HumanMessage(
                 content=f"User query: {current_query}\n\nRemember this is the case that no document found."
