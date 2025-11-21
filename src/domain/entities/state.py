@@ -51,14 +51,12 @@ class ThinkingState(TypedDict, total=False):
 
     iteration_count: int
 
-    # Phase planning (from phase_agent)
     phase_title: str
-    next_action: str  # "reason_only" or "use_tool"
+    next_action: str
 
-    # Action execution results
-    direction: str  # query for tool (when next_action="use_tool")
-    selected_subgraph: str  # tool name (when next_action="use_tool")
-    reasoning: str  # reasoning content (when next_action="reason_only")
+    direction: str
+    selected_subgraph: str
+    reasoning: str
 
     accumulated_context: str
     learnings: list[str]
@@ -73,12 +71,13 @@ class ThinkingState(TypedDict, total=False):
     has_tool_results: bool
     execution_history: list[dict[str, Any]]
     consecutive_failures: int
+
     _temp_documents: list[Document]
     _sql_result: str
     _is_sql_iteration: bool
     _should_continue: bool
     _missing_aspects: str
-    internal_reasoning: str
+    _internal_reasoning: str
     _execution_failed: bool
     _failure_reason: str
 

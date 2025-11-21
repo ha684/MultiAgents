@@ -120,7 +120,7 @@ async def main():
     orchestrator = MainGraph()
 
     human_message = HumanMessage(
-        content="Evaluate the interplay between international policy frameworks, technological innovation, and market dynamics in shaping the pace of global renewable energy adoption over the past decade. Assess the challenges of integrating variable renewable sources into existing energy infrastructures across developed and developing economies, and predict the long-term macroeconomic, geopolitical, and environmental consequences if current adoption trajectories continue.",
+        content="What are the main obstacles preventing large-scale integration of renewable energy sources into national grids, and how might overcoming these barriers impact global energy markets?",
         additional_kwargs={"message_metadata": context_metadata},
     )
     conversation = [human_message]

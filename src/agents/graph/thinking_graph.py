@@ -61,7 +61,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         self.compiled_graph = self._build_graph()
         self.max_iterations = 30
         self.min_knowledge_threshold = 500
-        self.max_query_length = 400  # Tavily max length
 
     @property
     def graph(self) -> CompiledStateGraph:
@@ -96,7 +95,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             phase_title = resp.get("phase_title", "Research step")
             next_action = resp.get("next_action", "use_tool")
 
-            # Force reasoning on iteration 1
             if iteration == 0:
                 next_action = "reason_only"
                 phase_title = f"Initial Analysis: {phase_title}"
@@ -154,17 +152,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
                 query = resp.get(
                     "query", conversation[-1].content if conversation else ""
                 )
-
-                # Validate query length and truncate if needed
-                if len(query) > self.max_query_length:
-                    original_length = len(query)
-                    query = query[: self.max_query_length].rsplit(" ", 1)[
-                        0
-                    ]  # Truncate at last space
-                    logger.warning(
-                        f"[Action Execution] Query too long ({original_length} chars). "
-                        f"Truncated to {len(query)} chars"
-                    )
 
                 logger.info(
                     f"[Action Execution] Iter={iteration}, Tool={selected_subgraph}, Query={query[:100]}..."
@@ -248,7 +235,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
             result_obj: SubgraphOutput = await executor(state)
 
-            # Check for subgraph errors FIRST
             if result_obj.subgraph_error:
                 logger.error(
                     f"[Execute] Subgraph returned error: {result_obj.subgraph_error}"
@@ -382,12 +368,12 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         learnings = list(state.get("learnings", []))
         learnings.append(learning_entry)
 
-        internal_reasoning = state.get("internal_reasoning", "")
+        internal_reasoning = state.get("_internal_reasoning", "")
         internal_reasoning += f"\n\n{reasoning}"
 
         return {
             "learnings": learnings,
-            "internal_reasoning": internal_reasoning,
+            "_internal_reasoning": internal_reasoning,
         }
 
     async def extract_learnings_node(self, state: ThinkingState) -> dict[str, Any]:
@@ -491,7 +477,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         Now passes detailed error information from subgraph_error to missing_aspects.
         """
         accumulated_context = state.get("accumulated_context", "")
-        internal_reasoning = state.get("internal_reasoning", "")
+        internal_reasoning = state.get("_internal_reasoning", "")
 
         total_context = accumulated_context + "\n\n" + internal_reasoning
         total_length = len(total_context)
@@ -627,7 +613,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         has_documents = citation_counter > 0
         has_tool_results = state.get("has_tool_results", False)
 
-        internal_reasoning = state.get("internal_reasoning", "").strip()
+        internal_reasoning = state.get("_internal_reasoning", "").strip()
         accumulated_context = state.get("accumulated_context", "").strip()
 
         final_context = ""

@@ -65,9 +65,11 @@ class PhaseAgent(BaseAgent):
             f"Missing Aspects:\n{missing_aspects}" if missing_aspects else ""
         )
 
-        knowledge_section = (
-            f"Accumulated Knowledge:\n{knowledge[-3000:]}" if knowledge else ""
-        )
+        knowledge_section = ""
+        if knowledge:
+            truncated = len(knowledge) > 3000
+            prefix = "(Showing most recent ~3000 chars)\n" if truncated else ""
+            knowledge_section = f"Accumulated Knowledge:\n{prefix}{knowledge[-3000:]}"
 
         learnings_text = (
             "\n".join(f"- {learning}" for learning in learnings[-3:])
