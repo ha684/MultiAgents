@@ -35,11 +35,25 @@ class VerificationAgent(BaseAgent):
         max_iterations = 3
         conversation_text = get_buffer_string(state["conversation"])
 
-        total_context = f"Accumulated context:\n{state.get('accumulated_context', '') + '\n\n' + state.get('internal_reasoning', '')}"
+        internal_reasoning = state.get("_internal_reasoning", "").strip()
+        accumulated_context = state.get("accumulated_context", "").strip()
+
+        execution_history = state.get("execution_history", [])
+        successful_executions = [
+            ex for ex in execution_history if ex.get("status") == "success"
+        ]
+
+        knowledge_summary = self._build_knowledge_summary(
+            internal_reasoning=internal_reasoning,
+            accumulated_context=accumulated_context,
+            execution_history=successful_executions,
+            iteration_count=state.get("iteration_count", 0),
+        )
+
         messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.VERIFICATION_PROMPT),
-            AIMessage(content=total_context),
-            HumanMessage(content=f"Conversation: {conversation_text}"),
+            AIMessage(content=knowledge_summary),
+            HumanMessage(content=f"Conversation:\n{conversation_text}"),
         ]
 
         verification_llm = self.thinking_llm
@@ -53,6 +67,57 @@ class VerificationAgent(BaseAgent):
         )
 
         return verification_dict
+
+    def _build_knowledge_summary(
+        self,
+        internal_reasoning: str,
+        accumulated_context: str,
+        execution_history: list,
+        iteration_count: int,
+    ) -> str:
+        """
+        Build a clear summary of what knowledge we have and where it came from.
+        This helps verification agent understand the SOURCE of information.
+        """
+        summary_parts = []
+
+        summary_parts.append(f"## Research Progress: Iteration {iteration_count}")
+        summary_parts.append("")
+
+        if internal_reasoning:
+            summary_parts.append("### Internal Reasoning (No External Sources)")
+            summary_parts.append("- Generated from your own knowledge")
+            summary_parts.append("")
+            summary_parts.append("Content:")
+            summary_parts.append(internal_reasoning)
+            summary_parts.append("")
+
+        if accumulated_context:
+            summary_parts.append("### External Sources (From Tool Executions)")
+
+            if execution_history:
+                summary_parts.append(
+                    f"- Total successful searches: {len(execution_history)}"
+                )
+                summary_parts.append("- Tools used:")
+                for ex in execution_history:
+                    subgraph = ex.get("subgraph", "unknown")
+                    query = ex.get("query", "")[:60]
+                    summary_parts.append(f'  • {subgraph}: "{query}"')
+            else:
+                summary_parts.append("- No external searches completed yet")
+
+            summary_parts.append("")
+            summary_parts.append("Content:")
+            summary_parts.append(accumulated_context)
+        else:
+            summary_parts.append("### External Sources")
+            summary_parts.append("- No external sources gathered yet")
+            summary_parts.append(
+                "- All current knowledge is from internal reasoning only"
+            )
+
+        return "\n".join(summary_parts)
 
 
 def parse_verification_response(content: str) -> VerificationSchema | None:

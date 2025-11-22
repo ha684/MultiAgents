@@ -67,9 +67,11 @@ class ActionExecutionAgent(BaseAgent):
             f"Missing Aspects:\n{missing_aspects}" if missing_aspects else ""
         )
 
-        knowledge_section = (
-            f"Accumulated Knowledge:\n{knowledge[-3000:]}" if knowledge else ""
-        )
+        knowledge_section = ""
+        if knowledge:
+            truncated = len(knowledge) > 3000
+            prefix = "(Showing most recent ~3000 chars)\n" if truncated else ""
+            knowledge_section = f"Accumulated Knowledge:\n{prefix}{knowledge[-3000:]}"
 
         learnings_text = (
             "\n".join(f"- {learning}" for learning in learnings[-3:])
@@ -115,14 +117,21 @@ class ActionExecutionAgent(BaseAgent):
             HumanMessage(content=f"Conversation:\n{conversation_text}"),
         ]
 
-        result = await self.iterative_llm_call_structured(
-            messages=messages,
-            llm_with_tools=self.thinking_llm,
-            available_tools={"think": think},
-            max_iterations=3,
-            parse_fn=parse_action_execution_result,
-            retry_prompt=f"Please provide the execution result in the correct JSON format for action={action}",
-        )
+        if action == "reason_only":
+            result = await self.simple_llm_call(
+                messages=messages,
+                error_context=f"ActionExecutionAgent (reason_only) for action={action}",
+            )
+            result = parse_action_execution_result(result.content)
+        else:
+            result = await self.iterative_llm_call_structured(
+                messages=messages,
+                llm_with_tools=self.thinking_llm,
+                available_tools={"think": think},
+                max_iterations=3,
+                parse_fn=parse_action_execution_result,
+                retry_prompt=f"Please provide the execution result in the correct JSON format for action={action}",
+            )
 
         result["action"] = action
 
@@ -133,14 +142,14 @@ class ActionExecutionAgent(BaseAgent):
         return result
 
 
-def parse_action_execution_result(content: str) -> dict[str, Any] | None:
+def parse_action_execution_result(content: str) -> dict[str, Any] | str:
     """Parse action execution result from content"""
     try:
         parsed = parse_response(content)
         if parsed is None:
-            return None
+            return content
 
         return parsed
     except Exception as e:
         logger.error(f"Error parsing action execution result: {e}")
-        return None
+        return content

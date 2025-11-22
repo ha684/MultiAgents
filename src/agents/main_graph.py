@@ -7,7 +7,7 @@ Routes to NormalGraph (fast path) or ThinkingGraph (iterative research)
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables.schema import StreamEvent
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -26,6 +26,7 @@ from src.agents.tools.server.mcp_retrieve_tools import (
 from src.domain.entities.graph import RunConfig
 from src.domain.entities.state import MainGraphState, NormalGraphState, ThinkingState
 from src.domain.schemas.chat import Message, RetrievalContext, TextPart
+from src.llm.language_detector import detect_language
 from src.services.conversation_service import ConversationService
 from src.utils.logger_conf import logger
 
@@ -71,39 +72,64 @@ class MainGraph(GraphAgentBase[MainGraphState]):
         """
         Entry point with intelligent routing.
         LLM decides: direct response / normal mode / thinking mode
+
+        Handles cases where LLM generates both content AND tool calls.
         """
         conversation = state.get("conversation", [])
-        system_prompt = SystemMessage(content=PromptTemplates.DIRECT_RESPONSE_PROMPT)
+
+        latest_user_query = ""
+        for msg in reversed(conversation):
+            if isinstance(msg, HumanMessage):
+                latest_user_query = msg.content
+                break
+
+        detected_language = detect_language(latest_user_query)
+        language_instruction = f"""**CRITICAL LANGUAGE REQUIREMENT** - Response language: {detected_language} ONLY - NO mixed tokens from other languages"""
+        system_prompt = SystemMessage(
+            content=PromptTemplates.DIRECT_RESPONSE_PROMPT + language_instruction
+        )
+
         messages = [system_prompt] + conversation
         llm_with_tools = self.llm.bind_tools(
-            [use_normal_mode, use_thinking_mode]
+            [use_normal_mode, use_thinking_mode], tool_choice="auto"
         ).with_retry()
+
         try:
             response: AIMessage = await llm_with_tools.ainvoke(messages)
-
-            if response.content and not response.tool_calls:
-                return {
-                    "route_mode": "direct",
-                    "final_answer": response.content,
-                }
 
             if response.tool_calls:
                 tool_call = response.tool_calls[0]
                 tool_name = tool_call["name"]
 
+                if response.content:
+                    logger.info(
+                        f"[DirectResponse] Agent explanation before routing: '{response.content[:150]}...'"
+                    )
+
                 if tool_name == "use_normal_mode":
                     return {
                         "route_mode": "normal",
+                        "routing_explanation": response.content,
                     }
                 elif tool_name == "use_thinking_mode":
                     return {
                         "route_mode": "thinking",
+                        "routing_explanation": response.content,
                     }
                 else:
+                    logger.warning(f"[DirectResponse] Unknown tool: {tool_name}")
                     return {
                         "route_mode": "direct",
-                        "final_answer": "I apologize, but I encountered an issue. Could you please rephrase your question?",
+                        "final_answer": response.content
+                        or "I apologize, but I encountered an issue. Could you please rephrase your question?",
                     }
+
+            if response.content:
+                logger.info("[DirectResponse] Direct answer without routing")
+                return {
+                    "route_mode": "direct",
+                    "final_answer": response.content,
+                }
 
             logger.warning("[DirectResponse] No content or tool calls in response")
             return {
@@ -124,6 +150,11 @@ class MainGraph(GraphAgentBase[MainGraphState]):
     def route_after_entry(self, state: MainGraphState) -> str:
         """Route after entry point based on mode decision."""
         route_mode = state.get("route_mode", "direct")
+
+        # Log routing explanation if available
+        routing_explanation = state.get("routing_explanation")
+        if routing_explanation:
+            logger.info(f"[Orchestrator] Routing explanation: {routing_explanation}")
 
         if route_mode == "direct":
             return "end"
