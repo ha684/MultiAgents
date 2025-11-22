@@ -1,3 +1,4 @@
+```mermaid
 flowchart LR
     subgraph U[Users / Knowledge Workers]
     end
@@ -40,3 +41,4 @@ flowchart LR
     S4 --> P
 
     P --> G[Knowledge Gaps / Slow Decisions / Incomplete Data]
+```
