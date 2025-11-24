@@ -12,7 +12,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import Tool
 
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.core.config.llm_config import SupportedLLMProviders
+from src.core.config.llm_config import LLMModelConfigs, SupportedLLMProviders
 from src.llm.factory import get_llm
 from src.utils.logger_conf import logger
 
@@ -20,8 +20,12 @@ from src.utils.logger_conf import logger
 class BaseAgent(ABC):
     """LLM utilities common to all agents (with or without graph)."""
 
-    def __init__(self, provider: SupportedLLMProviders = "nxchat"):
-        self.llm = get_llm(provider)
+    def __init__(
+        self,
+        provider: SupportedLLMProviders = "nxchat",
+        config: LLMModelConfigs | None = None,
+    ):
+        self.llm = get_llm(provider, config)
         self.thinking_llm = self.llm.bind_tools([think])
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
 

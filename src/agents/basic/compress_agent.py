@@ -5,6 +5,8 @@ from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.basic.base import BaseAgent
+from src.core.config.llm_config import LLMModelConfigs
+from src.core.config.settings import settings
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
@@ -71,7 +73,15 @@ class CompressAgent(BaseAgent):
     """Agent responsible for compressing and organizing information from filtered documents."""
 
     def __init__(self):
-        super().__init__()
+        super().__init__(
+            provider="nxchat",
+            config=LLMModelConfigs(
+                model="nxchat-internal",
+                base_url=settings.ntqai_base_url,
+                api_key=settings.ntqai_api_key,
+                temperature=0.5,
+            ),
+        )
         logger.info("Compress Agent initialized successfully.")
 
     async def ainvoke(self, query: str, reference: list[Document]) -> str:

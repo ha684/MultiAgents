@@ -14,7 +14,6 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from src.agents.basic.base import BaseAgent
 from src.agents.prompts.agent_prompts import PromptTemplates
-from src.core.config.llm_config import SupportedLLMProviders
 from src.domain.entities.graph import ResponseMode
 from src.llm.language_detector import detect_language
 from src.utils import format_context_for_response
@@ -517,8 +516,8 @@ Remember: Transform database query results into **clear, visually engaging, acti
 class ResponseAgent(BaseAgent):
     """Agent responsible for generating the final response based on mode and context."""
 
-    def __init__(self, provider: SupportedLLMProviders = "nxchat"):
-        super().__init__(provider)
+    def __init__(self):
+        super().__init__()
         logger.info("Response Agent initialized successfully.")
 
     def _prepare_messages_by_mode(

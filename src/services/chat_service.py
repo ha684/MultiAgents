@@ -279,7 +279,7 @@ class ChatService:
             if retrieved_docs:
                 with tracer.start_as_current_span("CitationAgent.extract_citations"):
                     citation_indexes = await citation_agent.ainvoke(
-                        history=conversation,
+                        query=contextualized_query,
                         reference=retrieved_docs,
                     )
                 if citation_indexes.indexes:
@@ -421,7 +421,7 @@ class ChatService:
                 progress=0.8,
             )
             citation_indexes = await citation_agent.ainvoke(
-                history=conversation,
+                query=contextualized_query,
                 reference=retrieved_docs,
             )
             if citation_indexes.indexes:

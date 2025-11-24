@@ -12,7 +12,8 @@ from langchain_core.messages import (
 from src.agents.basic.base import BaseAgent
 from src.agents.prompts.agent_prompts import PromptTemplates
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.core.config.llm_config import SupportedLLMProviders
+from src.core.config.llm_config import LLMModelConfigs
+from src.core.config.settings import settings
 from src.domain.entities.state import ThinkingState
 from src.domain.schemas.graph import VerificationSchema
 from src.utils import parse_response
@@ -24,8 +25,16 @@ from src.utils.logger_conf import logger
 class VerificationAgent(BaseAgent):
     """Agent responsible for verifying information from relevant documents."""
 
-    def __init__(self, provider: SupportedLLMProviders = "nxchat"):
-        super().__init__(provider)
+    def __init__(self):
+        super().__init__(
+            provider="nxchat",
+            config=LLMModelConfigs(
+                model="nxchat-internal",
+                base_url=settings.ntqai_base_url,
+                api_key=settings.ntqai_api_key,
+                temperature=0.0,
+            ),
+        )
         logger.info("Verification Agent initialized successfully.")
 
     async def ainvoke(self, state: ThinkingState) -> dict[str, Any]:

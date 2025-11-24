@@ -5,6 +5,8 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 
 from src.agents.basic.base import BaseAgent
 from src.agents.tools.server.mcp_retrieve_tools import think
+from src.core.config.llm_config import LLMModelConfigs
+from src.core.config.settings import settings
 from src.domain.schemas.chat import CitationIndexes
 from src.utils import format_context_for_response, parse_response
 from src.utils.decorators import singleton
@@ -108,7 +110,15 @@ class CitationAgent(BaseAgent):
     """Agent responsible for extracting citations from retrieved documents."""
 
     def __init__(self):
-        super().__init__()
+        super().__init__(
+            provider="nxchat",
+            config=LLMModelConfigs(
+                model="nxchat-internal",
+                base_url=settings.ntqai_base_url,
+                api_key=settings.ntqai_api_key,
+                temperature=0.0,
+            ),
+        )
         logger.info("Citation Agent initialized successfully.")
 
     async def ainvoke(self, query: str, reference: list[Document]) -> CitationIndexes:
@@ -135,6 +145,7 @@ class CitationAgent(BaseAgent):
                 parse_fn=parse_citation_response,
                 retry_prompt='Please provide your final answer as a JSON object with the exact format: {"indexes": [1, 2, 3]}',
             )
+            logger.info(f"Citation response: {response}")
             return CitationIndexes(indexes=response["indexes"])
 
         except Exception as e:
