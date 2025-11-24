@@ -17,6 +17,7 @@ from src.core.exceptions.document_exceptions import (
     DocumentProcessingError,
     DuplicateDocumentError,
 )
+from src.core.exceptions.knowledgebase_exceptions import KnowledgeBaseNotFoundError
 from src.database import document_repository, knowledge_base_repository, qa_repository
 from src.database.models.document import Document
 from src.domain.schemas.document import (
@@ -52,10 +53,17 @@ class DocumentService:
     async def _verify_knowledge_base_exists(self, knowledge_base_id: uuid.UUID) -> None:
         """Verify that a knowledge base exists."""
         try:
-            await self.kb_repository.get(knowledge_base_id)
+            kb = await self.kb_repository.get(knowledge_base_id)
+            if kb is None:
+                raise KnowledgeBaseNotFoundError(
+                    f"Knowledge Base with ID {knowledge_base_id} not found"
+                )
+
         except Exception as e:
-            logger.error(f"Error verifying knowledge base: {str(e)}")
-            raise e
+            logger.exception(f"Error verifying knowledge base: {str(e)}")
+            raise KnowledgeBaseNotFoundError(
+                f"Error verifying knowledge base: {str(e)}"
+            )
 
     async def _get_file_info(self, file: UploadFile) -> tuple[str, str]:
         """Extract file information without saving to disk."""
