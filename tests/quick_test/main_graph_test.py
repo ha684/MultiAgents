@@ -120,7 +120,7 @@ async def main():
     orchestrator = MainGraph()
 
     human_message_1 = HumanMessage(
-        content="",
+        content="Hãy phân tích tác động của lạm phát toàn cầu đến tăng trưởng kinh tế Việt Nam trong ba năm gần đây. Đưa ra các số liệu, nguyên nhân chính, ảnh hưởng đến từng ngành quan trọng, và đề xuất giải pháp ứng phó từ góc độ chính sách vĩ mô.",
         additional_kwargs={"message_metadata": context_metadata},
     )
 

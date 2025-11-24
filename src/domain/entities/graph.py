@@ -185,4 +185,3 @@ class SubgraphProfile:
     executor: any = None
 
     tags: list[str] = field(default_factory=list)
-    confidence_threshold: float = 0.7
