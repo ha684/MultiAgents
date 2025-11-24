@@ -23,7 +23,7 @@ class ImageLoader(BaseLoader):
     async def _load_text(self) -> list[Document]:
         """Load a text file."""
         try:
-            content = await self.agent.extract(self.image_path)
+            content = await self.agent.ainvoke(self.image_path)
             full_text = textwrap.dedent(
                 f"""\
                 This is an image. The content extracted from the image is: <|IMAGE|>{content}</|IMAGE|>."

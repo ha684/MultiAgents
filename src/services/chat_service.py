@@ -196,7 +196,7 @@ class ChatService:
     ) -> RetrievalContext:
         """Retrieves relevant documents based on the query and knowledge base ID."""
         embed_top = 50
-        rerank_top = 20
+        rerank_top = 15
         original_query = conversation[-1].content
         kb_id = metadata.get("kb_id")
         contextualized_query = original_query
@@ -459,7 +459,7 @@ class ChatService:
                 conversation, web_search_config, metadata
             )
             with tracer.start_as_current_span("ResponseAgent.generate_response"):
-                response = await response_agent.ainvoke(
+                response = await response_agent.ainvoke_deprecated(
                     contexts=retrieval_context.cited_chunks,
                     history=conversation,
                 )

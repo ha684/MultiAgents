@@ -56,7 +56,7 @@ class SummaryAgent(BaseAgent):
             return response.content
 
         except Exception as e:
-            logger.error(f"Error generating conversation summary: {e}")
+            logger.exception(f"Error generating conversation summary: {repr(e)}")
             return "Previous conversation context available but could not be fully summarized due to processing error."
 
     def append_summary_to_user_message(

@@ -600,7 +600,7 @@ class ExcelLoader(BaseLoader):
         if isinstance(data, list):
             documents = []
             for sheet_info in data:
-                content = self.agent.extract(sheet_info["presigned_url"])
+                content = self.agent.ainvoke(sheet_info["presigned_url"])
                 documents.append(
                     Document(
                         page_content=f"##{sheet_info['sheet_name']} content:\n{content}",

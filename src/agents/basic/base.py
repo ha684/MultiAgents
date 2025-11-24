@@ -38,7 +38,9 @@ class BaseAgent(ABC):
             prompt = ChatPromptTemplate.from_messages(list(messages))
             return await (prompt | self.llm.with_retry()).ainvoke({})
         except Exception as e:
-            logger.error(f"{error_context}: Error in LLM call: {e}", exc_info=True)
+            logger.error(
+                f"{error_context}: Error in LLM call: {repr(e)}", exc_info=True
+            )
             return AIMessage(content="")
 
     async def iterative_llm_call_text(

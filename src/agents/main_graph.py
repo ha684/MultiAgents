@@ -322,7 +322,6 @@ class MainGraph(GraphAgentBase[MainGraphState]):
                     total_retrieved=len(cited_documents),
                     total_cited=len(cited_documents),
                     cited_chunks=cited_documents,
-                    search_method="agentic",
                 ),
             )
             return message

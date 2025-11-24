@@ -88,7 +88,7 @@ class Settings(BaseSettings):
     frontend_url: str = "http://localhost:3000"
 
     # Rate Limiting
-    rate_limit_requests: int = 100
+    rate_limit_requests: int = 200
     rate_limit_window_minutes: int = 1
     login_rate_limit_requests: int = 5
     login_rate_limit_window_minutes: int = 15

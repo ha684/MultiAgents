@@ -6,31 +6,66 @@ from langchain_core.prompts import PromptTemplate
 from src.core.config.llm_config import SupportedLLMProviders
 from src.llm.factory import get_llm
 
-QAC_PROMPT_TEMPLATE = """Your task is to create exactly one question and one answer based on the provided input.
+QAC_PROMPT_TEMPLATE = """You are a question-answer pair generator. Your task is to create ONE self-contained, specific question and its answer from the given input.
 
-<GUIDELINES>:
-1. The question must be clear, concise, and accurately reflect the content of the input.
-2. The answer must be precise, detailed, and relevant to the question without adding information beyond the input.
-3. If the input lacks sufficient information to create a meaningful question and answer, return a question and answer suitable for the remaining content.
-4. The languague of the question and answer should only be English.
-5. Return exactly one question and one answer only.
-</GUIDELINES>
+<CRITICAL_RULES>:
+1. Questions MUST be self-contained and specific
+   - Include necessary context IN the question itself
+   - DO NOT use phrases like: "the provided", "the document", "the text", "above", "following"
+   - DO NOT use vague references: "What is mentioned?", "What is described?", "What is the value?"
+   - DO NOT refer to visual elements: "the table", "the chart", "the figure"
 
-<EXAMPLE>:
+2. Questions MUST be answerable without seeing the original document
+   - Bad: "What is the main task described in the provided guidelines?"
+   - Good: "What is the main task for data preprocessing in machine learning pipelines?"
+   - Bad: "What is the numerical value provided?"
+   - Good: "What is the accuracy score of the ResNet-50 model on ImageNet dataset?"
+
+3. Include specific entities, numbers, or concepts from the input
+   - Use proper nouns, technical terms, dates, locations
+   - Make the question specific enough to stand alone
+
+4. The answer must be accurate and directly from the input
+   - Do not add information beyond what's provided
+   - Keep the answer concise but complete
+
+5. Language: English only
+
+6. If the input is too vague or lacks substance, skip it by returning empty question and answer
+
+</CRITICAL_RULES>
+
+<GOOD_EXAMPLES>:
 Input: "Renewable energy provides an environmentally friendly alternative to fossil fuels."
-Output: {{"question": "What are the advantages of renewable energy?", "answer": "Renewable energy provides an environmentally friendly alternative to fossil fuels."}}
-</EXAMPLE>
+Output: {{"question": "What environmental benefit does renewable energy provide compared to fossil fuels?", "answer": "Renewable energy provides an environmentally friendly alternative to fossil fuels."}}
+
+Input: "The ResNet-50 model achieved 76.5% accuracy on the ImageNet dataset."
+Output: {{"question": "What accuracy did the ResNet-50 model achieve on the ImageNet dataset?", "answer": "The ResNet-50 model achieved 76.5% accuracy on the ImageNet dataset."}}
+
+Input: "In 2023, Tesla delivered 1.8 million electric vehicles worldwide."
+Output: {{"question": "How many electric vehicles did Tesla deliver worldwide in 2023?", "answer": "Tesla delivered 1.8 million electric vehicles worldwide in 2023."}}
+</GOOD_EXAMPLES>
+
+<BAD_EXAMPLES>:
+❌ "What is the main point discussed?" (too vague)
+❌ "What does the document mention about climate?" (refers to "the document")
+❌ "What is shown in the table?" (refers to visual element)
+❌ "What is the value?" (no context)
+❌ "What is described in the text above?" (refers to "above")
+</BAD_EXAMPLES>
 
 ### Input:
 {input}
 
-### Output:
-The output must be in exact proper valid JSON format, with no extra spaces or line breaks, with special characters properly escaped, following this structure:
-{{"question": "Generated question", "answer": "Generated answer: but with \"quotes\""}}
+### Task:
+Generate ONE question-answer pair that follows all the rules above. If the input is too vague or insufficient, return empty strings for both question and answer.
 
-## Remember:
-JSON only allows certain characters to be escaped, such as double quotes, backslashes, and control characters. Ensure that your output adheres to this format strictly.
-DO NOT escape characters that do not require escaping in JSON, such as underscores or spaces. The output must be a valid JSON object with the keys "question" and "answer"."""
+### Output:
+Return ONLY valid JSON with no markdown formatting, following this exact structure:
+{{"question": "Your specific, self-contained question here", "answer": "Your accurate answer here"}}
+
+Remember: The question must make sense on its own without any external context or document reference.
+"""
 
 
 class QACAgent:

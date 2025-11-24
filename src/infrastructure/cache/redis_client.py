@@ -3,13 +3,13 @@ import hashlib
 import json
 import time
 from datetime import datetime
-from json import loads
 from typing import Any
 from zoneinfo import ZoneInfo
 
 import redis.asyncio as aioredis
 from langchain_core.caches import RETURN_VAL_TYPE, BaseCache
 from langchain_core.load.dump import dumps
+from langchain_core.load.load import loads
 from redis.commands.json.path import Path as JSONPath
 
 from src.utils.logger_conf import logger
@@ -78,7 +78,7 @@ class Redis(BaseCache):
         prefix = "llm_cache"
         result = await self.get_obj(prefix, prompt, llm_string)
         if result:
-            return [loads(json.dumps(result))]
+            return [loads(result)]
         return None
 
     async def alookup(self, prompt: str, llm_string: str) -> RETURN_VAL_TYPE | None:

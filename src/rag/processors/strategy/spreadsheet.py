@@ -386,7 +386,7 @@ class SpreadsheetStrategy(BaseStrategy):
         """
         return ExcelLoader(file_path)
 
-    def chunk(self, file_path: str, document: DBDocument) -> list[Document]:
+    def chunk(self, file_path: str, document: DBDocument) -> tuple[list[Document], str]:
         """
         Process a file using Langchain's document loaders.
 
@@ -433,7 +433,7 @@ class SpreadsheetStrategy(BaseStrategy):
             docs = (
                 chunker.chunk_and_merge_documents(document_spliter) + unsplit_documents
             )
-
+            full_text = "\n\n".join([doc.page_content for doc in docs])
             if not docs:
                 raise ValueError("The document has no readable content.")
 
@@ -454,7 +454,7 @@ class SpreadsheetStrategy(BaseStrategy):
                     doc.metadata["source"] = file_path
                 doc.metadata["strategy"] = "spreadsheet"
 
-            return docs
+            return docs, full_text
 
         except Exception as e:
             logger.exception(f"Error processing file {file_path}: {str(e)}")
