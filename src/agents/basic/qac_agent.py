@@ -1,116 +1,214 @@
 # src/agents/basic/qac_agent.py
 
-from langchain_core.output_parsers import JsonOutputParser
-from langchain_core.prompts import PromptTemplate
+import json
 
-from src.core.config.llm_config import SupportedLLMProviders
-from src.llm.factory import get_llm
+from langchain_core.messages import HumanMessage, SystemMessage
 
-QAC_PROMPT_TEMPLATE = """You are a question-answer pair generator. Your task is to create ONE self-contained, specific question and its answer from the given input.
+from src.agents.basic.base import BaseAgent
+from src.core.config.llm_config import LLMModelConfigs, SupportedLLMProviders
+from src.utils.decorators import singleton
+from src.utils.logger_conf import logger
 
-<CRITICAL_RULES>:
-1. Questions MUST be self-contained and specific
-   - Include necessary context IN the question itself
-   - DO NOT use phrases like: "the provided", "the document", "the text", "above", "following"
-   - DO NOT use vague references: "What is mentioned?", "What is described?", "What is the value?"
-   - DO NOT refer to visual elements: "the table", "the chart", "the figure"
+QAC_SYSTEM_PROMPT = """You are an expert question-answer pair generator for knowledge management systems. Your task is to analyze document content and generate high-quality, self-contained question-answer pairs.
 
-2. Questions MUST be answerable without seeing the original document
+**CRITICAL REQUIREMENTS:**
+
+1. **Self-Contained Questions**
+   - Questions MUST include all necessary context within themselves
+   - DO NOT use references like: "the document", "the text", "above", "following", "mentioned", "described", "provided"
+   - DO NOT refer to visual elements: "the table", "the chart", "the figure", "the image"
+   - Each question should make complete sense without seeing the original document
+
+2. **Specificity & Clarity**
+   - Include specific entities: proper nouns, technical terms, dates, numbers, locations
    - Bad: "What is the main task described in the provided guidelines?"
    - Good: "What is the main task for data preprocessing in machine learning pipelines?"
-   - Bad: "What is the numerical value provided?"
+   - Bad: "What is the numerical value?"
    - Good: "What is the accuracy score of the ResNet-50 model on ImageNet dataset?"
 
-3. Include specific entities, numbers, or concepts from the input
-   - Use proper nouns, technical terms, dates, locations
-   - Make the question specific enough to stand alone
-
-4. The answer must be accurate and directly from the input
+3. **Accuracy**
+   - Answers must be directly supported by the content
    - Do not add information beyond what's provided
-   - Keep the answer concise but complete
+   - Keep answers concise but complete
+   - Preserve important details, numbers, and context
 
-5. Language: English only
+4. **Quality Control**
+   - Skip trivial or obvious questions
+   - Avoid repetitive questions on the same topic
+   - Focus on key facts, concepts, and insights
+   - Generate diverse questions covering different aspects of the content
 
-6. If the input is too vague or lacks substance, skip it by returning empty question and answer
+5. **Format**
+   - Language: English only
+   - Output: Valid JSON array of question-answer pairs
+   - Each pair: {"question": "...", "answer": "..."}
 
-</CRITICAL_RULES>
+**GOOD EXAMPLES:**
 
-<GOOD_EXAMPLES>:
-Input: "Renewable energy provides an environmentally friendly alternative to fossil fuels."
-Output: {{"question": "What environmental benefit does renewable energy provide compared to fossil fuels?", "answer": "Renewable energy provides an environmentally friendly alternative to fossil fuels."}}
+Content: "The ResNet-50 model achieved 76.5% accuracy on the ImageNet dataset in 2015, significantly outperforming previous architectures."
 
-Input: "The ResNet-50 model achieved 76.5% accuracy on the ImageNet dataset."
-Output: {{"question": "What accuracy did the ResNet-50 model achieve on the ImageNet dataset?", "answer": "The ResNet-50 model achieved 76.5% accuracy on the ImageNet dataset."}}
+Good Q/A Pairs:
+1. {"question": "What accuracy did the ResNet-50 model achieve on the ImageNet dataset?", "answer": "The ResNet-50 model achieved 76.5% accuracy on the ImageNet dataset."}
+2. {"question": "When did ResNet-50 achieve 76.5% accuracy on ImageNet?", "answer": "ResNet-50 achieved this accuracy in 2015."}
+3. {"question": "How did ResNet-50 perform compared to previous architectures on ImageNet?", "answer": "ResNet-50 significantly outperformed previous architectures on ImageNet."}
 
-Input: "In 2023, Tesla delivered 1.8 million electric vehicles worldwide."
-Output: {{"question": "How many electric vehicles did Tesla deliver worldwide in 2023?", "answer": "Tesla delivered 1.8 million electric vehicles worldwide in 2023."}}
-</GOOD_EXAMPLES>
-
-<BAD_EXAMPLES>:
-❌ "What is the main point discussed?" (too vague)
-❌ "What does the document mention about climate?" (refers to "the document")
+**BAD EXAMPLES:**
+❌ "What is mentioned about accuracy?" (vague, has reference)
+❌ "What does the document say about ResNet?" (refers to "document")
 ❌ "What is shown in the table?" (refers to visual element)
 ❌ "What is the value?" (no context)
-❌ "What is described in the text above?" (refers to "above")
-</BAD_EXAMPLES>
 
-### Input:
-{input}
+**TASK:**
+Analyze the provided document content and generate 5-10 high-quality question-answer pairs that follow all the rules above. Focus on the most important and useful information."""
 
-### Task:
-Generate ONE question-answer pair that follows all the rules above. If the input is too vague or insufficient, return empty strings for both question and answer.
+QAC_USER_PROMPT_TEMPLATE = """Analyze the following document content and generate question-answer pairs:
 
-### Output:
-Return ONLY valid JSON with no markdown formatting, following this exact structure:
-{{"question": "Your specific, self-contained question here", "answer": "Your accurate answer here"}}
+<DOCUMENT_CONTENT>
+{content}
+</DOCUMENT_CONTENT>
 
-Remember: The question must make sense on its own without any external context or document reference.
-"""
+Generate 5-10 self-contained question-answer pairs covering the key information, facts, and concepts from this content.
+
+Return ONLY a valid JSON array (no markdown, no code blocks):
+[
+  {{"question": "...", "answer": "..."}},
+  {{"question": "...", "answer": "..."}}
+]"""
 
 
-class QACAgent:
-    def __init__(self, provider: SupportedLLMProviders = "nxchat"):
-        self.llm = get_llm(provider)
+@singleton
+class QACAgent(BaseAgent):
+    """Agent responsible for generating question-answer pairs from document content."""
 
-    async def generate_qa(self, contexts: list[str]) -> list[tuple[str, str]]:
+    def __init__(
+        self,
+        provider: SupportedLLMProviders = "nxchat",
+        config: LLMModelConfigs | None = None,
+    ):
+        super().__init__(provider, config)
+        logger.info("QAC Agent initialized successfully.")
+
+    def _truncate_text(self, text: str, max_tokens: int = 5000) -> str:
         """
-        Generate question-answer pairs based on the provided contexts.
+        Truncate text to approximately max_tokens using tiktoken tokenizer.
 
         Args:
-            contexts (List[str]): List of contexts to generate QA pairs from.
+            text: Full text to truncate
+            max_tokens: Maximum number of tokens to keep (default: 5000)
 
         Returns:
-            List[Tuple[str, str]]: List of (question, answer) tuples.
+            Truncated text
         """
         try:
-            prompt = PromptTemplate(
-                template=QAC_PROMPT_TEMPLATE, input_variables=["input"]
+            tokens = self.tokenizer.encode(text)
+            if len(tokens) <= max_tokens:
+                return text
+
+            truncated_tokens = tokens[:max_tokens]
+            truncated_text = self.tokenizer.decode(truncated_tokens)
+            logger.info(
+                f"Truncated text from {len(tokens)} to {len(truncated_tokens)} tokens"
+            )
+            return truncated_text
+
+        except Exception as e:
+            logger.warning(
+                f"Error truncating text: {repr(e)}. Using character-based truncation."
+            )
+            max_chars = max_tokens * 4
+            return text[:max_chars]
+
+    def _parse_qa_response(self, response_text: str) -> list[dict[str, str]]:
+        """
+        Parse LLM response into list of Q/A pairs.
+
+        Args:
+            response_text: Raw response from LLM
+
+        Returns:
+            List of {"question": "...", "answer": "..."} dicts
+        """
+        try:
+            response_text = response_text.strip()
+
+            if response_text.startswith("```"):
+                lines = response_text.split("\n")
+                response_text = "\n".join(
+                    line for line in lines if not line.strip().startswith("```")
+                )
+
+            parsed = json.loads(response_text)
+
+            if isinstance(parsed, list):
+                return parsed
+            elif isinstance(parsed, dict):
+                return [parsed]
+            else:
+                logger.warning(f"Unexpected JSON structure: {type(parsed)}")
+                return []
+
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse JSON response: {repr(e)}")
+            return []
+        except Exception as e:
+            logger.error(f"Error parsing Q/A response: {repr(e)}")
+            return []
+
+    async def ainvoke(
+        self, full_text: str, max_tokens: int = 5000
+    ) -> list[tuple[str, str]]:
+        """
+        Generate question-answer pairs from document content.
+
+        Args:
+            full_text: Full document content
+            max_tokens: Maximum tokens to process (default: 5000)
+
+        Returns:
+            List of (question, answer) tuples
+        """
+        try:
+            truncated_text = self._truncate_text(full_text, max_tokens)
+
+            if not truncated_text.strip():
+                logger.warning("Empty text after truncation")
+                return []
+
+            system_message = SystemMessage(content=QAC_SYSTEM_PROMPT)
+            user_message = HumanMessage(
+                content=QAC_USER_PROMPT_TEMPLATE.format(content=truncated_text)
             )
 
-            chain = prompt | self.llm | JsonOutputParser()
+            response = await self.simple_llm_call(
+                [system_message, user_message], error_context="QACAgent"
+            )
 
-            inputs = [{"input": context} for context in contexts]
+            if not response.content:
+                logger.warning("Empty response from LLM")
+                return []
 
-            results = await chain.with_retry().abatch(inputs=inputs)
-
-            if not results:
-                raise ValueError("No content returned from LLM response")
+            qa_list = self._parse_qa_response(response.content)
 
             unique_qa_pairs = []
             seen_questions = set()
 
-            for content in results:
-                question = content.get("question", "").strip()
-                answer = content.get("answer", "").strip()
+            for qa_dict in qa_list:
+                question = qa_dict.get("question", "").strip()
+                answer = qa_dict.get("answer", "").strip()
 
                 if not question or not answer:
                     continue
 
-                if question not in seen_questions:
-                    unique_qa_pairs.append((question, answer))
-                    seen_questions.add(question)
+                if len(question) < 10 or len(answer) < 5:
+                    continue
 
+                if question.lower() not in seen_questions:
+                    unique_qa_pairs.append((question, answer))
+                    seen_questions.add(question.lower())
+
+            logger.info(f"Generated {len(unique_qa_pairs)} unique Q/A pairs")
             return unique_qa_pairs
 
         except Exception as e:
-            raise RuntimeError(f"Error generating QA: {str(e)}")
+            logger.exception(f"Error generating Q/A pairs: {repr(e)}")
+            return []

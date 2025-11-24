@@ -8,12 +8,12 @@ from src.utils.logger_conf import logger
 
 
 async def generate_qa_pairs_async(
-    document_id: UUID, kb_id: UUID, contexts: list[str]
+    document_id: UUID, kb_id: UUID, full_text: str
 ) -> None:
     """
     Generate QA pairs asynchronously.
     """
-    if not contexts:
+    if not full_text:
         logger.warning("No contexts provided for QA generation.")
         return
 
@@ -27,7 +27,7 @@ async def generate_qa_pairs_async(
 
     await qa_repository.delete_qa_by_doc_id(document_id)
 
-    qa_pairs = await qac_agent.generate_qa(contexts)
+    qa_pairs = await qac_agent.ainvoke(full_text)
     if not qa_pairs:
         raise ValueError(f"No QA pairs generated for document {document_id}")
 

@@ -558,7 +558,7 @@ def seed_base_subgraphs():
     Call this on application startup.
     """
     SubgraphRegistry.register(RAG_SEARCH_PROFILE)
-    SubgraphRegistry.register(WEB_SEARCH_PROFILE)
+    # SubgraphRegistry.register(WEB_SEARCH_PROFILE)
     # SubgraphRegistry.register(SQL_QUERY_PROFILE)
 
 

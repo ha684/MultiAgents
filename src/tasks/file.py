@@ -2,7 +2,6 @@
 import asyncio
 import json
 import os
-import random
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -162,7 +161,7 @@ async def _process_document_async(
             )
 
             await _generate_qa_pairs_with_error_handling(
-                document_id, document.knowledge_base_id, chunks
+                document_id, document.knowledge_base_id, full_text
             )
 
             storage_start = time.time()
@@ -259,24 +258,12 @@ async def _prepare_chunks_with_metadata(
 
 
 async def _generate_qa_pairs_with_error_handling(
-    document_id: uuid.UUID, kb_id: uuid.UUID, chunks: list[LangchainDocument]
+    document_id: uuid.UUID, kb_id: uuid.UUID, full_text: str
 ):
     """Generate QA pairs with error handling - don't fail main processing"""
     try:
-        number_of_chunks = min(8, len(chunks))
-        random_chunks = (
-            random.sample(chunks, number_of_chunks)
-            if len(chunks) > number_of_chunks
-            else chunks
-        )
-
-        qa_contexts = [
-            chunk.page_content for chunk in random_chunks if chunk.page_content
-        ]
-
-        if qa_contexts:
-            await generate_qa_pairs_async(document_id, kb_id, qa_contexts)
-            logger.info(f"Generated QA pairs for document {document_id}")
+        await generate_qa_pairs_async(document_id, kb_id, full_text)
+        logger.info(f"Generated QA pairs for document {document_id}")
     except Exception as e:
         logger.error(f"Failed to generate QA pairs for document {document_id}: {e}")
 
