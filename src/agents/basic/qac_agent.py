@@ -59,7 +59,7 @@ Good Q/A Pairs:
 ❌ "What is the value?" (no context)
 
 **TASK:**
-Analyze the provided document content and generate 5-10 high-quality question-answer pairs that follow all the rules above. Focus on the most important and useful information."""
+Analyze the provided document content and generate 1-5 high-quality question-answer pairs that follow all the rules above. Focus on the most important and useful information."""
 
 QAC_USER_PROMPT_TEMPLATE = """Analyze the following document content and generate question-answer pairs:
 
@@ -67,7 +67,7 @@ QAC_USER_PROMPT_TEMPLATE = """Analyze the following document content and generat
 {content}
 </DOCUMENT_CONTENT>
 
-Generate 5-10 self-contained question-answer pairs covering the key information, facts, and concepts from this content.
+Generate 1-5 self-contained question-answer pairs covering the key information, facts, and concepts from this content.
 
 Return ONLY a valid JSON array (no markdown, no code blocks):
 [
@@ -197,9 +197,6 @@ class QACAgent(BaseAgent):
                 answer = qa_dict.get("answer", "").strip()
 
                 if not question or not answer:
-                    continue
-
-                if len(question) < 10 or len(answer) < 5:
                     continue
 
                 if question.lower() not in seen_questions:

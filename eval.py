@@ -11,7 +11,7 @@ from openpyxl.styles import Font, PatternFill
 
 from src.llm.factory import get_llm
 
-API_BASE_URL = "http://localhost:8000"
+API_BASE_URL = "https://smart-kind-macaque.ngrok-free.app"
 API_KEY = "hapt68"
 USER_ID = "hafizh"
 APP_NAME = "evaluation_app"
