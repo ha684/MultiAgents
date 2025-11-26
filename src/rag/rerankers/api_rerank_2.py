@@ -22,7 +22,7 @@ class InferenceAPIReranker2(BaseReranker):
         scored_document: list[Rank] = []
         for idx in range(0, len(documents), limit):
             batch = documents[idx : idx + limit]
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     url=self.api_url,
                     headers=self._headers,
@@ -32,6 +32,7 @@ class InferenceAPIReranker2(BaseReranker):
                         "return_documents": True,
                         "model": settings.rerank_model,
                     },
+                    timeout=60.0,
                 )
                 response.raise_for_status()
                 data = response.json().get("results", [])

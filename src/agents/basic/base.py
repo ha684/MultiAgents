@@ -108,7 +108,7 @@ class BaseAgent(ABC):
             messages.append(response)
 
             if response.content:
-                parsed = parse_fn(str(response.content))
+                parsed = parse_fn(response.content)
                 if parsed:
                     return parsed
 

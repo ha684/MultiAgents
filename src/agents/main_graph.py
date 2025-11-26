@@ -46,7 +46,7 @@ class MainGraph(GraphAgentBase[MainGraphState]):
 
     def __init__(self):
         """Initialize main graph, normal graph, and thinking graph."""
-        super().__init__()
+        super().__init__(provider="openai")
         self.conv_service = ConversationService()
         self.graph_name = "MainGraph"
         self.normal_graph = NormalGraph()

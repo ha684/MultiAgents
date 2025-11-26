@@ -80,12 +80,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         Special handling for Iteration 1:
         - Force next_action to "reason_only" on first iteration
         - This ensures initial context gathering before tool execution
-
-        Similar to ChatGPT's phase titles like:
-        - "Looking up renewable energy reports"
-        - "Analyzing cloud platform tradeoffs"
-        - "Structuring renewable energy adoption essay"
-
         Returns: phase_title, next_action
         """
         iteration = state.get("iteration_count", 0)

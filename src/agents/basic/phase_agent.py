@@ -131,24 +131,16 @@ class PhaseAgent(BaseAgent):
         return phase_result
 
 
-def parse_phase_result(content: str) -> dict[str, Any] | None:
+def parse_phase_result(content: str) -> dict[str, Any] | str:
     """Parse phase result from content"""
+    if isinstance(content, dict):
+        return content
     try:
         parsed = parse_response(content)
         if parsed is None:
-            return None
-
-        if "phase_title" not in parsed or "next_action" not in parsed:
-            logger.error("Missing required fields: phase_title or next_action")
-            return None
-
-        if parsed["next_action"] not in ["reason_only", "use_tool"]:
-            logger.error(
-                f"Invalid next_action: {parsed['next_action']}, must be 'reason_only' or 'use_tool'"
-            )
-            return None
+            return content
 
         return parsed
     except Exception as e:
         logger.error(f"Error parsing phase result: {e}")
-        return None
+        return content

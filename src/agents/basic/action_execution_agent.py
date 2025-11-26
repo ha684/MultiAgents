@@ -99,7 +99,6 @@ class ActionExecutionAgent(BaseAgent):
                 extras=state.get("subgraph_policy", {}).get("extras"),
             )
             subgraph_definitions = SubgraphRegistry.generate_routing_prompt(active_map)
-
             context_parts = [
                 f"Phase: {phase_title}",
                 subgraph_definitions,

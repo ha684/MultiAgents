@@ -89,68 +89,88 @@ class SubgraphRegistry:
         """Generate detailed routing instructions."""
         sections = []
 
-        sections.append("# AVAILABLE SUBGRAPHS\n")
+        sections.append("AVAILABLE SUBGRAPHS (Tools for Information Retrieval)")
         sections.append(
-            "Route user queries to the most appropriate subgraph based on their intent and needs.\n"
+            "\nYou must select ONE subgraph from this list. "
+            "Use the exact name shown in [ROUTE NAME].\n"
         )
 
         sorted_profiles = sorted(
             profiles.values(), key=lambda p: p.primary_behavior.priority, reverse=True
         )
 
-        for profile in sorted_profiles:
-            sections.append(f"\n## {profile.display_name}")
-            sections.append(f"**Route Name:** `{profile.name}`\n")
+        for i, profile in enumerate(sorted_profiles, 1):
+            sections.append(f"[{i}] {profile.display_name}")
+            sections.append(f"[ROUTE NAME]: {profile.name}")
+            sections.append("")
 
             behavior = profile.primary_behavior
-            sections.append("**Core Capability:**")
-            sections.append(f"{behavior.action.capability}\n")
 
-            sections.append("**When to Route Here:**")
-            sections.append(f"{behavior.condition.trigger}")
+            sections.append("CAPABILITY:")
+            sections.append(f"   {behavior.action.capability}")
+            sections.append("")
+
+            sections.append("WHEN TO USE THIS TOOL:")
+            sections.append(f"   {behavior.condition.trigger}")
+            sections.append("")
 
             if behavior.condition.signals:
-                sections.append(
-                    f"\n**Signal Phrases:** {', '.join(behavior.condition.signals[:5])}"
+                sections.append("SIGNAL KEYWORDS:")
+                signals_str = ", ".join(
+                    f'"{s}"' for s in behavior.condition.signals[:8]
                 )
+                sections.append(f"   {signals_str}")
+                if len(behavior.condition.signals) > 8:
+                    sections.append(
+                        f"   ...and {len(behavior.condition.signals) - 8} more"
+                    )
+                sections.append("")
+
+            sections.append("ROUTING INSTRUCTION:")
+            sections.append(f"   {behavior.action.router_instruction}")
+            sections.append("")
 
             if behavior.condition.exclude_when:
-                sections.append(
-                    f"\n**Do NOT route here if:** {' | '.join(behavior.condition.exclude_when)}"
-                )
-
-            sections.append("\n**Routing Guidance:**")
-            sections.append(f"{behavior.action.router_instruction}")
-
-            if profile.journeys:
-                sections.append("\n**Typical User Flows:**")
-                for journey in profile.journeys:
-                    sections.append(f"- {journey.name}: {journey.description}")
+                sections.append("DO NOT USE IF:")
+                for exclude in behavior.condition.exclude_when:
+                    sections.append(f"   • {exclude}")
+                sections.append("")
 
             if profile.canonical_examples:
-                sections.append("\n**Example Queries:**")
+                sections.append("EXAMPLE QUERIES:")
                 for ex in profile.canonical_examples[:3]:
-                    sections.append(f'  • "{ex["query"]}" → {ex["rationale"]}')
+                    sections.append(f'   ✓ "{ex["query"]}"')
+                    sections.append(f"     → {ex['rationale']}")
+                sections.append("")
 
-            sections.append("\n" + "-" * 60)
+        sections.append("\n")
+        sections.append("SELECTION RULES")
+        sections.append("1. You MUST choose exactly ONE subgraph from the list above")
+        sections.append("2. Use the exact [ROUTE NAME] value")
+        sections.append("3. Match user intent to the tool's CAPABILITY and WHEN TO USE")
+        sections.append("4. Check SIGNAL KEYWORDS for quick pattern matching")
+        sections.append("5. Avoid tools with matching DO NOT USE conditions")
 
         return "\n".join(sections)
 
     @classmethod
     def _generate_compact_prompt(cls, profiles: dict[str, SubgraphProfile]) -> str:
         """Generate compact routing instructions for low-latency routing."""
-        tools = []
+        lines = ["AVAILABLE TOOLS:\n"]
+
         for name, profile in profiles.items():
             behavior = profile.primary_behavior
-            tool_desc = f"{behavior.action.capability}\n"
-            tool_desc += f"WHEN: {behavior.condition.trigger}\n"
-
+            lines.append(f"• {name}:")
+            lines.append(f"  - {behavior.action.capability}")
+            lines.append(f"  - When: {behavior.condition.trigger}")
             if behavior.condition.signals:
-                tool_desc += f"SIGNALS: {', '.join(behavior.condition.signals[:5])}"
+                lines.append(
+                    f"  - Keywords: {', '.join(behavior.condition.signals[:5])}"
+                )
+            lines.append("")
 
-            tools.append({"name": name, "description": tool_desc})
-
-        return tools
+        lines.append("\nYou MUST select one tool name from the list above.")
+        return "\n".join(lines)
 
     @classmethod
     def get_subgraph_executor(
@@ -275,13 +295,6 @@ RAG_SEARCH_PROFILE = create_simple_subgraph(
         "This includes: company policies, HR procedures, product documentation, "
         "internal tools/systems guides, and proprietary processes. "
         "\n\n"
-        "DO NOT route here for:\n"
-        "- External/public information (use web_search)\n"
-        "- Database metrics/queries (use sql_query)\n"
-        "- Current events or news (use web_search)\n"
-        "\n"
-        "When routing, ensure the query is clear and specific. "
-        "If user asks vaguely like 'tell me about X', clarify what aspect they need."
     ),
     examples=[
         ("What is our refund policy?", "Direct policy question"),
