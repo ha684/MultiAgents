@@ -693,7 +693,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         """
         workflow = StateGraph(ThinkingState)
 
-        # Add nodes
         workflow.add_node("phase_planning", self.phase_planning_node)
         workflow.add_node("action_execution", self.action_execution_node)
         workflow.add_node("execute_subgraph", self.execute_subgraph_node)
@@ -703,13 +702,10 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         workflow.add_node("continue_iteration", self.continue_iteration_node)
         workflow.add_node("synthesize_response", self.synthesize_response_node)
 
-        # Entry point: Start with phase planning
         workflow.set_entry_point("phase_planning")
 
-        # Phase planning → Action execution
         workflow.add_edge("phase_planning", "action_execution")
 
-        # Action execution → Route based on action type
         workflow.add_conditional_edges(
             "action_execution",
             self.decide_action_route,
@@ -719,14 +715,11 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             },
         )
 
-        # Tool execution path
         workflow.add_edge("execute_subgraph", "extract_learnings")
         workflow.add_edge("extract_learnings", "evaluate_sufficiency")
 
-        # Pure reasoning path
         workflow.add_edge("pure_reasoning", "evaluate_sufficiency")
 
-        # Evaluate → Continue or Synthesize
         workflow.add_conditional_edges(
             "evaluate_sufficiency",
             self.decide_continue_or_synthesize,
@@ -736,7 +729,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             },
         )
 
-        # Continue → Back to phase planning
         workflow.add_edge("continue_iteration", "phase_planning")
 
         # Finish point

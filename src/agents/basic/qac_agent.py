@@ -1,5 +1,3 @@
-# src/agents/basic/qac_agent.py
-
 import json
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -9,67 +7,100 @@ from src.core.config.llm_config import LLMModelConfigs, SupportedLLMProviders
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
-QAC_SYSTEM_PROMPT = """You are an expert question-answer pair generator for knowledge management systems. Your task is to analyze document content and generate high-quality, self-contained question-answer pairs.
+QAC_SYSTEM_PROMPT = """You are an expert at creating high-quality question-answer pairs for evaluating Retrieval-Augmented Generation (RAG) systems using RAGAS metrics.
 
-**CRITICAL REQUIREMENTS:**
+**OBJECTIVE:**
+Generate 3-7 diverse, self-contained question-answer pairs that test different aspects of RAG performance: factual recall, reasoning, specificity, and comprehension.
 
-1. **Self-Contained Questions**
-   - Questions MUST include all necessary context within themselves
-   - DO NOT use references like: "the document", "the text", "above", "following", "mentioned", "described", "provided"
-   - DO NOT refer to visual elements: "the table", "the chart", "the figure", "the image"
-   - Each question should make complete sense without seeing the original document
+**CRITICAL RULES FOR QUESTIONS:**
 
-2. **Specificity & Clarity**
-   - Include specific entities: proper nouns, technical terms, dates, numbers, locations
-   - Bad: "What is the main task described in the provided guidelines?"
-   - Good: "What is the main task for data preprocessing in machine learning pipelines?"
-   - Bad: "What is the numerical value?"
-   - Good: "What is the accuracy score of the ResNet-50 model on ImageNet dataset?"
+1. **Complete Self-Containment (MANDATORY)**
+   - NEVER use: "the document", "the text", "above", "below", "mentioned", "described", "provided", "shown", "following", "preceding"
+   - NEVER refer to: "the table", "the chart", "the figure", "the image", "the diagram", "the list"
+   - Questions must be answerable without any reference to the source document
+   - Include ALL necessary context: names, terms, domains, timeframes, quantities
 
-3. **Accuracy**
-   - Answers must be directly supported by the content
-   - Do not add information beyond what's provided
-   - Keep answers concise but complete
-   - Preserve important details, numbers, and context
+2. **High Specificity**
+   - Always include: specific entities (proper nouns), technical terms, numerical values, dates, locations
+   - Be precise about what you're asking
+   
+   ❌ BAD: "What is the main advantage?"
+   ✅ GOOD: "What is the main advantage of using ResNet's residual connections in deep neural networks?"
+   
+   ❌ BAD: "What are the key findings?"
+   ✅ GOOD: "What accuracy improvements did BERT achieve over ELMo on the GLUE benchmark?"
 
-4. **Quality Control**
-   - Skip trivial or obvious questions
-   - Avoid repetitive questions on the same topic
-   - Focus on key facts, concepts, and insights
-   - Generate diverse questions covering different aspects of the content
+3. **Question Diversity**
+   Generate different types to test RAG capabilities:
+   - **Factual**: Direct fact retrieval (numbers, dates, definitions)
+   - **Conceptual**: Understanding of concepts, processes, relationships
+   - **Comparative**: Comparing methods, approaches, results
+   - **Analytical**: Why/how questions requiring reasoning
+   - **Specific Detail**: Granular technical details
 
-5. **Format**
-   - Language: English only
-   - Output: Valid JSON array of question-answer pairs
-   - Each pair: {"question": "...", "answer": "..."}
+4. **Answer Quality**
+   - Answers must be directly extractable from the content
+   - Be precise and complete, including numbers, units, and qualifiers
+   - Include relevant context that makes the answer meaningful
+   - Length: 1-4 sentences (concise but comprehensive)
 
-**GOOD EXAMPLES:**
+5. **Quality Filters**
+   - Skip vague, generic, or trivial questions
+   - Avoid yes/no questions unless they're meaningful
+   - No redundant questions on the same fact
+   - Focus on information that matters for understanding the content
 
-Content: "The ResNet-50 model achieved 76.5% accuracy on the ImageNet dataset in 2015, significantly outperforming previous architectures."
+**EXAMPLES OF EXCELLENT Q/A PAIRS:**
 
-Good Q/A Pairs:
-1. {"question": "What accuracy did the ResNet-50 model achieve on the ImageNet dataset?", "answer": "The ResNet-50 model achieved 76.5% accuracy on the ImageNet dataset."}
-2. {"question": "When did ResNet-50 achieve 76.5% accuracy on ImageNet?", "answer": "ResNet-50 achieved this accuracy in 2015."}
-3. {"question": "How did ResNet-50 perform compared to previous architectures on ImageNet?", "answer": "ResNet-50 significantly outperformed previous architectures on ImageNet."}
+Content: "BERT (Bidirectional Encoder Representations from Transformers) achieved state-of-the-art results on 11 NLP tasks in 2018. On the SQuAD v1.1 question answering dataset, BERT-Large obtained an F1 score of 93.2, surpassing the previous best system by 1.5 points. The model uses masked language modeling to pre-train on unlabeled text."
 
-**BAD EXAMPLES:**
-❌ "What is mentioned about accuracy?" (vague, has reference)
-❌ "What does the document say about ResNet?" (refers to "document")
-❌ "What is shown in the table?" (refers to visual element)
-❌ "What is the value?" (no context)
+✅ EXCELLENT Pairs:
+1. {
+   "question": "What F1 score did BERT-Large achieve on the SQuAD v1.1 question answering dataset?",
+   "answer": "BERT-Large achieved an F1 score of 93.2 on the SQuAD v1.1 dataset."
+}
+
+2. {
+   "question": "By how many points did BERT-Large surpass the previous best system on SQuAD v1.1?",
+   "answer": "BERT-Large surpassed the previous best system by 1.5 points on SQuAD v1.1."
+}
+
+3. {
+   "question": "What pre-training technique does BERT use to learn from unlabeled text?",
+   "answer": "BERT uses masked language modeling to pre-train on unlabeled text."
+}
+
+4. {
+   "question": "How many NLP tasks did BERT achieve state-of-the-art results on in 2018?",
+   "answer": "BERT achieved state-of-the-art results on 11 NLP tasks in 2018."
+}
+
+❌ BAD Examples (DO NOT GENERATE):
+- "What does the document say about BERT?" (refers to "document")
+- "What is the model mentioned?" (vague, no context)
+- "What are the results?" (too generic)
+- "What is shown in the table above?" (refers to visual element)
+- "What is the main finding?" (lacks specificity)
+
+**OUTPUT FORMAT:**
+Return ONLY a valid JSON array (no markdown, no explanations, no code blocks):
+[
+  {"question": "...", "answer": "..."},
+  {"question": "...", "answer": "..."}
+]
 
 **TASK:**
-Analyze the provided document content and generate 1-5 high-quality question-answer pairs that follow all the rules above. Focus on the most important and useful information."""
+Analyze the document content carefully and generate 1-5 high-quality, diverse question-answer pairs that would be ideal for evaluating a RAG system's retrieval and generation capabilities."""
 
-QAC_USER_PROMPT_TEMPLATE = """Analyze the following document content and generate question-answer pairs:
+QAC_USER_PROMPT_TEMPLATE = """Document content to analyze:
 
-<DOCUMENT_CONTENT>
+<CONTENT>
 {content}
-</DOCUMENT_CONTENT>
+</CONTENT>
 
-Generate 1-5 self-contained question-answer pairs covering the key information, facts, and concepts from this content.
+Generate 1-5 self-contained, specific question-answer pairs covering the most important information. Ensure diversity in question types (factual, conceptual, comparative, analytical).
 
-Return ONLY a valid JSON array (no markdown, no code blocks):
+Return ONLY valid JSON (no markdown, no code blocks):
 [
   {{"question": "...", "answer": "..."}},
   {{"question": "...", "answer": "..."}}
@@ -78,7 +109,7 @@ Return ONLY a valid JSON array (no markdown, no code blocks):
 
 @singleton
 class QACAgent(BaseAgent):
-    """Agent responsible for generating question-answer pairs from document content."""
+    """Agent for generating question-answer pairs for RAG evaluation using RAGAS."""
 
     def __init__(
         self,
@@ -86,7 +117,7 @@ class QACAgent(BaseAgent):
         config: LLMModelConfigs | None = None,
     ):
         super().__init__(provider, config)
-        logger.info("QAC Agent initialized successfully.")
+        logger.info("QAC Agent initialized for RAG evaluation.")
 
     def _truncate_text(self, text: str, max_tokens: int = 5000) -> str:
         """
@@ -120,7 +151,7 @@ class QACAgent(BaseAgent):
 
     def _parse_qa_response(self, response_text: str) -> list[dict[str, str]]:
         """
-        Parse LLM response into list of Q/A pairs.
+        Parse LLM response into list of Q/A pairs with validation.
 
         Args:
             response_text: Raw response from LLM
@@ -140,32 +171,43 @@ class QACAgent(BaseAgent):
             parsed = json.loads(response_text)
 
             if isinstance(parsed, list):
-                return parsed
+                qa_list = parsed
             elif isinstance(parsed, dict):
-                return [parsed]
+                qa_list = [parsed]
             else:
                 logger.warning(f"Unexpected JSON structure: {type(parsed)}")
                 return []
 
+            validated_pairs = []
+            for qa in qa_list:
+                q = qa.get("question", "").strip()
+                a = qa.get("answer", "").strip()
+
+                if q and a and len(q) > 10 and len(a) > 10:
+                    validated_pairs.append({"question": q, "answer": a})
+
+            return validated_pairs
+
         except json.JSONDecodeError as e:
             logger.warning(f"Failed to parse JSON response: {repr(e)}")
+            logger.debug(f"Response text: {response_text[:200]}...")
             return []
         except Exception as e:
             logger.error(f"Error parsing Q/A response: {repr(e)}")
             return []
 
     async def ainvoke(
-        self, full_text: str, max_tokens: int = 5000
+        self, full_text: str, max_tokens: int = 8192
     ) -> list[tuple[str, str]]:
         """
-        Generate question-answer pairs from document content.
+        Generate question-answer pairs for RAG evaluation.
 
         Args:
             full_text: Full document content
             max_tokens: Maximum tokens to process (default: 5000)
 
         Returns:
-            List of (question, answer) tuples
+            List of (question, answer) tuples suitable for RAGAS evaluation
         """
         try:
             truncated_text = self._truncate_text(full_text, max_tokens)
@@ -199,11 +241,15 @@ class QACAgent(BaseAgent):
                 if not question or not answer:
                     continue
 
-                if question.lower() not in seen_questions:
-                    unique_qa_pairs.append((question, answer))
-                    seen_questions.add(question.lower())
+                q_normalized = question.lower().strip("?!. ")
 
-            logger.info(f"Generated {len(unique_qa_pairs)} unique Q/A pairs")
+                if q_normalized not in seen_questions:
+                    unique_qa_pairs.append((question, answer))
+                    seen_questions.add(q_normalized)
+
+            logger.info(
+                f"Generated {len(unique_qa_pairs)} unique Q/A pairs for RAG evaluation"
+            )
             return unique_qa_pairs
 
         except Exception as e:
