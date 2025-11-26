@@ -134,7 +134,7 @@ class NaiveStrategy(BaseStrategy):
 
         return documents
 
-    def chunk(
+    async def chunk(
         self, file_path: str, document: DBDocument
     ) -> tuple[list[LangchainDocument], str]:
         """

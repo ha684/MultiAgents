@@ -41,7 +41,7 @@ class ImageStrategy(BaseStrategy):
 
     async def chunk(
         self, file_path: str, document: DBDocument
-    ) -> list[LangchainDocument]:
+    ) -> tuple[list[LangchainDocument], str]:
         """
         Process a file using Langchain's LangchainDocument loaders.
 
@@ -65,6 +65,7 @@ class ImageStrategy(BaseStrategy):
                 f"Loading documents from {file_path} using {loader.__class__.__name__}"
             )
             docs = await loader.lazy_load()
+            full_text = "\n\n".join([doc.page_content for doc in docs])
             for doc in docs:
                 if "source" not in doc.metadata:
                     doc.metadata["source"] = file_path
@@ -73,7 +74,7 @@ class ImageStrategy(BaseStrategy):
                 f"Loaded {len(docs)} documents from {file_path} using {loader.__class__.__name__}"
             )
 
-            return docs
+            return docs, full_text
 
         except Exception as e:
             logger.exception(f"Error processing file {file_path}: {str(e)}")

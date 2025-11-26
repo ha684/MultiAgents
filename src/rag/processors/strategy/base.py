@@ -50,7 +50,9 @@ class BaseStrategy(ABC):
         return file_extension in self._supported_file_types
 
     @abstractmethod
-    def chunk(self, file_path: str, document: DBDocument) -> list[Document]:
+    async def chunk(
+        self, file_path: str, document: DBDocument
+    ) -> tuple[list[Document], str]:
         """
         Process a document file according to the strategy.
 
@@ -59,6 +61,6 @@ class BaseStrategy(ABC):
             document: Document data (optional)
 
         Returns:
-            A list of Langchain Document objects
+            A tuple containing a list of Langchain Document objects and the full text of the document
         """
         raise NotImplementedError("Subclasses should implement this method.")

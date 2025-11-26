@@ -386,7 +386,9 @@ class SpreadsheetStrategy(BaseStrategy):
         """
         return ExcelLoader(file_path)
 
-    def chunk(self, file_path: str, document: DBDocument) -> tuple[list[Document], str]:
+    async def chunk(
+        self, file_path: str, document: DBDocument
+    ) -> tuple[list[Document], str]:
         """
         Process a file using Langchain's document loaders.
 

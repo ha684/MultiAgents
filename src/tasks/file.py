@@ -145,7 +145,7 @@ async def _process_document_async(
 
             strategy = get_strategy(document=document, config={})
             chunk_start = time.time()
-            chunks, full_text = strategy.chunk(
+            chunks, full_text = await strategy.chunk(
                 file_path=str(temp_file_path), document=document
             )
             chunk_time = time.time() - chunk_start
