@@ -7,7 +7,7 @@ import aiohttp
 # Configuration
 API_BASE_URL = "http://localhost:8000"  # Thay bằng URL API của bạn
 API_KEY = "hapt68"
-FOLDER_PATH = r"C:\Users\ha.phan\Downloads\upload"  # Thay bằng đường dẫn folder của bạn
+FOLDER_PATH = r"C:\workspace\data"  # Thay bằng đường dẫn folder của bạn
 
 EXISTING_KB_ID = None
 

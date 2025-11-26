@@ -200,7 +200,6 @@ class ChatService:
         original_query = conversation[-1].content
         kb_id = metadata.get("kb_id")
         contextualized_query = original_query
-        cited_docs = []
         retrieved_docs = []
         max_tokens = 8192
 
@@ -276,28 +275,28 @@ class ChatService:
             for i, doc in enumerate(retrieved_docs):
                 doc.metadata["original_index"] = i
 
-            if retrieved_docs:
-                with tracer.start_as_current_span("CitationAgent.extract_citations"):
-                    citation_indexes = await citation_agent.ainvoke(
-                        query=contextualized_query,
-                        reference=retrieved_docs,
-                    )
-                if citation_indexes.indexes:
-                    cited_docs = [
-                        retrieved_docs[i - 1]
-                        for i in citation_indexes.indexes
-                        if 0 < i <= len(retrieved_docs)
-                    ]
-                logger.info(
-                    f"Extracted {len(cited_docs)} citations for query: {original_query} in knowledgebase: {kb_id}"
-                )
+            # if retrieved_docs:
+            #     with tracer.start_as_current_span("CitationAgent.extract_citations"):
+            #         citation_indexes = await citation_agent.ainvoke(
+            #             query=contextualized_query,
+            #             reference=retrieved_docs,
+            #         )
+            #     if citation_indexes.indexes:
+            #         cited_docs = [
+            #             retrieved_docs[i - 1]
+            #             for i in citation_indexes.indexes
+            #             if 0 < i <= len(retrieved_docs)
+            #         ]
+            #     logger.info(
+            #         f"Extracted {len(cited_docs)} citations for query: {original_query} in knowledgebase: {kb_id}"
+            #     )
 
             retrieval_context = RetrievalContext(
                 original_query=original_query,
                 contextualized_query=contextualized_query,
                 total_retrieved=len(retrieved_docs),
-                total_cited=len(cited_docs),
-                cited_chunks=cited_docs,
+                total_cited=len(retrieved_docs),
+                cited_chunks=retrieved_docs,
                 search_method=search_method,
             )
 

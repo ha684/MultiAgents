@@ -83,6 +83,8 @@ dependencies = [
     "types-pyyaml>=6.0.12.20250915",
     "bandit>=1.8.6",
     "aiosqlite>=0.21.0",
+    "ragas>=0.3.9",
+    "datasets>=4.4.1",
 ]
 
 [project.optional-dependencies]

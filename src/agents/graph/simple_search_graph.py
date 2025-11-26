@@ -7,7 +7,6 @@ from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from src.agents.basic import citation_agent
 from src.agents.graph.base import GraphAgentBase
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search
 from src.domain.entities.graph import RunConfig
@@ -126,43 +125,32 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
         }
 
     async def filter_citations_node(self, state: SimpleSearchState) -> dict[str, Any]:
-        if state.get("early_terminate"):
-            logger.info("Early terminate is True -> skip citation filtering")
-            cited_docs = []
-            meta = {
-                **state.get("response_metadata", {}),
-                "sources_count": 0,
-                "total_cited": 0,
-                "filter_skipped": True,
-            }
-            return {"cited_documents": cited_docs, "response_metadata": meta}
-
         retrieved_docs = state["cited_documents"]
         if not retrieved_docs:
             logger.warning("No documents to filter")
             return {}
 
-        citation_indexes = await citation_agent.ainvoke(
-            query=state["direction"],
-            reference=retrieved_docs,
-        )
+        # citation_indexes = await citation_agent.ainvoke(
+        #     query=state["direction"],
+        #     reference=retrieved_docs,
+        # )
 
-        cited_docs = []
-        if citation_indexes.indexes:
-            cited_docs = [
-                retrieved_docs[i - 1]
-                for i in citation_indexes.indexes
-                if 0 < i <= len(retrieved_docs)
-            ]
+        # cited_docs = []
+        # if citation_indexes.indexes:
+        #     cited_docs = [
+        #         retrieved_docs[i - 1]
+        #         for i in citation_indexes.indexes
+        #         if 0 < i <= len(retrieved_docs)
+        #     ]
 
-        logger.info(f"Filtered to {len(cited_docs)} cited documents")
+        logger.info(f"Filtered to {len(retrieved_docs)} cited documents")
 
         return {
-            "cited_documents": cited_docs,
+            "cited_documents": retrieved_docs,
             "response_metadata": {
                 **state.get("response_metadata", {}),
-                "sources_count": len(cited_docs),
-                "total_cited": len(cited_docs),
+                "sources_count": len(retrieved_docs),
+                "total_cited": len(retrieved_docs),
             },
         }
 

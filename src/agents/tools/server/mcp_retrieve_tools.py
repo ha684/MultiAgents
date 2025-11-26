@@ -19,7 +19,7 @@ async def rag_search(query: str, context_metadata: dict[str, Any]) -> list[Docum
     if not query:
         raise ValueError("user query is required")
     top_k = 50
-    top_n = 10
+    top_n = 15
     kb_id = context_metadata["kb_id"]
     filters = None
     try:

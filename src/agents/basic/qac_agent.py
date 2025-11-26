@@ -7,109 +7,108 @@ from src.core.config.llm_config import LLMModelConfigs, SupportedLLMProviders
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
-QAC_SYSTEM_PROMPT = """You are an expert at creating high-quality question-answer pairs for evaluating Retrieval-Augmented Generation (RAG) systems using RAGAS metrics.
+QAC_SYSTEM_PROMPT = """You are an expert at creating high-quality question-answer pairs for evaluating RAG (Retrieval-Augmented Generation) systems.
 
-**OBJECTIVE:**
-Generate 3-7 diverse, self-contained question-answer pairs that test different aspects of RAG performance: factual recall, reasoning, specificity, and comprehension.
+**CORE PRINCIPLE:** Quality over quantity. Generate ONLY meaningful Q/A pairs from content with substantial information. If the content is trivial, blank, or lacks meaningful information, return an empty array.
 
-**CRITICAL RULES FOR QUESTIONS:**
+**CONTENT FILTERING (CRITICAL):**
+Skip generation entirely if the content is:
+- Blank, empty, or placeholder text
+- Generic metadata without substance (e.g., "This is a mixed content type")
+- Navigation elements, headers, footers only
+- Repetitive or meaningless information
+- Image descriptions that say "no visible content" or "blank image"
 
-1. **Complete Self-Containment (MANDATORY)**
-   - NEVER use: "the document", "the text", "above", "below", "mentioned", "described", "provided", "shown", "following", "preceding"
-   - NEVER refer to: "the table", "the chart", "the figure", "the image", "the diagram", "the list"
-   - Questions must be answerable without any reference to the source document
-   - Include ALL necessary context: names, terms, domains, timeframes, quantities
+**QUESTION REQUIREMENTS:**
 
-2. **High Specificity**
-   - Always include: specific entities (proper nouns), technical terms, numerical values, dates, locations
-   - Be precise about what you're asking
-   
-   ❌ BAD: "What is the main advantage?"
-   ✅ GOOD: "What is the main advantage of using ResNet's residual connections in deep neural networks?"
-   
-   ❌ BAD: "What are the key findings?"
-   ✅ GOOD: "What accuracy improvements did BERT achieve over ELMo on the GLUE benchmark?"
+1. **Self-Contained & Specific**
+   - NEVER use references: "the document", "the text", "the image", "above", "mentioned", "described", "shown"
+   - Include ALL context: specific names, terms, technologies, numbers, dates, domains
+   - Question must be answerable independently without seeing the source
 
-3. **Question Diversity**
-   Generate different types to test RAG capabilities:
-   - **Factual**: Direct fact retrieval (numbers, dates, definitions)
-   - **Conceptual**: Understanding of concepts, processes, relationships
-   - **Comparative**: Comparing methods, approaches, results
-   - **Analytical**: Why/how questions requiring reasoning
-   - **Specific Detail**: Granular technical details
+2. **Meaningful & Testable**
+   - Ask about substantive information: facts, concepts, processes, relationships, technical details
+   - Avoid meta-questions about the document itself
+   - Should test real knowledge retrieval and understanding
 
-4. **Answer Quality**
-   - Answers must be directly extractable from the content
-   - Be precise and complete, including numbers, units, and qualifiers
-   - Include relevant context that makes the answer meaningful
-   - Length: 1-4 sentences (concise but comprehensive)
+**ANSWER REQUIREMENTS (CRITICAL FOR EVALUATION):**
 
-5. **Quality Filters**
-   - Skip vague, generic, or trivial questions
-   - Avoid yes/no questions unless they're meaningful
-   - No redundant questions on the same fact
-   - Focus on information that matters for understanding the content
+1. **Comprehensive & Complete**
+   - Provide FULL context and supporting details
+   - Include relevant numbers, dates, names, qualifications
+   - Explain WHY and HOW, not just WHAT
+   - Length: 2-5 sentences typically (enough for judge to evaluate accurately)
 
-**EXAMPLES OF EXCELLENT Q/A PAIRS:**
+2. **Self-Sufficient**
+   - Answer should contain enough information that a judge can verify correctness
+   - Include background context that makes the answer meaningful
+   - Don't assume the judge has seen the original content
 
-Content: "BERT (Bidirectional Encoder Representations from Transformers) achieved state-of-the-art results on 11 NLP tasks in 2018. On the SQuAD v1.1 question answering dataset, BERT-Large obtained an F1 score of 93.2, surpassing the previous best system by 1.5 points. The model uses masked language modeling to pre-train on unlabeled text."
+**COMPARISON:**
 
-✅ EXCELLENT Pairs:
-1. {
-   "question": "What F1 score did BERT-Large achieve on the SQuAD v1.1 question answering dataset?",
-   "answer": "BERT-Large achieved an F1 score of 93.2 on the SQuAD v1.1 dataset."
+❌ SHORT, INADEQUATE ANSWER:
+Q: "What accuracy did ResNet-50 achieve on ImageNet?"
+A: "76.5% accuracy."
+→ Judge cannot verify if this is complete or contextualized correctly
+
+✅ FULL, COMPREHENSIVE ANSWER:
+Q: "What accuracy did ResNet-50 achieve on ImageNet in 2015?"
+A: "ResNet-50 achieved 76.5% top-5 accuracy on the ImageNet classification dataset when it was introduced in 2015. This performance significantly outperformed previous state-of-the-art architectures at the time, marking a breakthrough in deep learning by demonstrating that residual connections could enable training of much deeper networks."
+→ Judge has full context to evaluate
+
+**EXAMPLES:**
+
+Content: "Transformer architecture introduced in 'Attention Is All You Need' (2017) uses self-attention mechanisms instead of recurrence. The base model has 65M parameters with 6 encoder and 6 decoder layers. It achieved 28.4 BLEU on WMT English-to-German translation, training in 3.5 days on 8 P100 GPUs."
+
+✅ EXCELLENT PAIR:
+{
+  "question": "What BLEU score did the base Transformer model achieve on WMT English-to-German translation, and how long did training take?",
+  "answer": "The base Transformer model achieved 28.4 BLEU score on the WMT English-to-German translation task. The model was trained for 3.5 days using 8 P100 GPUs. This was introduced in the 'Attention Is All You Need' paper (2017), where the Transformer architecture demonstrated that self-attention mechanisms alone, without recurrence, could achieve state-of-the-art translation performance. The base model contained 65 million parameters with 6 encoder layers and 6 decoder layers."
 }
 
-2. {
-   "question": "By how many points did BERT-Large surpass the previous best system on SQuAD v1.1?",
-   "answer": "BERT-Large surpassed the previous best system by 1.5 points on SQuAD v1.1."
+❌ INADEQUATE PAIR (TOO SHORT):
+{
+  "question": "What is the BLEU score?",
+  "answer": "28.4 BLEU"
 }
 
-3. {
-   "question": "What pre-training technique does BERT use to learn from unlabeled text?",
-   "answer": "BERT uses masked language modeling to pre-train on unlabeled text."
-}
-
-4. {
-   "question": "How many NLP tasks did BERT achieve state-of-the-art results on in 2018?",
-   "answer": "BERT achieved state-of-the-art results on 11 NLP tasks in 2018."
-}
-
-❌ BAD Examples (DO NOT GENERATE):
-- "What does the document say about BERT?" (refers to "document")
-- "What is the model mentioned?" (vague, no context)
-- "What are the results?" (too generic)
-- "What is shown in the table above?" (refers to visual element)
-- "What is the main finding?" (lacks specificity)
+❌ MEANINGLESS CONTENT - RETURN EMPTY:
+Content: "This image appears blank with no visible content. Content type: Mixed."
+→ Return: []
 
 **OUTPUT FORMAT:**
-Return ONLY a valid JSON array (no markdown, no explanations, no code blocks):
-[
-  {"question": "...", "answer": "..."},
-  {"question": "...", "answer": "..."}
-]
+Return ONLY valid JSON array (no markdown, no code blocks, no explanations):
+- If content is meaningful: [{"question": "...", "answer": "..."}, ...]
+- If content lacks substance: []
 
-**TASK:**
-Analyze the document content carefully and generate 1-5 high-quality, diverse question-answer pairs that would be ideal for evaluating a RAG system's retrieval and generation capabilities."""
+Generate 1-3 pairs maximum. Focus on the most important, testable information."""
 
-QAC_USER_PROMPT_TEMPLATE = """Document content to analyze:
+QAC_USER_PROMPT_TEMPLATE = """Analyze this content and decide if it contains substantial, meaningful information worth testing:
 
 <CONTENT>
 {content}
 </CONTENT>
 
-Generate 1-5 self-contained, specific question-answer pairs covering the most important information. Ensure diversity in question types (factual, conceptual, comparative, analytical).
+**INSTRUCTIONS:**
+1. First, assess if this content has meaningful information (not blank, not just metadata, not trivial)
+2. If NO meaningful content → return empty array: []
+3. If YES → generate 1-3 high-quality Q/A pairs with comprehensive answers
 
-Return ONLY valid JSON (no markdown, no code blocks):
+Generate questions that are self-contained and specific. Write answers that are detailed (2-5 sentences) with full context so a judge can accurately evaluate responses.
+
+Return ONLY valid JSON (no markdown, no explanations):
 [
   {{"question": "...", "answer": "..."}},
   {{"question": "...", "answer": "..."}}
-]"""
+]
+
+Or if no meaningful content:
+[]"""
 
 
 @singleton
 class QACAgent(BaseAgent):
-    """Agent for generating question-answer pairs for RAG evaluation using RAGAS."""
+    """Agent for generating high-quality question-answer pairs for RAG evaluation."""
 
     def __init__(
         self,
@@ -117,7 +116,7 @@ class QACAgent(BaseAgent):
         config: LLMModelConfigs | None = None,
     ):
         super().__init__(provider, config)
-        logger.info("QAC Agent initialized for RAG evaluation.")
+        logger.info("QAC Agent initialized for RAG evaluation (quality-focused).")
 
     def _truncate_text(self, text: str, max_tokens: int = 5000) -> str:
         """
@@ -149,9 +148,54 @@ class QACAgent(BaseAgent):
             max_chars = max_tokens * 4
             return text[:max_chars]
 
+    def _validate_qa_quality(self, question: str, answer: str) -> bool:
+        """
+        Validate Q/A pair quality based on length and content.
+
+        Args:
+            question: Question text
+            answer: Answer text
+
+        Returns:
+            True if pair meets quality standards
+        """
+        # Minimum length requirements
+        if len(question) < 20 or len(answer) < 50:
+            return False
+
+        # Check for meta-references (questions about "the document" itself)
+        forbidden_phrases = [
+            "the document",
+            "the text",
+            "the image",
+            "the table",
+            "the content",
+            "mentioned above",
+            "shown above",
+            "described in",
+            "provided in",
+            "this document",
+        ]
+
+        q_lower = question.lower()
+        for phrase in forbidden_phrases:
+            if phrase in q_lower:
+                logger.debug(
+                    f"Question contains forbidden phrase '{phrase}': {question[:50]}..."
+                )
+                return False
+
+        # Answer should be substantial (multiple words, ideally multiple sentences)
+        word_count = len(answer.split())
+        if word_count < 15:  # Answers should be at least 15 words for good evaluation
+            logger.debug(f"Answer too short ({word_count} words): {answer[:50]}...")
+            return False
+
+        return True
+
     def _parse_qa_response(self, response_text: str) -> list[dict[str, str]]:
         """
-        Parse LLM response into list of Q/A pairs with validation.
+        Parse LLM response into list of Q/A pairs with strict validation.
 
         Args:
             response_text: Raw response from LLM
@@ -162,6 +206,7 @@ class QACAgent(BaseAgent):
         try:
             response_text = response_text.strip()
 
+            # Remove markdown code blocks if present
             if response_text.startswith("```"):
                 lines = response_text.split("\n")
                 response_text = "\n".join(
@@ -169,6 +214,11 @@ class QACAgent(BaseAgent):
                 )
 
             parsed = json.loads(response_text)
+
+            # Handle empty array (no meaningful content)
+            if isinstance(parsed, list) and len(parsed) == 0:
+                logger.info("LLM returned empty array - no meaningful content detected")
+                return []
 
             if isinstance(parsed, list):
                 qa_list = parsed
@@ -178,13 +228,24 @@ class QACAgent(BaseAgent):
                 logger.warning(f"Unexpected JSON structure: {type(parsed)}")
                 return []
 
+            # Strict validation for each Q/A pair
             validated_pairs = []
-            for qa in qa_list:
+            for idx, qa in enumerate(qa_list):
                 q = qa.get("question", "").strip()
                 a = qa.get("answer", "").strip()
 
-                if q and a and len(q) > 10 and len(a) > 10:
-                    validated_pairs.append({"question": q, "answer": a})
+                if not q or not a:
+                    logger.debug(f"Pair {idx}: Empty question or answer")
+                    continue
+
+                if not self._validate_qa_quality(q, a):
+                    logger.debug(f"Pair {idx}: Failed quality validation")
+                    continue
+
+                validated_pairs.append({"question": q, "answer": a})
+                logger.debug(
+                    f"Pair {idx}: Validated ✓ (Q: {len(q)} chars, A: {len(a)} chars)"
+                )
 
             return validated_pairs
 
@@ -197,23 +258,28 @@ class QACAgent(BaseAgent):
             return []
 
     async def ainvoke(
-        self, full_text: str, max_tokens: int = 8192
+        self, full_text: str, max_tokens: int = 5000
     ) -> list[tuple[str, str]]:
         """
-        Generate question-answer pairs for RAG evaluation.
+        Generate high-quality question-answer pairs for RAG evaluation.
+        Returns empty list if content is not substantial enough.
 
         Args:
             full_text: Full document content
             max_tokens: Maximum tokens to process (default: 5000)
 
         Returns:
-            List of (question, answer) tuples suitable for RAGAS evaluation
+            List of (question, answer) tuples. Empty list if no meaningful content.
         """
         try:
             truncated_text = self._truncate_text(full_text, max_tokens)
 
             if not truncated_text.strip():
                 logger.warning("Empty text after truncation")
+                return []
+
+            if len(truncated_text) < 50:
+                logger.info("Text too short to generate meaningful Q/A pairs")
                 return []
 
             system_message = SystemMessage(content=QAC_SYSTEM_PROMPT)
@@ -231,24 +297,30 @@ class QACAgent(BaseAgent):
 
             qa_list = self._parse_qa_response(response.content)
 
+            if not qa_list:
+                logger.info(
+                    "No Q/A pairs generated - content may lack substance or failed validation"
+                )
+                return []
+
             unique_qa_pairs = []
             seen_questions = set()
 
             for qa_dict in qa_list:
-                question = qa_dict.get("question", "").strip()
-                answer = qa_dict.get("answer", "").strip()
-
-                if not question or not answer:
-                    continue
+                question = qa_dict["question"]
+                answer = qa_dict["answer"]
 
                 q_normalized = question.lower().strip("?!. ")
 
                 if q_normalized not in seen_questions:
                     unique_qa_pairs.append((question, answer))
                     seen_questions.add(q_normalized)
+                    logger.info(
+                        f"✓ Generated Q/A pair: Q={len(question)} chars, A={len(answer)} chars"
+                    )
 
             logger.info(
-                f"Generated {len(unique_qa_pairs)} unique Q/A pairs for RAG evaluation"
+                f"Successfully generated {len(unique_qa_pairs)} high-quality Q/A pairs"
             )
             return unique_qa_pairs
 
