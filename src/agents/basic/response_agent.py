@@ -564,10 +564,12 @@ class ResponseAgent(BaseAgent):
 
         detected_language = detect_language(latest_user_query)
         language_instruction = f"""**CRITICAL LANGUAGE REQUIREMENT** - Response language: {detected_language} ONLY - NO mixed tokens from other languages"""
-        current_time = f"The current time is {get_current_time()}"
+        current_time = f"The current time is {get_current_time()}, remember this."
         if mode == ResponseMode.STANDARD and not accumulated_context:
             system_message = SystemMessage(
-                content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE + language_instruction
+                content=current_time
+                + NO_CONTEXT_GENERATION_PROMPT_TEMPLATE
+                + language_instruction
             )
             return [system_message] + history
 
@@ -590,7 +592,7 @@ class ResponseAgent(BaseAgent):
             context_label = "Retrieved context"
 
         messages: list[BaseMessage] = [
-            SystemMessage(content=system_content + language_instruction + current_time)
+            SystemMessage(content=current_time + system_content + language_instruction)
         ]
 
         if accumulated_context:

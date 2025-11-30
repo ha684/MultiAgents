@@ -16,7 +16,7 @@ from src.core.config.llm_config import LLMModelConfigs
 from src.core.config.settings import settings
 from src.domain.entities.state import ThinkingState
 from src.domain.schemas.graph import VerificationSchema
-from src.utils import parse_response
+from src.utils import get_current_time, parse_response
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
@@ -43,7 +43,7 @@ class VerificationAgent(BaseAgent):
         """
         max_iterations = 3
         conversation_text = get_buffer_string(state["conversation"])
-
+        current_time = f"The current time is {get_current_time()}, remember this."
         internal_reasoning = state.get("_internal_reasoning", "").strip()
         accumulated_context = state.get("accumulated_context", "").strip()
 
@@ -60,7 +60,7 @@ class VerificationAgent(BaseAgent):
         )
 
         messages: list[BaseMessage] = [
-            SystemMessage(content=PromptTemplates.VERIFICATION_PROMPT),
+            SystemMessage(content=current_time + PromptTemplates.VERIFICATION_PROMPT),
             AIMessage(content=knowledge_summary),
             HumanMessage(content=f"Conversation:\n{conversation_text}"),
         ]

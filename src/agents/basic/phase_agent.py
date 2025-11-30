@@ -126,7 +126,7 @@ class PhaseAgent(BaseAgent):
         learnings_section = f"Previous Learnings:\n{learnings_text}"
 
         conversation_text = get_buffer_string(state["conversation"])
-        current_time = f"The current time is {get_current_time()}"
+        current_time = f"The current time is {get_current_time()}, remember this."
         previous_phase = state.get("phase_title", "")
         previous_phase_section = (
             f"Previous Phase: {previous_phase}" if previous_phase else ""
@@ -140,12 +140,11 @@ class PhaseAgent(BaseAgent):
             learnings_section,
             history_section,
             missing_section,
-            current_time,
         ]
         context_content = "\n\n".join(filter(None, context_parts))
 
         messages: list[BaseMessage] = [
-            SystemMessage(content=system_prompt),
+            SystemMessage(content=current_time + system_prompt),
             AIMessage(content=context_content),
             HumanMessage(content=f"Conversation:\n{conversation_text}"),
         ]
