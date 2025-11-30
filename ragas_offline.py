@@ -146,7 +146,7 @@ def run_ragas_metrics(results_data, llm):
             embeddings=ragas_embedding,
             run_config=run_config,
             batch_size=BATCH_SIZE,  # Giảm tải
-            raise_exceptions=False,  # False để nếu 1 câu lỗi thì không crash cả chương trình
+            raise_exceptions=True,  # False để nếu 1 câu lỗi thì không crash cả chương trình
         )
 
         results_df = evaluation_result.to_pandas()
