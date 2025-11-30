@@ -16,7 +16,7 @@ from src.agents.basic.base import BaseAgent
 from src.agents.prompts.agent_prompts import PromptTemplates
 from src.domain.entities.graph import ResponseMode
 from src.llm.language_detector import detect_language
-from src.utils import format_context_for_response
+from src.utils import format_context_for_response, get_current_time
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
@@ -564,7 +564,7 @@ class ResponseAgent(BaseAgent):
 
         detected_language = detect_language(latest_user_query)
         language_instruction = f"""**CRITICAL LANGUAGE REQUIREMENT** - Response language: {detected_language} ONLY - NO mixed tokens from other languages"""
-
+        current_time = f"The current time is {get_current_time()}"
         if mode == ResponseMode.STANDARD and not accumulated_context:
             system_message = SystemMessage(
                 content=NO_CONTEXT_GENERATION_PROMPT_TEMPLATE + language_instruction
@@ -590,7 +590,7 @@ class ResponseAgent(BaseAgent):
             context_label = "Retrieved context"
 
         messages: list[BaseMessage] = [
-            SystemMessage(content=system_content + language_instruction)
+            SystemMessage(content=system_content + language_instruction + current_time)
         ]
 
         if accumulated_context:

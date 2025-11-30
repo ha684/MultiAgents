@@ -571,8 +571,8 @@ def seed_base_subgraphs():
     Call this on application startup.
     """
     SubgraphRegistry.register(RAG_SEARCH_PROFILE)
-    # SubgraphRegistry.register(WEB_SEARCH_PROFILE)
-    # SubgraphRegistry.register(SQL_QUERY_PROFILE)
+    SubgraphRegistry.register(WEB_SEARCH_PROFILE)
+    SubgraphRegistry.register(SQL_QUERY_PROFILE)
 
 
 def enable_sql(db_url: str, allow_tables: list[str]):

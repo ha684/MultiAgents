@@ -14,7 +14,7 @@ from src.agents.prompts.agent_prompts import PromptTemplates
 from src.agents.shared.registry import SubgraphRegistry
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.core.config.llm_config import SupportedLLMProviders
-from src.utils import parse_response
+from src.utils import get_current_time, parse_response
 from src.utils.logger_conf import logger
 
 
@@ -81,7 +81,7 @@ class ActionExecutionAgent(BaseAgent):
         learnings_section = f"Previous Learnings:\n{learnings_text}"
 
         conversation_text = get_buffer_string(state["conversation"])
-
+        current_time = f"The current time is {get_current_time()}"
         if action == "reason_only":
             system_prompt = PromptTemplates.REASONING_EXECUTION_PROMPT
             context_parts = [
@@ -89,6 +89,7 @@ class ActionExecutionAgent(BaseAgent):
                 knowledge_section,
                 learnings_section,
                 missing_section,
+                current_time,
             ]
         else:  # use_tool
             system_prompt = PromptTemplates.TOOL_EXECUTION_PROMPT
@@ -106,6 +107,7 @@ class ActionExecutionAgent(BaseAgent):
                 learnings_section,
                 history_section,
                 missing_section,
+                current_time,
             ]
 
         context_content = "\n\n".join(filter(None, context_parts))

@@ -14,7 +14,7 @@ from src.agents.prompts.agent_prompts import PromptTemplates
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.core.config.llm_config import LLMModelConfigs
 from src.core.config.settings import settings
-from src.utils import parse_response
+from src.utils import get_current_time, parse_response
 from src.utils.logger_conf import logger
 
 
@@ -69,6 +69,25 @@ class PhaseAgent(BaseAgent):
         knowledge = state.get("accumulated_context", "")
         execution_history = state.get("execution_history", [])
         missing_aspects = state.get("_missing_aspects", "")
+        iteration_count = state.get("iteration_count", 0)
+
+        # Build iteration progress section
+        iteration_section = f"## Current Progress: Iteration {iteration_count}"
+
+        # Add last execution result info for context
+        last_execution_info = ""
+        if execution_history:
+            last_ex = execution_history[-1]
+            last_status = last_ex.get("status", "unknown")
+            last_subgraph = last_ex.get("subgraph", "unknown")
+            if last_status == "success":
+                result_count = last_ex.get("result_count", 0)
+                last_execution_info = (
+                    f"Last Action: {last_subgraph} - SUCCESS ({result_count} results)"
+                )
+            else:
+                error = last_ex.get("error", "Unknown error")
+                last_execution_info = f"Last Action: {last_subgraph} - FAILED ({error})"
 
         history_section = ""
         if execution_history:
@@ -85,6 +104,9 @@ class PhaseAgent(BaseAgent):
                 ]
             )
             history_section = f"Execution History:\n{history_text}"
+
+        if isinstance(missing_aspects, list):
+            missing_aspects = "\n".join(missing_aspects)
 
         missing_section = (
             f"Missing Aspects:\n{missing_aspects}" if missing_aspects else ""
@@ -104,12 +126,21 @@ class PhaseAgent(BaseAgent):
         learnings_section = f"Previous Learnings:\n{learnings_text}"
 
         conversation_text = get_buffer_string(state["conversation"])
+        current_time = f"The current time is {get_current_time()}"
+        previous_phase = state.get("phase_title", "")
+        previous_phase_section = (
+            f"Previous Phase: {previous_phase}" if previous_phase else ""
+        )
 
         context_parts = [
+            iteration_section,
+            previous_phase_section,
+            last_execution_info,
             knowledge_section,
             learnings_section,
             history_section,
             missing_section,
+            current_time,
         ]
         context_content = "\n\n".join(filter(None, context_parts))
 

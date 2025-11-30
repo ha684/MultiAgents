@@ -69,7 +69,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
     def default_run_config(self) -> RunConfig:
         return RunConfig(
             graph_name=self.graph_name,
-            recursion_limit=100,
+            recursion_limit=200,
             timeout_seconds=300,
         )
 
@@ -89,16 +89,9 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
             phase_title = resp.get("phase_title", "Research step")
             next_action = resp.get("next_action", "use_tool")
 
-            if iteration == 0:
-                next_action = "reason_only"
-                phase_title = f"Initial Analysis: {phase_title}"
-                logger.info(
-                    f"[Phase Planning] Iter={iteration}, Phase='{phase_title}', Action=FORCED_REASON_ONLY"
-                )
-            else:
-                logger.info(
-                    f"[Phase Planning] Iter={iteration}, Phase='{phase_title}', Action={next_action}"
-                )
+            logger.info(
+                f"[Phase Planning] Iter={iteration}, Phase='{phase_title}', Action={next_action}"
+            )
 
             return {
                 "phase_title": phase_title,
@@ -345,13 +338,21 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         """
         Pure reasoning path - no tool execution.
         Collect reasoning in separate field, will be added to context at synthesis.
+
+        Important: Reset execution failure flags when taking this path.
+        This prevents the evaluate_sufficiency_node from incorrectly detecting
+        a failure from the previous tool execution iteration.
         """
         reasoning = state.get("reasoning", "")
         iteration = state.get("iteration_count", 0)
 
         if not reasoning:
             logger.warning("[Reasoning] No reasoning content provided")
-            return {}
+            # Still reset failure flags even if no reasoning
+            return {
+                "_execution_failed": False,
+                "_failure_reason": "",
+            }
 
         logger.info(f"[Reasoning] Iter {iteration}: {reasoning[:150]}...")
 
@@ -368,6 +369,9 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         return {
             "learnings": learnings,
             "_internal_reasoning": internal_reasoning,
+            # Reset execution failure flags - this iteration used reasoning, not tools
+            "_execution_failed": False,
+            "_failure_reason": "",
         }
 
     async def extract_learnings_node(self, state: ThinkingState) -> dict[str, Any]:
@@ -568,8 +572,12 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
     async def continue_iteration_node(self, state: ThinkingState) -> dict[str, Any]:
         """
-        Increment iteration counter BEFORE next iteration.
-        This ensures iteration starts from 1, not 0.
+        Increment iteration counter and prepare for next iteration.
+
+        Note: We don't clear _missing_aspects here because:
+        - It contains valuable feedback from verification_agent
+        - Phase_agent needs this to decide the next action
+        - It will be updated fresh in the next evaluate_sufficiency call
         """
         current = state.get("iteration_count", 0)
         next_iteration = current + 1
@@ -580,6 +588,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
         return {
             "iteration_count": next_iteration,
+            "_temp_documents": [],  # Clear temp documents for next iteration
         }
 
     async def synthesize_response_node(self, state: ThinkingState) -> dict[str, Any]:

@@ -33,6 +33,7 @@ class SimpleSearchState(TypedDict):
     seen_doc_ids: set[str]
     duplicate_skip_ratio: float
     early_terminate: bool
+    web_search_active: bool
 
 
 class ThinkingState(TypedDict, total=False):

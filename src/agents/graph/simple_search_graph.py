@@ -42,18 +42,16 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
         Retrieve documents from RAG or web search based on config
         """
         conversation: list[BaseMessage] = state["conversation"]
+        web_search_active = state.get("web_search_active", False)
         last_human_message = conversation[-1]
         kb_id = last_human_message.additional_kwargs["message_metadata"]["kb_id"]
-        web_search_config: dict[str, str] = last_human_message.additional_kwargs[
-            "message_metadata"
-        ]["web_search_config"]
 
         direction = state["direction"]
         context_metadata = {
             "kb_id": kb_id,
         }
 
-        if web_search_config.get("active"):
+        if web_search_active:
             logger.info("Using web search")
             retrieved_docs = await web_search(
                 query=direction,

@@ -7,7 +7,6 @@ from langchain_core.runnables.schema import StreamEvent
 
 from src.agents.main_graph import MainGraph
 from src.core.config.settings import settings
-from src.domain.schemas.chat import SearchProvider, WebSearchConfig
 from src.utils.logger_conf import logger
 
 
@@ -108,14 +107,11 @@ class MainGraphStreamer:
 async def main():
     """Test orchestrator with streaming"""
 
-    context_metadata = {"kb_id": "068dbcfd-ff20-7647-8000-c7cfdf551423"}
-    web_search_config = WebSearchConfig(
-        provider=SearchProvider.TAVILY,
-        active=False,
-        api_key=settings.tavily_api_key,
-    )
-    context_metadata.update({"web_search_config": web_search_config.model_dump()})
-
+    context_metadata = {
+        "kb_id": "06926eb4-af94-7355-8000-765cda3cfeec",
+        "db_url": settings.database_url,
+        "allow_tables": ["conversations", "documents", "knowledge_bases", "users"],
+    }
     logger.info("Initializing OrchestratorGraph...")
     orchestrator = MainGraph()
 

@@ -28,6 +28,7 @@ from src.domain.entities.state import MainGraphState, NormalGraphState, Thinking
 from src.domain.schemas.chat import Message, RetrievalContext, TextPart
 from src.llm.language_detector import detect_language
 from src.services.conversation_service import ConversationService
+from src.utils import get_current_time
 from src.utils.logger_conf import logger
 
 
@@ -46,7 +47,7 @@ class MainGraph(GraphAgentBase[MainGraphState]):
 
     def __init__(self):
         """Initialize main graph, normal graph, and thinking graph."""
-        super().__init__(provider="openai")
+        super().__init__(provider="nxchat")
         self.conv_service = ConversationService()
         self.graph_name = "MainGraph"
         self.normal_graph = NormalGraph()
@@ -85,8 +86,11 @@ class MainGraph(GraphAgentBase[MainGraphState]):
 
         detected_language = detect_language(latest_user_query)
         language_instruction = f"""**CRITICAL LANGUAGE REQUIREMENT** - Response language: {detected_language} ONLY - NO mixed tokens from other languages"""
+        current_time = f"The current time is {get_current_time()}"
         system_prompt = SystemMessage(
-            content=PromptTemplates.DIRECT_RESPONSE_PROMPT + language_instruction
+            content=PromptTemplates.DIRECT_RESPONSE_PROMPT
+            + language_instruction
+            + current_time
         )
 
         messages = [system_prompt] + conversation
@@ -272,7 +276,7 @@ class MainGraph(GraphAgentBase[MainGraphState]):
         block = meta.get("disabled_subgraphs", [])
 
         extras = {}
-        if db_url and allow_tables:
+        if db_url:
             extras["sql_query"] = enable_sql(db_url, allow_tables)
         else:
             block.append("sql_query")

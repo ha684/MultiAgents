@@ -332,6 +332,8 @@ class PromptTemplates:
         - "Structuring renewable energy adoption essay" (reason_only)
         - "Addressing integration challenges" (reason_only)
         - "Evaluating policy framework impacts" (reason_only)
+
+        **Avoid Repetition**: Do not use the exact same title as the previous phase unless absolutely necessary. If continuing the same activity, refine the title to reflect progress (e.g., "Continuing analysis of..." or "Deepening understanding of...").
         </phase_title_guidelines>
 
         <execution_history_guidelines>
