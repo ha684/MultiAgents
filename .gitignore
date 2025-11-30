@@ -185,3 +185,5 @@ coverage.svg
 
 # Local development
 docker-compose.override.yml
+
+ragas_outputs

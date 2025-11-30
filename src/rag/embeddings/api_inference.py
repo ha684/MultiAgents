@@ -149,3 +149,6 @@ class RagasSyncEmbeddings(Embeddings):
         # Ragas gọi hàm này để vector hóa câu hỏi
         result = self.embed_documents([text])
         return result[0] if result else []
+
+    async def embed_text(self, text: str) -> List[float]:
+        return self.embed_query(text)

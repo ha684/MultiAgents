@@ -15,6 +15,8 @@ from ragas.metrics import (
     faithfulness,
 )
 
+from src.core.config.llm_config import LLMModelConfigs
+from src.core.config.settings import settings
 from src.llm.factory import get_llm
 from src.rag.embeddings import ragas_embedding
 
@@ -22,9 +24,14 @@ from src.rag.embeddings import ragas_embedding
 INPUT_FILE = "ragas_evaluation_temp.json"
 OUTPUT_FILE = f"ragas_report_offline_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 LLM_PROVIDER = "nxchat"
-
+LLM_CONFIG = LLMModelConfigs(
+    model="nxchat-internal",
+    api_key=settings.ntqai_api_key,
+    base_url=settings.ntqai_base_url,
+    temperature=0.0,
+)
 # Giảm batch size xuống 1 để tránh DDOS LLM của chính mình gây timeout
-BATCH_SIZE = 1
+BATCH_SIZE = 30
 TIMEOUT_SECONDS = 300  # Tăng timeout lên 5 phút cho mỗi câu
 
 
@@ -137,7 +144,7 @@ def run_ragas_metrics(results_data, llm):
     # 3. Chạy Evaluate với RunConfig
     try:
         # RunConfig giúp quản lý timeout và retries ở mức độ task
-        run_config = RunConfig(timeout=TIMEOUT_SECONDS, max_retries=3, max_wait=60)
+        run_config = RunConfig(timeout=TIMEOUT_SECONDS, max_retries=10, max_wait=120)
 
         evaluation_result = evaluate(
             dataset=dataset,
@@ -208,14 +215,14 @@ def _add_summary(writer, sheet_name, df):
                 worksheet.cell(row=current_row, column=1, value=col)
                 worksheet.cell(row=current_row, column=2, value=round(avg_val, 4))
                 current_row += 1
-    except Exception:
-        pass
+    except Exception as e:
+        raise e
 
 
 def main():
     print("⚙️  Khởi tạo LLM...")
     try:
-        llm = get_llm(provider=LLM_PROVIDER)
+        llm = get_llm(provider=LLM_PROVIDER, config=LLM_CONFIG)
         print(f"✅ LLM: {LLM_PROVIDER}")
     except Exception as e:
         print(f"❌ Lỗi init LLM: {e}")
@@ -240,7 +247,6 @@ def main():
 
 
 if __name__ == "__main__":
-    # Fix cho Windows asyncio loop policy (đôi khi giúp tránh lỗi loop closed)
     import sys
 
     if sys.platform == "win32":
