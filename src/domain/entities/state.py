@@ -87,7 +87,7 @@ class SqlState(TypedDict):
     """State for SQL query operations"""
 
     conversation: list[BaseMessage]
-
+    direction: str
     is_relevant: bool | None
     irrelevance_reason: str | None
     suggested_rephrase: str | None

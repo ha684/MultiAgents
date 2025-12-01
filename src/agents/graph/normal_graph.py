@@ -147,7 +147,7 @@ class NormalGraph(GraphAgentBase[NormalGraphState]):
                 EXECUTORS.get(exec_ref) if isinstance(exec_ref, str) else exec_ref
             )
 
-            if not executor or not callable(executor):
+            if not executor:
                 logger.error(
                     f"[NormalGraph] Executor for '{subgraph_name}' not callable"
                 )

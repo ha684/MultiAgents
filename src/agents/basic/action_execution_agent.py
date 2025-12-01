@@ -6,7 +6,6 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
-    get_buffer_string,
 )
 
 from src.agents.basic.base import BaseAgent
@@ -80,7 +79,6 @@ class ActionExecutionAgent(BaseAgent):
         )
         learnings_section = f"Previous Learnings:\n{learnings_text}"
 
-        conversation_text = get_buffer_string(state["conversation"])
         if action == "reason_only":
             system_prompt = PromptTemplates.REASONING_EXECUTION_PROMPT
             context_parts = [
@@ -99,7 +97,6 @@ class ActionExecutionAgent(BaseAgent):
             )
             subgraph_definitions = SubgraphRegistry.generate_routing_prompt(active_map)
             context_parts = [
-                f"Phase: {phase_title}",
                 subgraph_definitions,
                 knowledge_section,
                 learnings_section,
@@ -112,7 +109,7 @@ class ActionExecutionAgent(BaseAgent):
         messages: list[BaseMessage] = [
             SystemMessage(content=get_current_time() + system_prompt),
             AIMessage(content=context_content),
-            HumanMessage(content=f"Conversation:\n{conversation_text}"),
+            HumanMessage(content=f"Phase Title:\n{phase_title}"),
         ]
 
         if action == "reason_only":

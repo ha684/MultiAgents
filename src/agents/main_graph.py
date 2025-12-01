@@ -52,9 +52,7 @@ class MainGraph(GraphAgentBase[MainGraphState]):
         self.graph_name = "MainGraph"
         self.normal_graph = NormalGraph()
         self.thinking_graph = ThinkingGraph()
-
         self.compiled_graph = self._build_graph()
-        seed_base_subgraphs()
 
     @property
     def graph(self) -> CompiledStateGraph:
@@ -267,6 +265,7 @@ class MainGraph(GraphAgentBase[MainGraphState]):
         self, conversation: list[BaseMessage]
     ) -> AsyncGenerator[StreamEvent]:
         """Run the main graph on the entire conversation (streaming)."""
+        seed_base_subgraphs()
         meta = conversation[-1].additional_kwargs or {}
         conversation_id = meta.get("conversation_id")
         db_url = meta.get("db_url")
@@ -277,7 +276,8 @@ class MainGraph(GraphAgentBase[MainGraphState]):
 
         extras = {}
         if db_url:
-            extras["sql_query"] = enable_sql(db_url, allow_tables)
+            sql_profile = enable_sql(db_url, allow_tables)
+            extras["sql_query"] = sql_profile
         else:
             block.append("sql_query")
 

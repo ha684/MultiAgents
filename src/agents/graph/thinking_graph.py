@@ -429,15 +429,8 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
         Now passes detailed error information from subgraph_error to missing_aspects.
         """
-        accumulated_context = state.get("accumulated_context", "")
-        internal_reasoning = state.get("_internal_reasoning", "")
-
-        total_context = accumulated_context + "\n\n" + internal_reasoning
-        total_length = len(total_context)
-
         iteration = state.get("iteration_count", 0)
         consecutive_failures = state.get("consecutive_failures", 0)
-        execution_failed = state.get("_execution_failed", False)
         failure_reason = state.get("_failure_reason", "Unknown error")
 
         if consecutive_failures >= 3:
@@ -476,25 +469,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
                 "_should_continue": False,
                 "_missing_aspects": "",
                 "_force_stop_reason": "max_iterations",
-            }
-
-        if execution_failed:
-            logger.warning(
-                f"[Evaluate] Execution failed but consecutive_failures={consecutive_failures}. "
-                f"Error: {failure_reason}. Allowing reflection agent to try different approach."
-            )
-            return {
-                "_should_continue": True,
-                "_missing_aspects": f"Previous tool execution failed with: '{failure_reason}'. Try a different search approach or narrower query.",
-            }
-
-        if total_length < self.min_knowledge_threshold:
-            logger.info(
-                f"[Evaluate] Context too short ({total_length} chars, external: {len(accumulated_context)}, reasoning: {len(internal_reasoning)}). CONTINUE."
-            )
-            return {
-                "_should_continue": True,
-                "_missing_aspects": "Insufficient knowledge gathered.",
             }
 
         try:

@@ -44,7 +44,7 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
         conversation: list[BaseMessage] = state["conversation"]
         web_search_active = state.get("web_search_active", False)
         last_human_message = conversation[-1]
-        kb_id = last_human_message.additional_kwargs["message_metadata"]["kb_id"]
+        kb_id = last_human_message.additional_kwargs["kb_id"]
 
         direction = state["direction"]
         context_metadata = {

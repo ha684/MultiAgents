@@ -14,7 +14,6 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
-    get_buffer_string,
 )
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -70,18 +69,17 @@ class SqlGraph(GraphAgentBase[SqlState]):
         Fast check before expensive analysis/generation steps.
         """
         max_iterations = 3
-
         schema_info = await self.sql_database.get_table_info()
         available_tables = ", ".join(self.sql_database.get_usable_table_names())
 
-        conversation_text = get_buffer_string(state["conversation"])
+        direction = state["direction"]
 
         messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.RELEVANCE_VALIDATION_SYSTEM_PROMPT),
             AIMessage(
                 content=f"Available tables: {available_tables}\n\nDatabase schema:\n{schema_info}"
             ),
-            HumanMessage(content=f"Conversation:\n{conversation_text}"),
+            HumanMessage(content=f"Query:\n{direction}"),
         ]
 
         response = await self.iterative_llm_call_structured(
@@ -158,47 +156,54 @@ class SqlGraph(GraphAgentBase[SqlState]):
         max_iterations = 5
 
         schema_info = await self.sql_database.get_table_info()
-
-        conversation_text = get_buffer_string(state["conversation"])
+        direction = state["direction"]
 
         messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.SQL_ANALYSIS_SYSTEM_PROMPT),
             AIMessage(content=f"Database schema:\n{schema_info}"),
-            HumanMessage(
-                content=(
-                    f"Conversation:\n{conversation_text}",
-                    "Analyze the conversation and determine:",
-                    "1. What data is needed to answer the question",
-                    "2. Whether visualization would be helpful",
-                    "3. The optimal query strategy and chart type",
-                )
-            ),
+            HumanMessage(content=f"Direction:\n{direction}"),
         ]
 
-        response = await self.iterative_llm_call_structured(
-            messages=messages,
-            llm_with_tools=self.thinking_llm,
-            available_tools={"think": think},
-            max_iterations=max_iterations,
-            parse_fn=parse_sql_analysis_response,
-            retry_prompt="Please provide the analysis in correct JSON format.",
-        )
-
-        if not response:
-            logger.error(
-                "[analyze_query] Failed to analyze query after multiple attempts."
+        try:
+            response = await self.iterative_llm_call_structured(
+                messages=messages,
+                llm_with_tools=self.thinking_llm,
+                available_tools={"think": think},
+                max_iterations=max_iterations,
+                parse_fn=parse_sql_analysis_response,
+                retry_prompt="Please provide the analysis in correct JSON format.",
             )
+
+            logger.debug(f"[analyze_query] LLM raw response:\n{response}")
+
+            if not response:
+                logger.error(
+                    "[analyze_query] Failed to analyze query after multiple attempts."
+                )
+                return {
+                    "query_results": [],
+                    "analysis": None,
+                    "response_metadata": {
+                        "route": "sql_query",
+                        "query_successful": False,
+                        "error": "analysis_failed",
+                    },
+                }
+
+            return {"analysis": response}
+        except Exception as e:
+            import traceback
+
+            logger.error("!!! CRASH INSIDE analyze_query_node !!!")
+            logger.error(f"Error type: {type(e)}")
+            logger.error(f"Error message: {e}")
+            traceback.print_exc()
+
             return {
                 "query_results": [],
                 "analysis": None,
-                "response_metadata": {
-                    "route": "sql_query",
-                    "query_successful": False,
-                    "error": "analysis_failed",
-                },
+                "response_metadata": {"route": "sql_query", "error": str(e)},
             }
-
-        return {"analysis": response}
 
     async def generate_sql_queries_node(self, state: SqlState) -> dict[str, Any]:
         """
@@ -224,19 +229,14 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         schema_info = await self.sql_database.get_table_info()
 
-        conversation_text = get_buffer_string(state["conversation"])
+        direction = state["direction"]
 
         messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.SQL_GENERATION_SYSTEM_PROMPT),
             AIMessage(
                 content=f"Database schema:\n{schema_info}\n\nQuery plan:\n{json.dumps(query_plan, indent=2)}"
             ),
-            HumanMessage(
-                content=(
-                    f"Conversation:\n{conversation_text}",
-                    "Generate executable SQL SELECT queries based on the query plan and schema above.",
-                )
-            ),
+            HumanMessage(content=f"Direction:\n{direction}"),
         ]
 
         response = await self.iterative_llm_call_structured(
@@ -412,8 +412,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
                     }
                 )
                 continue
-
-            rows: list[dict[str, Any]] = json.loads(result) or []
+            rows: list[dict[str, Any]] = result or []
             total_rows = len(rows)
             truncated = total_rows > MAX_ROWS_PER_QUERY
             preview_rows = rows[:MAX_ROWS_PER_QUERY]
@@ -510,19 +509,14 @@ class SqlGraph(GraphAgentBase[SqlState]):
             return {"chart_spec": None}
 
         chart_type = state.get("analysis", {}).get("chart_type", "auto")
-        conversation_text = get_buffer_string(state["conversation"])
+        direction = state["direction"]
 
         messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.CHART_GENERATION_SYSTEM_PROMPT),
             AIMessage(
                 content=f"Suggested chart type: {chart_type}\n\nQuery results summary:\n{json.dumps(data_summary, indent=2, default=str)}"
             ),
-            HumanMessage(
-                content=(
-                    f"Conversation:\n{conversation_text}",
-                    "Generate a Vega-Lite chart specification that visualizes the query results to answer the user's question.",
-                )
-            ),
+            HumanMessage(content=f"Direction:\n{direction}"),
         ]
 
         response = await self.iterative_llm_call_structured(
@@ -612,14 +606,14 @@ def parse_sql_analysis_response(content: str) -> SqlAnalysisSchema | None:
             logger.warning(
                 "[Parser] Failed to parse SQL analysis response (null result)."
             )
-            return None
+            return content
         response = SqlAnalysisSchema(**parsed)
         return response.model_dump()
     except Exception as e:
         logger.error(
             f"[Parser] Error parsing SQL analysis response: {e}", exc_info=True
         )
-        return None
+        return content
 
 
 def parse_sql_generation_response(content: str) -> SqlGenerationSchema | None:

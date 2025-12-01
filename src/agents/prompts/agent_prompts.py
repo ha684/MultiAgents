@@ -288,58 +288,175 @@ class PromptTemplates:
         """\
         <role>
         You are a research phase planner. For each iteration, decide:
-        1. **phase_title**: What you're doing THIS step (must be different from previous)
+        1. **phase_title**: What you're doing THIS step (must differ from previous)
         2. **next_action**: "reason_only" (think) or "use_tool" (search)
         </role>
 
-        <core_principle>
-        **Look at what you ACTUALLY need right now** - not a fixed pattern.
+        <critical_instruction>
+        **MULTI-INTENT QUERY HANDLING**
         
-        - Do you have enough info to make progress by thinking? → reason_only
-        - Are you genuinely blocked without specific external data? → use_tool
+        If the original question has MULTIPLE distinct information needs:
+        - Break it down into sequential sub-tasks
+        - Handle ONE sub-task per iteration
+        - Track which sub-tasks are completed
         
-        That's it. No templates, no patterns. Just: what does THIS specific situation need?
-        </core_principle>
+        Example:
+        Query: "Current user count in our system + global AI chatbot growth trends?"
+        
+        Sub-tasks identified:
+        1. [Internal] Get current user count from SQL
+        2. [External] Search global AI chatbot growth data
+        3. [Synthesis] Compare the two findings
+        
+        Iteration 1: Focus on sub-task 1 only
+        Iteration 2: Focus on sub-task 2 only  
+        Iteration 3: Synthesize (reason_only)
+        
+        **ALWAYS check "Current Gap" section** - verification agent feedback OVERRIDES defaults.
+        </critical_instruction>
 
-        <action_selection>
-        **reason_only** - When you can work with current knowledge:
-        - Analyzing, synthesizing, organizing what you have
-        - Planning next steps based on current understanding
-        - Connecting dots, finding patterns, drawing conclusions
-        - Evaluating quality/sufficiency of accumulated info
+        <intent_decomposition_logic>
         
-        **use_tool** - When you're genuinely stuck:
-        - Absolutely need specific facts/data you don't have
-        - Zero information on a critical aspect
-        - Previous searches failed? Consider reasoning with what you have instead
-        </action_selection>
+        ## Step 1: Analyze Original Query (Iteration 0 only)
+        
+        Does query contain:
+        - Multiple questions joined by "and", "also", "plus"?
+        - Both internal data ("our system") AND external data ("global trends")?
+        - Multiple entities/aspects to research?
+        
+        If YES → Identify distinct sub-tasks
+        If NO → Treat as single-intent query
+        
+        ## Step 2: Match Sub-task to Data Source
+        
+        For each sub-task, classify:
+        
+        **Internal data** (requires SQL/internal tools):
+        - "our system", "our users", "company data"
+        - "current count", "how many we have"
+        - Specific metrics from our database
+        
+        **External data** (requires web_search):
+        - "global trends", "industry average", "market data"
+        - "compared to others", "benchmarks"
+        - Public information, research, statistics
+        
+        **Synthesis** (requires reason_only):
+        - "compare", "how does this relate to"
+        - "analyze patterns", "evaluate impact"
+        - After gathering multiple data sources
+        
+        ## Step 3: Determine Current Focus
+        
+        Check what's been completed:
+        - Review execution_history: which sub-tasks succeeded?
+        - Review accumulated_context: what data do we already have?
+        - Check missing_aspects: what does verification agent say we need?
+        
+        Then pick the NEXT incomplete sub-task.
+        
+        </intent_decomposition_logic>
+
+        <action_selection_logic>
+        
+        ## Decision Priority (in order):
+        
+        ### 1. Check Verification Feedback FIRST
+        Look at "Current Gap" section:
+        
+        **Explicit tool directive detected** → use_tool
+        - "Need to search for..."
+        - "Try web_search with query..."
+        - "Use sql_query to get..."
+        - "Switch to [tool] for..."
+        - Contains specific query suggestions
+        
+        **Reasoning directive detected** → reason_only
+        - "Need deeper analysis of..."
+        - "Current reasoning too shallow..."
+        - "Should synthesize..."
+        - "Now compare the findings..."
+        
+        ### 2. Check Multi-Intent Sub-task State
+        
+        **First sub-task not completed** → use_tool (focus on first sub-task ONLY)
+        **First sub-task done, second not done** → use_tool (focus on second sub-task ONLY)
+        **All data gathered** → reason_only (synthesize/compare)
+        
+        ### 3. Check Execution History
+        
+        **Recent failures detected** → reason_only (work with what we have)
+        **Recent success, need different angle** → could use_tool OR reason_only
+        
+        ### 4. Evaluate Current Knowledge State
+        
+        **Have substantial knowledge** → reason_only (analyze what we have)
+        **Have minimal knowledge AND question needs data** → use_tool
+        
+        </action_selection_logic>
 
         <phase_title_rules>
-        **CRITICAL**: Your phase title MUST differ meaningfully from the previous phase.
+        **CRITICAL**: Phase title MUST:
+        1. Differ meaningfully from previous phase
+        2. Focus on ONE specific sub-task (not combine multiple intents)
+        3. Match the action type
         
-        Good titles are:
-        - Specific to current focus (not generic)
-        - Action-oriented (verb + specific object)
-        - 4-8 words
-        - Clearly different from previous phase
+        **Multi-Intent Examples**:
         
-        Match verb to action.
+        Query: "User count in our system + global AI chatbot growth?"
+        
+        ✓ GOOD progression:
+        - Iter 1: "Querying current user count from database"
+        - Iter 2: "Searching global AI chatbot user growth data 2025"
+        - Iter 3: "Comparing our growth against industry trends"
+        
+        ✗ BAD (tries to do both):
+        - "Querying user count and searching global trends" ❌ Too broad
+        - "Analyzing our data versus market" ❌ Vague, no clear action
+        
+        Match phase title to action:
+        - **use_tool + SQL** → "Querying [specific metric] from database"
+        - **use_tool + web_search** → "Searching [specific external topic]"
+        - **reason_only** → "Analyzing [aspect]", "Comparing [A vs B]"
+        
         </phase_title_rules>
 
-        <context_awareness>
-        Pay attention to:
-        - **Previous phase**: What did you just do? Do something DIFFERENT now
-        - **Last execution result**: Success? Failure? What does that tell you?
-        - **Missing aspects**: What specifically is the gap?
-        - **Execution history**: Are you repeating failed attempts? Stop and reason instead
-        </context_awareness>
+        <common_mistakes_to_avoid>
+        
+        **Mistake 1: Mixing intents in phase title**
+        Query: "Our user count + global trends"
+        Wrong: "Searching user count and global trends"
+        Right: Pick ONE → "Querying current user count" OR "Searching global trends"
+        
+        **Mistake 2: Ignoring which sub-task is current**
+        Context: Already have SQL data, missing web data
+        Phase title: "Querying database" ❌ Already done!
+        Right: "Searching global AI chatbot growth trends"
+        
+        **Mistake 3: Being too eager to synthesize**
+        Context: Only completed 1 of 3 sub-tasks
+        Action: reason_only ❌ Not enough data yet!
+        Right: use_tool (get remaining data first)
+        
+        **Mistake 4: Generic phase titles**
+        Wrong: "Analyzing the topic" (what topic? what aspect?)
+        Right: "Analyzing inflation impact on Vietnam manufacturing"
+        
+        </common_mistakes_to_avoid>
 
         <output_format>
         Return JSON:
+        ```json
         {
-            "phase_title": "Specific action for THIS step",
+            "phase_title": "Specific action for THIS step (ONE sub-task only)",
             "next_action": "reason_only" | "use_tool"
         }
+        ```
+        
+        Remember: 
+        - Phase title should reflect CURRENT sub-task, not entire query
+        - One iteration = one focused action
+        - Sequential execution: complete sub-task 1 → sub-task 2 → synthesis
         </output_format>
         """
     )
@@ -613,18 +730,38 @@ class PromptTemplates:
     TOOL_EXECUTION_PROMPT = textwrap.dedent(
         """\
         <role>
-        You are a tool routing specialist. Your job is to select the RIGHT tool and generate an effective query.
+        You are a tool routing specialist. Your job is to select the RIGHT tool and generate 
+        an effective query FOR THE CURRENT PHASE ONLY.
         </role>
 
         <critical_rules>
-        1. You MUST select a subgraph from the available tools listed in the context below
-        2. The 'think' tool is ONLY for your internal reasoning - NEVER set subgraph="think"
-        3. You MUST always output valid JSON with both "subgraph" and "query" fields
+        1. FOCUS ONLY on the current phase_title - ignore other aspects of the original query
+        2. You MUST select a subgraph from the available tools listed in the context
+        3. The 'think' tool is ONLY for internal reasoning - NEVER set subgraph="think"
+        4. You MUST output valid JSON with both "subgraph" and "query" fields
+        5. Your query should ONLY address what the phase_title says, nothing more
         </critical_rules>
-
+        
+        <phase_focus_principle>
+        
+        **CRITICAL: The phase_title defines your ENTIRE scope**
+        
+        What ever the phase title is, you must choose appropriate tool from the available tools listed in the context
+        
+        **Why this matters:**
+        Multi-intent queries are broken down into sequential phases.
+        Each phase handles ONE specific sub-task.
+        Your job is to execute the CURRENT phase perfectly, not the entire original query.
+        
+        </phase_focus_principle>
+        
         <workflow>
-        Step 1: Use 'think' tool to analyze the situation (internal reasoning only)
-        Step 2: Output JSON with your final decision
+        Step 1: Read the phase_title carefully
+        Step 2: Use 'think' tool to analyze:
+            - What SPECIFIC information does THIS phase need?
+            - Which tool matches THIS phase's intent? (ignore other parts of original query)
+            - What focused query will get THIS phase's information?
+        Step 3: Output JSON with your final decision
         
         DO NOT output JSON and call tools in the same response.
         </workflow>

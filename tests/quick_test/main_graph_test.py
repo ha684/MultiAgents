@@ -116,19 +116,19 @@ async def main():
     orchestrator = MainGraph()
 
     human_message_1 = HumanMessage(
-        content="Hãy phân tích tác động của lạm phát toàn cầu đến tăng trưởng kinh tế Việt Nam trong ba năm gần đây. Đưa ra các số liệu, nguyên nhân chính, ảnh hưởng đến từng ngành quan trọng, và đề xuất giải pháp ứng phó từ góc độ chính sách vĩ mô.",
-        additional_kwargs={"message_metadata": context_metadata},
+        content="Số lượng file trong hệ thống của chúng ta hiện tại là bao nhiêu và mức tăng trưởng người dùng AI chatbot toàn cầu như thế nào?",
+        additional_kwargs=context_metadata,
     )
 
-    # # Mô phỏng response từ model
+    # # # Mô phỏng response từ model
     # ai_response_1 = AIMessage(
-    #     content="Tôi không hiểu rõ mục đích của bạn. Bạn có thể nêu cụ thể hơn về điều bạn muốn tìm kiếm hoặc cần hỗ trợ không?"
+    #     content="Xin lỗi, tôi không có thông tin cụ thể về tổng số cuộc hội thoại hiện tại. Bạn có thể cung cấp thêm chi tiết hoặc làm rõ câu hỏi của bạn không?"
     # )
 
-    # # Turn 2: Câu hỏi vague thứ 2 (giống turn 1 nhưng hơi khác)
+    # # # Turn 2: Câu hỏi vague thứ 2 (giống turn 1 nhưng hơi khác)
     # human_message_2 = HumanMessage(
-    #     content="cứ thử tìm xem",
-    #     additional_kwargs={"message_metadata": context_metadata},
+    #     content="Tôi cần biết hiện trong database có bao nhiêu cuộc trò chuyện. Cũng như là tổng số user đang sử dụng hệ thống.",
+    #     additional_kwargs=context_metadata,
     # )
 
     # Xây dựng conversation history

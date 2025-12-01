@@ -572,7 +572,6 @@ def seed_base_subgraphs():
     """
     SubgraphRegistry.register(RAG_SEARCH_PROFILE)
     SubgraphRegistry.register(WEB_SEARCH_PROFILE)
-    SubgraphRegistry.register(SQL_QUERY_PROFILE)
 
 
 def enable_sql(db_url: str, allow_tables: list[str]):
@@ -588,7 +587,7 @@ def enable_sql(db_url: str, allow_tables: list[str]):
         include_tables=allow_tables,
     )
     executor = SqlQueryExecutor(sql_db)
-
+    SubgraphRegistry.register(SQL_QUERY_PROFILE)
     sql_profile = SubgraphRegistry.get_profile("sql_query")
     if sql_profile:
         sql_profile.executor = executor

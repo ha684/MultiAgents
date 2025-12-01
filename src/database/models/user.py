@@ -53,7 +53,9 @@ class User(Base):
     role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
 
     status = Column(
-        Enum(UserStatus), default=UserStatus.PENDING_VERIFICATION, nullable=False
+        Enum(UserStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=UserStatus.PENDING_VERIFICATION,
+        nullable=False,
     )
 
     created_at = Column(
