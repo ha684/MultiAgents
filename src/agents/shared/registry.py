@@ -262,63 +262,110 @@ def create_journey_subgraph(
     return profile
 
 
-RAG_SEARCH_PROFILE = create_simple_subgraph(
+RAG_SEARCH_PROFILE = SubgraphProfile(
     name="rag_search",
-    display_name="Internal Knowledge Search",
-    capability=(
-        "Searches internal knowledge base using semantic search. "
-        "Covers company docs, policies, procedures, and product documentation."
+    display_name="Knowledge Base Search",
+    primary_behavior=SubgraphBehavior(
+        condition=RoutingCondition(
+            trigger=(
+                "User asks questions that could be answered from stored knowledge - "
+                "documents, articles, guides, references, or any ingested content"
+            ),
+            signals=[
+                "how to",
+                "how do I",
+                "what is",
+                "explain",
+                "guide",
+                "documentation",
+                "steps",
+                "process",
+                "procedure",
+                "about",
+                "describe",
+                "definition",
+                "overview",
+                "tutorial",
+                "example",
+                "best practice",
+            ],
+            exclude_when=[
+                "explicitly asks for 'latest' or 'recent' or 'current' information",
+                "asks for quantitative data or database queries (use sql_query)",
+                "asks to verify breaking news or very recent events (within days)",
+            ],
+        ),
+        action=RoutingAction(
+            capability=(
+                "Searches knowledge base containing ingested documents and content. "
+                "This could be anything previously stored: articles, guides, research papers, "
+                "product docs, policies, procedures, tutorials, references, or domain knowledge."
+            ),
+            router_instruction=(
+                "Route here as PRIMARY choice when:\n"
+                "• User asks informational questions that could be answered from documents\n"
+                "• Query is about concepts, processes, or explanations\n"
+                "• Looking for guides, tutorials, or how-to information\n"
+                "• Needs domain knowledge or reference material\n"
+                "• Asks about things that might be documented\n"
+                "\n"
+                "PREFER this over web_search UNLESS:\n"
+                "• User explicitly needs 'latest/recent/current' information\n"
+                "• Query is clearly about breaking news or very recent events\n"
+                "• Asks to verify current status of external entities\n"
+                "\n"
+                "Philosophy: Try knowledge base first for informational queries. "
+                "Web search is for verified recency needs."
+            ),
+            expected_outcome="Relevant information from stored knowledge with source references",
+        ),
+        priority=80,  # Higher than web_search for general informational queries
     ),
-    trigger=(
-        "User asks about internal/company-specific information, policies, "
-        "procedures, or proprietary product features"
-    ),
-    signals=[
-        "our policy",
-        "our process",
-        "our product",
-        "our system",
-        "company",
-        "internal",
-        "how do I",
-        "how to",
-        "documentation",
-        "guide",
-        "procedure",
-        "onboarding",
-        "employee handbook",
-        "benefits",
-        "PTO",
-    ],
-    router_instruction=(
-        "Route user queries here when they need information from internal documentation. "
-        "This includes: company policies, HR procedures, product documentation, "
-        "internal tools/systems guides, and proprietary processes. "
-        "\n\n"
-    ),
-    examples=[
-        ("What is our refund policy?", "Direct policy question"),
-        ("How do I submit a leave request?", "Internal HR process"),
-        ("Explain our product's authentication flow", "Product technical docs"),
-        ("What are the onboarding steps for new employees?", "HR documentation"),
-        ("How does our CI/CD pipeline work?", "Internal system documentation"),
-    ],
-    exclude_when=[
-        "asks about external/public information",
-        "asks about current events or news after 2025",
-        "asks for quantitative data or database queries",
-        "asks about competitors or market information",
+    canonical_examples=[
+        {
+            "query": "How does OAuth 2.0 work?",
+            "rationale": "Technical concept likely documented in knowledge base",
+        },
+        {
+            "query": "What are best practices for API design?",
+            "rationale": "Domain knowledge and guidelines",
+        },
+        {
+            "query": "Explain the refund policy",
+            "rationale": "Policy documentation",
+        },
+        {
+            "query": "How do I reset my password?",
+            "rationale": "Procedural guide likely in docs",
+        },
+        {
+            "query": "What is machine learning?",
+            "rationale": "Conceptual explanation, may be in knowledge base",
+        },
+        {
+            "query": "Show me examples of good code reviews",
+            "rationale": "Reference material and best practices",
+        },
     ],
     executor="rag_search",
     entry_state_type=SimpleSearchState,
+    tags=["knowledge", "documents", "reference"],
 )
 
-RAG_SEARCH_PROFILE.glossary = {
-    "PTO": "Paid Time Off - vacation and sick leave policy",
-    "OKR": "Objectives and Key Results - our goal-setting framework",
-    "RFC": "Request for Comments - our technical proposal process",
-    "Confluence": "Our internal wiki and documentation platform",
-}
+RAG_SEARCH_PROFILE.secondary_behaviors.append(
+    SubgraphBehavior(
+        condition=RoutingCondition(
+            trigger="User asks follow-up questions after getting knowledge base results",
+            signals=["tell me more", "elaborate", "give me details", "explain further"],
+        ),
+        action=RoutingAction(
+            capability="Deep dive into specific topics from knowledge base",
+            router_instruction="Continue using knowledge base for follow-up deep dives",
+            expected_outcome="More detailed information on specific aspects",
+        ),
+        priority=85,
+    )
+)
 
 WEB_SEARCH_PROFILE = SubgraphProfile(
     name="web_search",
@@ -326,84 +373,94 @@ WEB_SEARCH_PROFILE = SubgraphProfile(
     primary_behavior=SubgraphBehavior(
         condition=RoutingCondition(
             trigger=(
-                "User asks about current events, external entities (competitors, industry), "
-                "public information, or anything requiring up-to-date external data"
+                "User explicitly needs current/latest/recent information, "
+                "breaking news, real-time data, or verification of very recent events"
             ),
             signals=[
                 "latest",
                 "recent",
                 "current",
-                "news",
                 "today",
-                "competitor",
-                "industry",
-                "market",
-                "trend",
-                "regulation",
-                "standard",
-                "benchmark",
-                "public",
-                "what's new",
-                "updates",
-                "announcement",
+                "this week",
+                "this month",
+                "breaking",
+                "just announced",
+                "newest",
+                "up-to-date",
+                "right now",
+                "as of",
+                "updated",
             ],
             exclude_when=[
-                "asks about internal company information",
-                "asks for database metrics",
-                "asks about proprietary data or processes",
+                "asks for quantitative database metrics (use sql_query)",
+                "general informational query without recency requirement (try rag_search first)",
             ],
         ),
         action=RoutingAction(
             capability=(
-                "Searches public web for external information including "
-                "news, industry data, competitors, regulations, and public knowledge"
+                "Searches public web for real-time information, recent updates, "
+                "breaking news, and current status verification"
             ),
             router_instruction=(
-                "Route here when user needs external, public information that:\n"
-                "• Has changed or might have changed recently\n"
-                "• Is about entities outside our company (competitors, industry)\n"
-                "• Requires current/live data (news, regulations, standards)\n"
-                "• Is public knowledge not in our internal docs\n"
+                "Route here when user EXPLICITLY needs:\n"
+                "• Latest/current/recent information (temporal keywords present)\n"
+                "• Breaking news or events from past few days/weeks\n"
+                '• Verification of current status ("is X still CEO?", "did Y happen?")\n'
+                "• Real-time data (stock prices, weather, live scores)\n"
+                "• Updates or announcements specifically mentioned as recent\n"
                 "\n"
-                "Transform vague queries into specific, searchable questions. "
-                "For time-sensitive queries, include temporal context."
+                "DO NOT route here for:\n"
+                "• General informational questions without recency needs\n"
+                "• Conceptual or how-to questions (prefer rag_search)\n"
+                "• Historical facts or established knowledge\n"
+                "\n"
+                "Transform vague queries into specific, time-aware search questions."
             ),
-            expected_outcome="Current, externally-sourced information with proper citations",
+            expected_outcome="Current information with timestamps and source credibility",
         ),
-        priority=50,
+        priority=70,  # Lower than rag_search for general queries, high for recency
     ),
     canonical_examples=[
         {
             "query": "Latest AI developments in 2025",
-            "rationale": "Current events and industry news",
+            "rationale": "Explicit 'latest' keyword - needs current information",
         },
         {
-            "query": "What did OpenAI announce last week?",
-            "rationale": "Recent competitor news",
+            "query": "What did OpenAI announce this week?",
+            "rationale": "Recent announcement with temporal context",
         },
         {
-            "query": "Current GDPR requirements for data storage",
-            "rationale": "Up-to-date regulatory information",
+            "query": "Current GDPR requirements",
+            "rationale": "'Current' indicates need for up-to-date regulatory info",
         },
         {
-            "query": "Industry benchmark for SaaS churn rate",
-            "rationale": "Public market data",
+            "query": "Is Elon Musk still CEO of Tesla?",
+            "rationale": "Verification of current status",
+        },
+        {
+            "query": "News about recent tech layoffs",
+            "rationale": "Breaking news query",
+        },
+        {
+            "query": "What's the weather today?",
+            "rationale": "Real-time data need",
         },
     ],
     executor="web_search",
     entry_state_type=SimpleSearchState,
+    tags=["web", "current", "external", "real-time"],
 )
 
 WEB_SEARCH_PROFILE.secondary_behaviors.append(
     SubgraphBehavior(
         condition=RoutingCondition(
-            trigger="User asks to verify or fact-check information",
-            signals=["is it true", "verify", "fact check", "confirm", "validate"],
+            trigger="User asks about external entities when knowledge base returns insufficient results",
+            signals=["competitor", "company", "organization", "market", "industry"],
         ),
         action=RoutingAction(
-            capability="Verify claims using authoritative public sources",
-            router_instruction="Use for fact-checking and verification of claims",
-            expected_outcome="Verified information with source credibility assessment",
+            capability="Fallback for external entity information not in knowledge base",
+            router_instruction="Use as fallback when RAG doesn't have external entity info",
+            expected_outcome="Public information about external entities",
         ),
         priority=60,
     )

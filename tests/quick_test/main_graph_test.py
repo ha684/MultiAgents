@@ -116,7 +116,13 @@ async def main():
     orchestrator = MainGraph()
 
     human_message_1 = HumanMessage(
-        content="Số lượng file trong hệ thống của chúng ta hiện tại là bao nhiêu và mức tăng trưởng người dùng AI chatbot toàn cầu như thế nào?",
+        content=(
+            "Nếu bạn phải thiết kế một framework đánh giá LLM dựa trên ba bài kiểm tra: "
+            "context attribution, hallucination tax và illusion of thinking, bạn sẽ tập trung vào những tiêu chí nào? "
+            "Ngoài ra, bạn sẽ xây dựng các tiêu chí định lượng hóa và đo lường kết quả như thế nào cho từng bài kiểm tra? "
+            "Theo bạn, mối liên hệ giữa ba khía cạnh này là gì? "
+            "Bạn có thể đề xuất sơ bộ một checklist hoặc quy trình tổng thể để áp dụng bộ tiêu chí này khi đánh giá một mô hình LLM thực tế không?"
+        ),
         additional_kwargs=context_metadata,
     )
 

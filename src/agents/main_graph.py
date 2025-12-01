@@ -306,12 +306,35 @@ class MainGraph(GraphAgentBase[MainGraphState]):
     async def ainvoke(self, conversation: list[BaseMessage]) -> dict[str, Any] | None:
         """Non-streaming execution."""
         try:
+            seed_base_subgraphs()
+            meta = conversation[-1].additional_kwargs or {}
+            db_url = meta.get("db_url")
+            allow_tables = meta.get("allow_tables", [])
+
+            allow = meta.get("enabled_subgraphs", [])
+            block = meta.get("disabled_subgraphs", [])
+
+            extras = {}
+            if db_url:
+                sql_profile = enable_sql(db_url, allow_tables)
+                extras["sql_query"] = sql_profile
+            else:
+                block.append("sql_query")
+
+            subgraph_policy = {
+                "allow": allow or None,
+                "block": block or [],
+                "extras": extras,
+            }
+
             initial_state = MainGraphState(
                 conversation=conversation,
+                subgraph_policy=subgraph_policy,
                 search_iterations=[],
                 current_iteration=1,
                 accumulated_context="",
             )
+
             final_result = await super().ainvoke(initial_state)
 
             cited_documents = final_result.state.get("cited_documents", [])
