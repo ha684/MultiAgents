@@ -26,33 +26,6 @@ from src.utils.logger_conf import logger
 class ThinkingGraph(GraphAgentBase[ThinkingState]):
     """
     Iterative Research Graph with ChatGPT-style Two-Phase Approach.
-
-    Flow (inspired by ChatGPT's iterative thinking):
-    1. Phase Planning → Decide phase title and action type
-    2. Action Execution → Execute the planned action
-       2a. If "reason_only": Generate internal reasoning
-       2b. If "use_tool": Select tool and query
-    3. Route Based on Action Type
-       3a. If "use_tool": Execute Subgraph → Extract Learnings
-       3b. If "reason_only": Store Reasoning → Evaluate
-    4. Evaluate Sufficiency
-    5. If insufficient: Continue → back to step 1
-    6. If sufficient: Synthesize Response → END
-
-    Two-Phase Approach Benefits:
-    - Clearer separation of concerns (what to do vs how to do it)
-    - More transparent reasoning process
-    - Better phase titles for user visibility (like ChatGPT)
-
-    Response Mode Selection:
-    - If has_tool_results=True: Use ADVANCE (with citations)
-    - If has_tool_results=False: Use REASONING_ONLY (no citations needed)
-
-    Safety: max_iterations prevents infinite loops
-
-    Iteration 1 Behavior:
-    - Always starts with "reason_only" to gather initial context
-    - Tool execution begins from iteration 2
     """
 
     def __init__(self):
@@ -76,11 +49,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
     async def phase_planning_node(self, state: ThinkingState) -> dict[str, Any]:
         """
         Phase Planning Node (Step 1): Decide phase title and action type.
-
-        Special handling for Iteration 1:
-        - Force next_action to "reason_only" on first iteration
-        - This ensures initial context gathering before tool execution
-        Returns: phase_title, next_action
         """
         iteration = state.get("iteration_count", 0)
 
@@ -110,12 +78,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
     async def action_execution_node(self, state: ThinkingState) -> dict[str, Any]:
         """
         Action Execution Node (Step 2): Execute the planned action.
-
-        Two paths:
-        1. next_action="reason_only" → Generate reasoning
-        2. next_action="use_tool" → Select subgraph and generate query
-
-        Returns: reasoning OR (selected_subgraph, direction)
         """
         next_action = state.get("next_action", "use_tool")
         iteration = state.get("iteration_count", 0)
@@ -171,11 +133,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
     async def execute_subgraph_node(self, state: ThinkingState) -> dict[str, Any]:
         """
         Execute selected subgraph and return documents.
-
-        Special handling:
-        - SQL subgraph: Store result in _sql_result, set response_mode
-        - Other subgraphs: Deduplicate and return documents
-        - Error details: Capture subgraph_error and pass to missing_aspects
         """
         subgraph_name = state.get("selected_subgraph")
         query = state.get("direction")
@@ -348,7 +305,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
         if not reasoning:
             logger.warning("[Reasoning] No reasoning content provided")
-            # Still reset failure flags even if no reasoning
             return {
                 "_execution_failed": False,
                 "_failure_reason": "",
@@ -369,7 +325,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         return {
             "learnings": learnings,
             "_internal_reasoning": internal_reasoning,
-            # Reset execution failure flags - this iteration used reasoning, not tools
             "_execution_failed": False,
             "_failure_reason": "",
         }
@@ -544,11 +499,11 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
         try:
             resp = await verification_agent.ainvoke(state=state)
-            is_sufficient = resp.get("is_sufficient", False)
+            should_continue = resp.get("should_continue", False)
             missing = resp.get("missing_aspects", "")
 
             return {
-                "_should_continue": not is_sufficient,
+                "_should_continue": should_continue,
                 "_missing_aspects": missing,
             }
 
@@ -734,7 +689,6 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
 
         workflow.add_edge("continue_iteration", "phase_planning")
 
-        # Finish point
         workflow.set_finish_point("synthesize_response")
 
         return workflow.compile(name=self.graph_name)

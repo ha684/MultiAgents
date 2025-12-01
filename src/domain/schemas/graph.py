@@ -21,10 +21,12 @@ class SearchPlanSchema(BaseModel):
 class VerificationSchema(BaseModel):
     """Verification agent output schema"""
 
-    is_sufficient: bool = Field(
-        description="Whether the accumulated knowledge is sufficient to answer the original query"
+    should_continue: bool = Field(
+        description="Whether the agent should continue to research"
     )
-    missing_aspects: str = Field(description="Information gaps that need to be filled")
+    missing_aspects: str = Field(
+        description="Information gaps that need to be filled to continue researching"
+    )
 
 
 class DynamicQueriesSchema(BaseModel):

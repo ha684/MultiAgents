@@ -81,7 +81,6 @@ class ActionExecutionAgent(BaseAgent):
         learnings_section = f"Previous Learnings:\n{learnings_text}"
 
         conversation_text = get_buffer_string(state["conversation"])
-        current_time = f"The current time is {get_current_time()}, remember this."
         if action == "reason_only":
             system_prompt = PromptTemplates.REASONING_EXECUTION_PROMPT
             context_parts = [
@@ -89,7 +88,6 @@ class ActionExecutionAgent(BaseAgent):
                 knowledge_section,
                 learnings_section,
                 missing_section,
-                current_time,
             ]
         else:  # use_tool
             system_prompt = PromptTemplates.TOOL_EXECUTION_PROMPT
@@ -112,7 +110,7 @@ class ActionExecutionAgent(BaseAgent):
         context_content = "\n\n".join(filter(None, context_parts))
 
         messages: list[BaseMessage] = [
-            SystemMessage(content=current_time + system_prompt),
+            SystemMessage(content=get_current_time() + system_prompt),
             AIMessage(content=context_content),
             HumanMessage(content=f"Conversation:\n{conversation_text}"),
         ]

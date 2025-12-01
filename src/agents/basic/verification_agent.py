@@ -23,7 +23,7 @@ from src.utils.logger_conf import logger
 
 @singleton
 class VerificationAgent(BaseAgent):
-    """Agent responsible for verifying information from relevant documents."""
+    """Agent responsible for verifying if we can answer the question well."""
 
     def __init__(self):
         super().__init__(
@@ -39,30 +39,42 @@ class VerificationAgent(BaseAgent):
 
     async def ainvoke(self, state: ThinkingState) -> dict[str, Any]:
         """
-        Verifies information from relevant documents.
+        Verifies if we should continue researching or synthesize answer now.
+
+        Returns:
+            {
+                "should_continue": bool,  # Changed from is_sufficient
+                "missing_aspects": str,   # What's missing (or why we're stopping)
+            }
         """
         max_iterations = 3
         conversation_text = get_buffer_string(state["conversation"])
-        current_time = f"The current time is {get_current_time()}, remember this."
         internal_reasoning = state.get("_internal_reasoning", "").strip()
         accumulated_context = state.get("accumulated_context", "").strip()
+        iteration_count = state.get("iteration_count", 0)
+        consecutive_failures = state.get("consecutive_failures", 0)
 
         execution_history = state.get("execution_history", [])
-        successful_executions = [
-            ex for ex in execution_history if ex.get("status") == "success"
-        ]
+
+        pattern_analysis = self._analyze_execution_pattern(execution_history)
 
         knowledge_summary = self._build_knowledge_summary(
             internal_reasoning=internal_reasoning,
             accumulated_context=accumulated_context,
-            execution_history=successful_executions,
-            iteration_count=state.get("iteration_count", 0),
+            execution_history=execution_history,
+            iteration_count=iteration_count,
+            pattern_analysis=pattern_analysis,
+            consecutive_failures=consecutive_failures,
         )
 
         messages: list[BaseMessage] = [
-            SystemMessage(content=current_time + PromptTemplates.VERIFICATION_PROMPT),
+            SystemMessage(
+                content=get_current_time() + PromptTemplates.VERIFICATION_PROMPT
+            ),
             AIMessage(content=knowledge_summary),
-            HumanMessage(content=f"Conversation:\n{conversation_text}"),
+            HumanMessage(
+                content=f"<original_conversation>\n{conversation_text}\n</original_conversation>"
+            ),
         ]
 
         verification_llm = self.thinking_llm
@@ -72,10 +84,75 @@ class VerificationAgent(BaseAgent):
             available_tools={"think": think},
             max_iterations=max_iterations,
             parse_fn=parse_verification_response,
-            retry_prompt="Please provide the verification result in correct JSON format.",
+            retry_prompt='Return JSON: {"should_continue": true/false, "missing_aspects": "..."}',
         )
 
         return verification_dict
+
+    def _analyze_execution_pattern(self, execution_history: list) -> dict[str, Any]:
+        """
+        Analyze recent execution pattern to detect stuck loops.
+
+        Returns pattern info that verification agent needs to know.
+        """
+        if not execution_history or len(execution_history) < 2:
+            return {
+                "is_stuck": False,
+                "pattern_type": "normal",
+                "description": "Normal execution flow",
+            }
+
+        recent_5 = execution_history[-5:]
+
+        recent_failures = [ex for ex in recent_5 if ex.get("status") == "failed"]
+        if len(recent_failures) >= 3:
+            failed_tool = recent_failures[0].get("subgraph", "unknown")
+            if all(ex.get("subgraph") == failed_tool for ex in recent_failures):
+                return {
+                    "is_stuck": True,
+                    "pattern_type": "repeated_tool_failure",
+                    "description": f"Tool '{failed_tool}' failed {len(recent_failures)} times in a row",
+                    "failed_tool": failed_tool,
+                    "last_error": recent_failures[-1].get("error", "Unknown"),
+                }
+
+        recent_queries = [ex.get("query", "")[:50].lower() for ex in recent_5]
+        if len(recent_queries) >= 3:
+            first_words = set(recent_queries[0].split())
+            similar_count = sum(
+                1
+                for q in recent_queries[1:]
+                if len(set(q.split()) & first_words) / max(len(set(q.split())), 1) > 0.6
+            )
+            if similar_count >= 2:
+                return {
+                    "is_stuck": True,
+                    "pattern_type": "repeated_similar_queries",
+                    "description": f"Last {similar_count + 1} queries are too similar, not finding new info",
+                    "sample_queries": recent_queries[-3:],
+                }
+
+        if len(recent_5) >= 4:
+            tools_used = [ex.get("subgraph", "") for ex in recent_5]
+            unique_tools = set(tools_used)
+            if len(unique_tools) == 2 and len(tools_used) >= 4:
+                is_alternating = all(
+                    tools_used[i] != tools_used[i + 1]
+                    for i in range(len(tools_used) - 1)
+                )
+                if is_alternating:
+                    return {
+                        "is_stuck": True,
+                        "pattern_type": "alternating_tools",
+                        "description": f"Alternating between {', '.join(unique_tools)} without progress",
+                        "tools": list(unique_tools),
+                    }
+
+        return {
+            "is_stuck": False,
+            "pattern_type": "normal",
+            "description": "Normal execution flow",
+        }
 
     def _build_knowledge_summary(
         self,
@@ -83,48 +160,112 @@ class VerificationAgent(BaseAgent):
         accumulated_context: str,
         execution_history: list,
         iteration_count: int,
+        pattern_analysis: dict,
+        consecutive_failures: int,
     ) -> str:
         """
-        Build a clear summary of what knowledge we have and where it came from.
-        This helps verification agent understand the SOURCE of information.
+        Build summary with clear signals about what's working and what's not.
         """
         summary_parts = []
 
-        summary_parts.append(f"## Research Progress: Iteration {iteration_count}")
+        summary_parts.append(f"## Research Status: Iteration {iteration_count}")
         summary_parts.append("")
 
-        if internal_reasoning:
-            summary_parts.append("### Internal Reasoning (No External Sources)")
-            summary_parts.append("- Generated from your own knowledge")
-            summary_parts.append("")
-            summary_parts.append("Content:")
-            summary_parts.append(internal_reasoning)
+        if consecutive_failures > 0:
+            summary_parts.append(f"**Consecutive Failures**: {consecutive_failures}")
             summary_parts.append("")
 
-        if accumulated_context:
-            summary_parts.append("### External Sources (From Tool Executions)")
-
-            if execution_history:
-                summary_parts.append(
-                    f"- Total successful searches: {len(execution_history)}"
-                )
-                summary_parts.append("- Tools used:")
-                for ex in execution_history:
-                    subgraph = ex.get("subgraph", "unknown")
-                    query = ex.get("query", "")[:60]
-                    summary_parts.append(f'  • {subgraph}: "{query}"')
-            else:
-                summary_parts.append("- No external searches completed yet")
-
-            summary_parts.append("")
-            summary_parts.append("Content:")
-            summary_parts.append(accumulated_context)
-        else:
-            summary_parts.append("### External Sources")
-            summary_parts.append("- No external sources gathered yet")
+        if pattern_analysis["is_stuck"]:
             summary_parts.append(
-                "- All current knowledge is from internal reasoning only"
+                f"**STUCK PATTERN DETECTED**: {pattern_analysis['description']}"
             )
+            summary_parts.append(
+                "   → Consider stopping and working with available information"
+            )
+            summary_parts.append("")
+
+        has_reasoning = len(internal_reasoning) > 0
+        has_external = len(accumulated_context) > 0
+
+        summary_parts.append("### Available Information:")
+        summary_parts.append("")
+
+        if has_reasoning:
+            summary_parts.append(
+                f"✓ **Internal Reasoning**: {len(internal_reasoning)} chars"
+            )
+            summary_parts.append("  Source: Your own knowledge and analysis")
+            summary_parts.append("")
+
+        if has_external:
+            successful_searches = [
+                ex for ex in execution_history if ex.get("status") == "success"
+            ]
+            summary_parts.append(
+                f"✓ **External Sources**: {len(accumulated_context)} chars"
+            )
+            summary_parts.append(
+                f"  From {len(successful_searches)} successful searches:"
+            )
+            for ex in successful_searches[-3:]:
+                subgraph = ex.get("subgraph", "unknown")
+                query = ex.get("query", "")[:60]
+                result_count = ex.get("result_count", "?")
+                summary_parts.append(
+                    f'  • {subgraph}: "{query}" ({result_count} results)'
+                )
+            summary_parts.append("")
+
+        if not has_reasoning and not has_external:
+            summary_parts.append("**No information gathered yet**")
+            summary_parts.append("")
+
+        if execution_history:
+            summary_parts.append("### Execution History:")
+            summary_parts.append("")
+
+            recent_10 = execution_history[-10:]
+            success_count = sum(1 for ex in recent_10 if ex.get("status") == "success")
+            fail_count = len(recent_10) - success_count
+
+            summary_parts.append(
+                f"Recent attempts (last {len(recent_10)}): {success_count} success, {fail_count} failed"
+            )
+            summary_parts.append("")
+
+            for ex in recent_10[-5:]:
+                iter_num = ex.get("iteration", "?")
+                status = "✓" if ex.get("status") == "success" else "✗"
+                subgraph = ex.get("subgraph", "unknown")
+                query = ex.get("query", "")[:50]
+
+                line = f'[{iter_num}] {status} {subgraph}: "{query}"'
+                if ex.get("status") == "failed":
+                    error = ex.get("error", "Unknown error")[:60]
+                    line += f" → Error: {error}"
+
+                summary_parts.append(line)
+            summary_parts.append("")
+
+        if has_reasoning:
+            summary_parts.append("### Internal Reasoning Preview:")
+            preview = (
+                internal_reasoning[:400] + "..."
+                if len(internal_reasoning) > 400
+                else internal_reasoning
+            )
+            summary_parts.append(preview)
+            summary_parts.append("")
+
+        if has_external:
+            summary_parts.append("### External Sources Preview:")
+            preview = (
+                accumulated_context[:400] + "..."
+                if len(accumulated_context) > 400
+                else accumulated_context
+            )
+            summary_parts.append(preview)
+            summary_parts.append("")
 
         return "\n".join(summary_parts)
 

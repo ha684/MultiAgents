@@ -54,7 +54,26 @@ def parse_response(content: str) -> dict | None:
 
 def get_current_time() -> str:
     """Get the current time in the Asia/Ho_Chi_Minh timezone"""
-    return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).isoformat()
+    current_date = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date()
+    current_year = current_date.year
+    current_month = current_date.month
+    temporal_context = f"""
+<temporal_context>
+**CRITICAL TEMPORAL INFORMATION**:
+- Today's date: {current_date}
+- Current year: {current_year}
+- Current month: {current_month} {current_year}
+
+When the user mentions:
+- "recent years" → means {current_year - 2}-{current_year} (NOT 2022-2024)
+- "last 3 years" → means {current_year - 3}-{current_year}
+- "this year" → means {current_year}
+- "latest" or "current" → means {current_year} data
+
+ALWAYS use {current_year} as the reference point for temporal queries.
+</temporal_context>
+"""
+    return temporal_context
 
 
 def get_message_id(m: Message | None) -> str | None:

@@ -89,7 +89,6 @@ class CompressAgent(BaseAgent):
         if not reference:
             logger.warning("No relevant documents to compress")
             return ""
-        current_time = f"The current time is {get_current_time()}, remember this."
         fallback = "\n\n".join([doc.page_content for doc in reference])
 
         try:
@@ -99,7 +98,7 @@ class CompressAgent(BaseAgent):
             formatted_docs = "\n".join(parts)
 
             messages: list[BaseMessage] = [
-                SystemMessage(content=current_time + COMPRESS_PROMPT_TEMPLATE),
+                SystemMessage(content=get_current_time() + COMPRESS_PROMPT_TEMPLATE),
                 AIMessage(content=formatted_docs),
                 HumanMessage(content=f"User query: {query}"),
             ]

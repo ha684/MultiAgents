@@ -48,105 +48,90 @@ class PhaseAgent(BaseAgent):
     ) -> dict[str, Any]:
         """
         Generate phase title and decide next action type.
-
-        Args:
-            state: Current state with conversation, context, etc.
-            mode: "thinking" (iterative, reasoning-first) or "normal" (single-shot, tool-focused)
-
-        Returns:
-            {
-                "phase_title": str,     # Example: "Looking up renewable energy reports"
-                "next_action": str,     # Example: "reason_only" or "use_tool"
-            }
         """
-        # Select prompt based on mode
         if mode == "normal":
             system_prompt = PromptTemplates.PHASE_PLANNING_NORMAL_PROMPT
         else:
             system_prompt = PromptTemplates.PHASE_PLANNING_PROMPT
 
-        learnings = state.get("learnings", [])
-        knowledge = state.get("accumulated_context", "")
-        execution_history = state.get("execution_history", [])
-        missing_aspects = state.get("_missing_aspects", "")
         iteration_count = state.get("iteration_count", 0)
+        previous_phase = state.get("phase_title", "")
+        missing_aspects = state.get("_missing_aspects", "")
+        execution_history = state.get("execution_history", [])
+        knowledge = state.get("accumulated_context", "")
+        learnings = state.get("learnings", [])
 
-        # Build iteration progress section
-        iteration_section = f"## Current Progress: Iteration {iteration_count}"
+        state_summary = f"**Iteration {iteration_count}**"
 
-        # Add last execution result info for context
-        last_execution_info = ""
+        if previous_phase:
+            state_summary += f"\n**Previous Phase**: {previous_phase}"
+            state_summary += f"\nYour next phase title MUST be meaningfully different from '{previous_phase}'"
+
         if execution_history:
             last_ex = execution_history[-1]
             last_status = last_ex.get("status", "unknown")
             last_subgraph = last_ex.get("subgraph", "unknown")
+            last_query = last_ex.get("query", "")[:80]
+
             if last_status == "success":
                 result_count = last_ex.get("result_count", 0)
-                last_execution_info = (
-                    f"Last Action: {last_subgraph} - SUCCESS ({result_count} results)"
-                )
+                state_summary += f"\n**Last Action**: ✓ {last_subgraph} succeeded ({result_count} results)"
+                state_summary += f"\n   Query: '{last_query}'"
             else:
                 error = last_ex.get("error", "Unknown error")
-                last_execution_info = f"Last Action: {last_subgraph} - FAILED ({error})"
+                state_summary += f"\n**Last Action**: ✗ {last_subgraph} FAILED"
+                state_summary += f"\n   Error: {error}"
+                state_summary += f"\n   Query: '{last_query}'"
 
-        history_section = ""
-        if execution_history:
-            recent_history = execution_history[-5:]
-            history_text = "\n".join(
+                recent_failures = [
+                    ex for ex in execution_history[-3:] if ex.get("status") == "failed"
+                ]
+                if len(recent_failures) >= 2:
+                    state_summary += "\nMultiple recent failures - consider reasoning with available data"
+
+        if missing_aspects:
+            if isinstance(missing_aspects, list):
+                missing_text = "\n".join(f"- {aspect}" for aspect in missing_aspects)
+            else:
+                missing_text = missing_aspects
+            state_summary += f"\n\n**Current Gap**:\n{missing_text}"
+
+        knowledge_length = len(knowledge)
+        if knowledge_length > 0:
+            state_summary += f"\n\n**Accumulated Knowledge**: {knowledge_length} chars"
+            if knowledge_length > 500:
+                preview = knowledge[:200] + "\n...\n" + knowledge[-200:]
+            else:
+                preview = knowledge
+            state_summary += f"\nPreview:\n{preview}"
+        else:
+            state_summary += (
+                "\n\n**Accumulated Knowledge**: Empty (need data or reasoning)"
+            )
+
+        if len(execution_history) >= 3:
+            recent_3 = execution_history[-3:]
+            pattern = " → ".join(
                 [
-                    f"  [{ex.get('iteration')}] {ex.get('subgraph')} - {ex.get('status')}: {ex.get('query', '')[:60]}..."
-                    + (
-                        f" (Error: {ex.get('error')})"
-                        if ex.get("status") == "failed"
-                        else ""
-                    )
-                    for ex in recent_history
+                    f"{ex.get('subgraph', 'reason')}({'✓' if ex.get('status') == 'success' else '✗'})"
+                    for ex in recent_3
                 ]
             )
-            history_section = f"Execution History:\n{history_text}"
+            state_summary += f"\n\n**Recent Pattern**: {pattern}"
 
-        if isinstance(missing_aspects, list):
-            missing_aspects = "\n".join(missing_aspects)
-
-        missing_section = (
-            f"Missing Aspects:\n{missing_aspects}" if missing_aspects else ""
-        )
-
-        knowledge_section = ""
-        if knowledge:
-            truncated = len(knowledge) > 3000
-            prefix = "(Showing most recent ~3000 chars)\n" if truncated else ""
-            knowledge_section = f"Accumulated Knowledge:\n{prefix}{knowledge[-3000:]}"
-
-        learnings_text = (
-            "\n".join(f"- {learning}" for learning in learnings[-3:])
-            if learnings
-            else "None yet"
-        )
-        learnings_section = f"Previous Learnings:\n{learnings_text}"
+        if learnings:
+            recent_learnings = learnings[-2:]
+            learnings_text = "\n".join(f"- {l}" for l in recent_learnings)
+            state_summary += f"\n\n**Recent Learnings**:\n{learnings_text}"
 
         conversation_text = get_buffer_string(state["conversation"])
-        current_time = f"The current time is {get_current_time()}, remember this."
-        previous_phase = state.get("phase_title", "")
-        previous_phase_section = (
-            f"Previous Phase: {previous_phase}" if previous_phase else ""
-        )
-
-        context_parts = [
-            iteration_section,
-            previous_phase_section,
-            last_execution_info,
-            knowledge_section,
-            learnings_section,
-            history_section,
-            missing_section,
-        ]
-        context_content = "\n\n".join(filter(None, context_parts))
 
         messages: list[BaseMessage] = [
-            SystemMessage(content=current_time + system_prompt),
-            AIMessage(content=context_content),
-            HumanMessage(content=f"Conversation:\n{conversation_text}"),
+            SystemMessage(content=get_current_time() + system_prompt),
+            AIMessage(content=f"<research_state>\n{state_summary}\n</research_state>"),
+            HumanMessage(
+                content=f"<original_conversation>\n{conversation_text}\n</original_conversation>"
+            ),
         ]
 
         phase_result = await self.iterative_llm_call_structured(
@@ -155,7 +140,7 @@ class PhaseAgent(BaseAgent):
             available_tools={"think": think},
             max_iterations=3,
             parse_fn=parse_phase_result,
-            retry_prompt='Please provide the phase decision in the correct JSON format: {"phase_title": "...", "next_action": "reason_only" or "use_tool"}',
+            retry_prompt='Return JSON: {"phase_title": "...", "next_action": "reason_only"|"use_tool"}',
         )
 
         return phase_result
