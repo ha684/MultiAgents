@@ -41,8 +41,8 @@ class PromptTemplates:
         - Trying for 3+ iterations on same missing piece
         
         4. **Wrong approach detected**
-        - Same tool failing repeatedly (wrong tool for the job)
-        - Similar queries returning nothing (query approach doesn't work)
+        - Same tool failing repeatedly
+        - Similar queries returning nothing
         - Alternating between tools without progress
         
         ## should_continue = TRUE (CONTINUE) when:
@@ -50,8 +50,7 @@ class PromptTemplates:
         1. **Critical gap exists AND is likely fillable**
         - User asked specific question we haven't addressed yet
         - Missing piece is reasonable to find (not obscure)
-        - Haven't tried appropriate tool/query yet
-        - Recent attempt was close but query needs refinement
+        - Recent attempt was close but needs refinement
         
         2. **Making steady progress**
         - Each iteration adding new insights
@@ -71,10 +70,10 @@ class PromptTemplates:
         When you see this, it's a STRONG signal to STOP (should_continue = false).
         
         Common stuck patterns:
-        - "Tool 'X' failed 3+ times in a row" → Tool doesn't work for this, stop trying
+        - "Tool 'X' failed 3+ times in a row" → Nothing is working with this approach
         - "Last N queries too similar, not finding new info" → We've exhausted this angle
         - "Alternating between tools without progress" → We're going in circles
-        - "Consecutive Failures: 3+" → Nothing is working, time to synthesize
+        - "Consecutive Failures: 3+" → Multiple approaches failing, time to synthesize
         
         When stuck: Set should_continue = false and explain in missing_aspects WHY we're stopping despite gaps.
         </stuck_pattern_detection>
@@ -97,22 +96,22 @@ class PromptTemplates:
         ```json
         {
             "should_continue": false,
-            "missing_aspects": "Ideally would have [X], but multiple search attempts failed to find this. Recommend synthesizing answer with available information: [list what we DO have]."
+            "missing_aspects": "Ideally would have [X], but multiple attempts failed to find this. Available information includes: [list what we DO have]. Recommend synthesizing answer with current knowledge."
         }
         ```
         
         **If should_continue = TRUE:**
         
-        Provide SPECIFIC, ACTIONABLE guidance:
+        Describe what information is still needed:
         
-        ✓ GOOD (specific + actionable):
+        ✓ GOOD (specific about the gap):
         ```
-        "Need current SE Asia geopolitical analysis. Previous search was too broad ('gold market trends'). Try specific query: 'SE Asia gold trade geopolitics 2024 China US tensions' using web_search."
+        "Need current SE Asia geopolitical analysis related to gold trade. Previous search was too broad - need more specific regional focus on China-US tensions impact on commodity markets."
         ```
         
-        ✓ GOOD (suggests different approach):
+        ✓ GOOD (identifies the missing piece):
         ```
-        "Previous 3 attempts with web_search found nothing on internal metrics. This is internal data - switch to sql_query tool to get actual user growth statistics from our database."
+        "Missing actual numerical data on user growth rates. Have general trends but need specific metrics to answer quantitatively."
         ```
         
         ✗ BAD (too vague):
@@ -120,9 +119,9 @@ class PromptTemplates:
         "Need more information about geopolitics"
         ```
         
-        ✗ BAD (repeating failed approach):
+        ✗ BAD (repeating same ask):
         ```
-        "Need to search for gold market trends"  ← We already tried this 3 times!
+        "Need to find gold market trends"  ← We already tried this 3 times!
         ```
         </missing_aspects_guidance>
 
@@ -168,16 +167,16 @@ class PromptTemplates:
         **Example 2: Stop - Accept defeat**
         Context:
         - Iteration 5
-        - STUCK PATTERN: "Tool 'web_search' failed 3 times in a row"
+        - STUCK PATTERN: "Tool failed 3 times in a row"
         - Consecutive Failures: 3
-        - Execution history shows: "gold nanotech mining" → no results (3x)
+        - Execution history shows: multiple attempts, no results
         - Question: "How is nanotech used in gold mining?"
         
         Decision:
         ```json
         {
         "should_continue": false,
-        "missing_aspects": "Ideally would have specific nanotech applications in gold mining, but 3 search attempts found no results. This may be emerging/niche topic with limited public information. Recommend synthesizing answer with: (1) general nanotech principles, (2) potential applications based on material properties, (3) caveat about limited current adoption data."
+        "missing_aspects": "Ideally would have specific nanotech applications in gold mining, but multiple attempts found no results. This may be emerging/niche topic with limited public information. Available information: (1) general nanotech principles, (2) theoretical applications based on material properties. Recommend synthesizing with caveat about limited current adoption data."
         }
         ```
         Reasoning: Stuck pattern detected. Information likely doesn't exist or isn't publicly available. Better to give thoughtful answer with what we know.
@@ -203,22 +202,21 @@ class PromptTemplates:
         
         ---
         
-        **Example 4: Continue - Legitimate gap, different approach**
+        **Example 4: Continue - Legitimate gap**
         Context:
         - Iteration 2
         - STUCK PATTERN: "Last 2 queries too similar"
-        - Previous searches: "company revenue 2024" → no results (using web_search)
-        - Question: "What's our Q3 revenue?"
-        - Execution history: Only tried web_search
+        - Previous searches: generic queries returned no specific data
+        - Question: "What's the Q3 revenue?"
         
         Decision:
         ```json
         {
         "should_continue": true,
-        "missing_aspects": "Question asks for internal company data ('our revenue'), but web_search was used which searches public web. Need to switch tools: use sql_query to query internal financial database, or use gdrive_search to find Q3 financial reports."
+        "missing_aspects": "Question asks for specific Q3 revenue numbers. Previous attempts used generic queries. Need to search for specific financial data or quarterly reports with more targeted approach."
         }
         ```
-        Reasoning: Clear gap, but wrong tool being used. One more iteration with correct tool should work.
+        Reasoning: Clear gap exists. Query approach needs refinement. Worth one more targeted attempt.
         
         ---
         
@@ -233,28 +231,28 @@ class PromptTemplates:
         ```json
         {
         "should_continue": true,
-        "missing_aspects": "Question requires specific current price data. Need web_search with query: 'gold price SE Asia 2024' or 'Singapore gold price today' to get actual market quotes."
+        "missing_aspects": "Question requires specific current price data for SE Asian markets. Need to find actual market quotes and regional pricing information."
         }
         ```
         Reasoning: Factual question requiring external data. Haven't searched yet. Legitimate need.
         
         ---
         
-        **Example 6: Stop - Wrong tool, but tried enough**
+        **Example 6: Stop - Multiple approaches failed**
         Context:
         - Iteration 4
-        - STUCK PATTERN: "Tool 'sql_query' failed 3 times in a row"
-        - Errors: "Table 'gold_prices' does not exist"
+        - STUCK PATTERN: "Multiple tools failed"
+        - Consecutive Failures: 3
         - Question: "What are current gold prices?"
         
         Decision:
         ```json
         {
         "should_continue": false,
-        "missing_aspects": "Attempted to query internal database for gold prices, but table doesn't exist (confirmed after 3 attempts). This is external market data, not internal. However, further web searches unlikely to succeed either. Recommend synthesizing answer explaining: (1) gold prices are publicly available on financial websites, (2) typical price range and factors affecting prices, (3) suggest user check specific sources like Kitco or local dealers."
+        "missing_aspects": "Unable to retrieve specific current gold prices after multiple attempts. Available information: (1) typical price range and factors affecting prices, (2) general market trends, (3) major factors influencing gold valuations. Recommend synthesizing answer with general guidance and suggesting user check financial websites directly."
         }
         ```
-        Reasoning: Wrong tool used, but also indicates user may have unrealistic expectation. Time to explain limitation and provide helpful alternative.
+        Reasoning: Multiple approaches tried and failed. Time to work with available general knowledge and be transparent about limitations.
         
         </decision_examples>
 
@@ -263,14 +261,14 @@ class PromptTemplates:
         ```json
         {
             "should_continue": true | false,
-            "missing_aspects": "specific guidance or empty string"
+            "missing_aspects": "description of what's missing or empty string"
         }
         ```
         
         - Use `should_continue` (not `is_sufficient`)
-        - When should_continue = false + gaps exist → explain in missing_aspects why stopping
+        - When should_continue = false + gaps exist → explain in missing_aspects what's missing and what we DO have
         - When should_continue = false + no gaps → missing_aspects = ""
-        - When should_continue = true → provide actionable next steps in missing_aspects
+        - When should_continue = true → describe what information is still needed (NOT how to get it)
         </output_format>
 
         <critical_reminders>
@@ -280,6 +278,7 @@ class PromptTemplates:
         4. **Consecutive failures ≥ 3** → very strong signal to stop
         5. **Same missing_aspects 2+ times** → information probably doesn't exist
         6. **Quality over coverage** - depth on key points > breadth on everything
+        7. **Focus on WHAT is missing, not HOW to find it** - tool selection is another agent's job
         </critical_reminders>
         """
     )

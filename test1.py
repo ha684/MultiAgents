@@ -10,10 +10,15 @@ API_KEY = "hapt68"
 USER_ID = "hafizh"
 APP_NAME = "single_query_test"
 
-# 👇👇👇 NHẬP THÔNG TIN CỦA BẠN TẠI ĐÂY 👇👇👇
-TARGET_KB_ID = "06926eb4-af94-7355-8000-765cda3cfeec"  # Điền Knowledge Base ID
-TARGET_QUERY = "Quy định về nghỉ phép năm như thế nào?"  # Điền câu hỏi bạn muốn test
-USE_AGENT = False  # True nếu muốn dùng Agent, False nếu thường
+TARGET_KB_ID = "06926eb4-af94-7355-8000-765cda3cfeec"
+TARGET_QUERY = (
+    "Nếu bạn phải thiết kế một framework đánh giá LLM dựa trên ba bài kiểm tra: "
+    "context attribution, hallucination tax và illusion of thinking, bạn sẽ tập trung vào những tiêu chí nào? "
+    "Ngoài ra, bạn sẽ xây dựng các tiêu chí định lượng hóa và đo lường kết quả như thế nào cho từng bài kiểm tra? "
+    "Theo bạn, mối liên hệ giữa ba khía cạnh này là gì? "
+    "Bạn có thể đề xuất sơ bộ một checklist hoặc quy trình tổng thể để áp dụng bộ tiêu chí này khi đánh giá một mô hình LLM thực tế không?"
+)
+USE_AGENT = False
 # ==========================================
 
 HEADERS = {

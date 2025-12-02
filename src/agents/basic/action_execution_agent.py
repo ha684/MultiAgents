@@ -82,7 +82,6 @@ class ActionExecutionAgent(BaseAgent):
         if action == "reason_only":
             system_prompt = PromptTemplates.REASONING_EXECUTION_PROMPT
             context_parts = [
-                f"Phase: {phase_title}",
                 knowledge_section,
                 learnings_section,
                 missing_section,
