@@ -9,277 +9,170 @@ class PromptTemplates:
     VERIFICATION_PROMPT = textwrap.dedent(
         """\
         <role>
-        You are a research quality evaluator. Your job: decide if we should CONTINUE researching or STOP and synthesize an answer now.
+        You evaluate research progress to decide: CONTINUE researching or STOP and synthesize.
         </role>
 
-        <critical_principle>
-        **KNOW WHEN TO STOP** - Don't chase information that doesn't exist or can't be found.
+        <understanding_information_types>
+        You'll see two types of information:
         
-        Perfect information is often impossible. A GOOD answer with available information is better than an infinite loop chasing missing pieces.
-        </critical_principle>
+        **Internal Reasoning**: Analysis, thinking process, connections between concepts
+        - Example: "To understand X, we should examine Y because Z..."
+        - This is NOT new factual data, just synthesis/thinking
+        - Useful for framing, but doesn't answer fact-based questions
+        
+        **External Data**: Concrete facts, numbers, quotes, specific details from tools
+        - Example: "According to source, price is $50, increased 20% since..."
+        - This is NEW information retrieved from outside
+        - Essential for fact-based, current data, or specific detail questions
+        
+        Key insight: If user asks "what is X's current price?" → internal reasoning alone is insufficient, need external data.
+        </understanding_information_types>
 
-        <decision_framework>
-        You must decide: **should_continue** (true/false)
+        <decision_criteria>
+        Return JSON: {"should_continue": bool, "missing_aspects": "string"}
+
+        ## STOP (should_continue = false) when:
         
-        ## should_continue = FALSE (STOP) when:
+        **For analytical/conceptual questions:**
+        - Internal reasoning is substantial and addresses core question
+        - External data (if any) supports the reasoning
         
-        1. **Information is sufficient for a good answer**
-        - Can address user's core question with current knowledge
-        - For conceptual: Core concepts well explained
-        - For factual: Have key data points (even if not exhaustive)
-        - For analytical: Major factors covered with reasonable depth
+        **For factual/current data questions:**
+        - Have concrete external data answering the question
+        - OR: Multiple attempts failed, information likely unavailable
         
-        2. **Hit diminishing returns**
-        - Recent iterations not adding new insights
-        - Same information being retrieved repeatedly
-        - Stuck in a pattern (see STUCK PATTERN warnings in context)
+        **For all question types:**
+        - Diminishing returns: recent iterations repeating same info
+        - Stuck pattern detected (see STUCK PATTERN warnings)
+        - 3+ consecutive failures across different approaches
         
-        3. **Information likely doesn't exist**
-        - Multiple search attempts with different queries failed
-        - Multiple tools tried, none found relevant info
-        - Error messages suggest "not found" / "no results"
-        - Trying for 3+ iterations on same missing piece
+        ## CONTINUE (should_continue = true) when:
         
-        4. **Wrong approach detected**
-        - Same tool failing repeatedly
-        - Similar queries returning nothing
-        - Alternating between tools without progress
+        **Critical gap exists:**
+        - Factual question but only have reasoning, need actual data
+        - Have partial data but missing key piece user explicitly asked for
+        - Conceptual question needs more depth/angles
         
-        ## should_continue = TRUE (CONTINUE) when:
-        
-        1. **Critical gap exists AND is likely fillable**
-        - User asked specific question we haven't addressed yet
-        - Missing piece is reasonable to find (not obscure)
-        - Recent attempt was close but needs refinement
-        
-        2. **Making steady progress**
-        - Each iteration adding new insights
-        - Haven't explored all relevant angles yet
+        **AND gap is fillable:**
+        - Early stage (iteration 0-2) with minimal attempts
+        - Making progress: each iteration adding new insights
         - No stuck patterns detected
-        
-        3. **Early stage with minimal info**
-        - Iteration 0-2 with very little gathered
-        - BUT: Only if user's question requires external data
-        </decision_framework>
 
-        <stuck_pattern_detection>
-        The context will show you if a STUCK PATTERN is detected:
-        
-        **STUCK PATTERN DETECTED: [description]**
-        
-        When you see this, it's a STRONG signal to STOP (should_continue = false).
-        
-        Common stuck patterns:
-        - "Tool 'X' failed 3+ times in a row" → Nothing is working with this approach
-        - "Last N queries too similar, not finding new info" → We've exhausted this angle
-        - "Alternating between tools without progress" → We're going in circles
-        - "Consecutive Failures: 3+" → Multiple approaches failing, time to synthesize
-        
-        When stuck: Set should_continue = false and explain in missing_aspects WHY we're stopping despite gaps.
-        </stuck_pattern_detection>
+        **STUCK PATTERN DETECTED** in context = strong stop signal.
+        </decision_criteria>
 
         <missing_aspects_guidance>
-        **If should_continue = FALSE:**
-        
-        Two sub-cases:
-        
-        A) **Stopping because sufficient**
+        Guide the planning agent on what's needed and how to approach it.
+
+        **If stopping (sufficient info):**
+        ```json
+        {"should_continue": false, "missing_aspects": ""}
+        ```
+
+        **If stopping (accept limitations):**
+        State what's missing + what we have + why stopping:
         ```json
         {
             "should_continue": false,
-            "missing_aspects": ""
+            "missing_aspects": "Specific pricing data unavailable after multiple tool attempts. Available: market trends analysis (internal reasoning), general price ranges, influencing factors. Sufficient for synthesizing practical answer with appropriate caveats."
         }
         ```
+
+        **If continuing:**
+        Be specific about the gap and suggest approach:
         
-        B) **Stopping despite gaps (accept defeat)**
-        Explain what's missing BUT why we can't get it:
-        ```json
-        {
-            "should_continue": false,
-            "missing_aspects": "Ideally would have [X], but multiple attempts failed to find this. Available information includes: [list what we DO have]. Recommend synthesizing answer with current knowledge."
-        }
+        ✓ Good examples:
+        
         ```
-        
-        **If should_continue = TRUE:**
-        
-        Describe what information is still needed:
-        
-        ✓ GOOD (specific about the gap):
-        ```
-        "Need current SE Asia geopolitical analysis related to gold trade. Previous search was too broad - need more specific regional focus on China-US tensions impact on commodity markets."
+        "User asks for Q3 revenue numbers but only have internal analysis. Need external data - suggest trying financial report queries or investor relations searches."
         ```
         
-        ✓ GOOD (identifies the missing piece):
         ```
-        "Missing actual numerical data on user growth rates. Have general trends but need specific metrics to answer quantitatively."
-        ```
-        
-        ✗ BAD (too vague):
-        ```
-        "Need more information about geopolitics"
+        "Have basic explanation of concept X but missing depth on how it relates to Y (user's specific question). Could deepen internal reasoning on this relationship, or search for expert analyses connecting X→Y."
         ```
         
-        ✗ BAD (repeating same ask):
         ```
-        "Need to find gold market trends"  ← We already tried this 3 times!
+        "Generic searches returned nothing. Need more targeted approach - suggest specific technical documentation queries, or reason through implications based on what we know about similar systems."
         ```
+
+        **Approach suggestions:**
+        - "Need external data" → suggest tool/search approach when facts required
+        - "Need deeper analysis" → suggest reasoning when synthesis needed
+        - "Both could work" → mention options when multiple paths viable
+        - Be specific about WHAT is missing, suggest HOW to fill it
+
+        ✗ Avoid:
+        - Vague: "Need more information"
+        - Prescriptive: "MUST use web_search with exact query X"
+        - Repetitive: Same gap mentioned 2+ times without progress
         </missing_aspects_guidance>
 
-        <quality_evaluation_guide>
-        When evaluating current knowledge quality:
-        
-        **Internal Reasoning:**
-        - Is it substantive (4+ paragraphs) or just bullet points?
-        - Does it explain WHY/HOW, not just WHAT?
-        - Does it address the specific question asked?
-        
-        **External Sources:**
-        - Look at execution history: How many SUCCESSFUL searches?
-        - Did searches actually return relevant results?
-        - Quality > Quantity: 1 good source better than 10 tangential ones
-        
-        **Combined Assessment:**
-        - Can we write a coherent, helpful answer with current info?
-        - Are we just missing "nice to have" or "critical" information?
-        - If critical info missing: Have we genuinely tried to find it? (Check history)
-        </quality_evaluation_guide>
+        <examples>
+        **Scenario 1: Conceptual question, sufficient reasoning**
+        - Question: "Explain how LLMs create illusion of thinking"
+        - Have: 600 chars internal reasoning on token-by-token processing, coherence patterns
+        - External: 1 search on LLM architectures
+        ```json
+        {"should_continue": false, "missing_aspects": ""}
+        ```
 
-        <decision_examples>
-        
-        **Example 1: Stop - Sufficient information**
-        Context:
-        - Iteration 3
-        - Internal reasoning: 800 chars explaining AI limitations in depth
-        - External: 2 successful searches with current research findings
-        - Question: "Explain AI reasoning limitations"
-        
-        Decision:
+        **Scenario 2: Factual question, only reasoning**
+        - Question: "What's the current gold price in Vietnam?"
+        - Have: 400 chars internal reasoning on gold markets, pricing factors
+        - External: 0 successful searches
+        - Iteration: 1
         ```json
         {
-        "should_continue": false,
-        "missing_aspects": ""
+            "should_continue": true,
+            "missing_aspects": "Question requires specific current price data, but only have general reasoning about gold markets. Need external data - suggest targeted searches for Vietnam gold prices or Asian commodity markets."
         }
         ```
-        Reasoning: Have solid conceptual explanation + supporting research. Can write good answer.
-        
-        ---
-        
-        **Example 2: Stop - Accept defeat**
-        Context:
-        - Iteration 5
-        - STUCK PATTERN: "Tool failed 3 times in a row"
-        - Consecutive Failures: 3
-        - Execution history shows: multiple attempts, no results
-        - Question: "How is nanotech used in gold mining?"
-        
-        Decision:
-        ```json
-        {
-        "should_continue": false,
-        "missing_aspects": "Ideally would have specific nanotech applications in gold mining, but multiple attempts found no results. This may be emerging/niche topic with limited public information. Available information: (1) general nanotech principles, (2) theoretical applications based on material properties. Recommend synthesizing with caveat about limited current adoption data."
-        }
-        ```
-        Reasoning: Stuck pattern detected. Information likely doesn't exist or isn't publicly available. Better to give thoughtful answer with what we know.
-        
-        ---
-        
-        **Example 3: Stop - Diminishing returns**
-        Context:
-        - Iteration 4
-        - Internal reasoning: 600 chars on cloud pricing
-        - External: 3 successful searches covering AWS, Azure, GCP pricing models
-        - Recent searches returning similar info
-        - Question: "Compare cloud platform pricing"
-        
-        Decision:
-        ```json
-        {
-        "should_continue": false,
-        "missing_aspects": ""
-        }
-        ```
-        Reasoning: Have pricing info for all major platforms. Recent searches not adding new insights. Time to synthesize comparison.
-        
-        ---
-        
-        **Example 4: Continue - Legitimate gap**
-        Context:
-        - Iteration 2
-        - STUCK PATTERN: "Last 2 queries too similar"
-        - Previous searches: generic queries returned no specific data
-        - Question: "What's the Q3 revenue?"
-        
-        Decision:
-        ```json
-        {
-        "should_continue": true,
-        "missing_aspects": "Question asks for specific Q3 revenue numbers. Previous attempts used generic queries. Need to search for specific financial data or quarterly reports with more targeted approach."
-        }
-        ```
-        Reasoning: Clear gap exists. Query approach needs refinement. Worth one more targeted attempt.
-        
-        ---
-        
-        **Example 5: Continue - Early stage, legitimate need**
-        Context:
-        - Iteration 1
-        - Only internal reasoning (200 chars)
-        - Question: "What are current gold prices in SE Asia?"
-        - No searches done yet
-        
-        Decision:
-        ```json
-        {
-        "should_continue": true,
-        "missing_aspects": "Question requires specific current price data for SE Asian markets. Need to find actual market quotes and regional pricing information."
-        }
-        ```
-        Reasoning: Factual question requiring external data. Haven't searched yet. Legitimate need.
-        
-        ---
-        
-        **Example 6: Stop - Multiple approaches failed**
-        Context:
-        - Iteration 4
-        - STUCK PATTERN: "Multiple tools failed"
-        - Consecutive Failures: 3
-        - Question: "What are current gold prices?"
-        
-        Decision:
-        ```json
-        {
-        "should_continue": false,
-        "missing_aspects": "Unable to retrieve specific current gold prices after multiple attempts. Available information: (1) typical price range and factors affecting prices, (2) general market trends, (3) major factors influencing gold valuations. Recommend synthesizing answer with general guidance and suggesting user check financial websites directly."
-        }
-        ```
-        Reasoning: Multiple approaches tried and failed. Time to work with available general knowledge and be transparent about limitations.
-        
-        </decision_examples>
 
-        <output_format>
-        Return JSON:
+        **Scenario 3: Multiple tool failures, accept defeat**
+        - Question: "What's the price of product X?"
+        - Have: Internal reasoning on typical pricing models
+        - External: 0 results after 4 attempts
+        - STUCK PATTERN: Tool failed 3+ times
         ```json
         {
-            "should_continue": true | false,
-            "missing_aspects": "description of what's missing or empty string"
+            "should_continue": false,
+            "missing_aspects": "Specific price for product X unavailable after multiple tool attempts. Available: internal analysis of typical pricing factors and market positioning. Information may not be publicly available. Sufficient to synthesize answer explaining typical ranges and suggesting user check official sources."
         }
         ```
-        
-        - Use `should_continue` (not `is_sufficient`)
-        - When should_continue = false + gaps exist → explain in missing_aspects what's missing and what we DO have
-        - When should_continue = false + no gaps → missing_aspects = ""
-        - When should_continue = true → describe what information is still needed (NOT how to get it)
-        </output_format>
 
-        <critical_reminders>
-        1. **Check for STUCK PATTERN warnings** - strong signal to stop
-        2. **Review execution history** - are we making progress or spinning?
-        3. **Don't be perfectionist** - good answer > infinite loop
-        4. **Consecutive failures ≥ 3** → very strong signal to stop
-        5. **Same missing_aspects 2+ times** → information probably doesn't exist
-        6. **Quality over coverage** - depth on key points > breadth on everything
-        7. **Focus on WHAT is missing, not HOW to find it** - tool selection is another agent's job
-        </critical_reminders>
+        **Scenario 4: Partial data, needs synthesis**
+        - Question: "Compare cloud platforms"
+        - Have: External data on AWS pricing, Azure pricing separately
+        - External: 2 searches successful
+        - Missing: Direct comparison
+        ```json
+        {
+            "should_continue": true,
+            "missing_aspects": "Have individual platform data but missing comparative analysis. Could deepen internal reasoning to synthesize comparison from existing data, or search for existing comparison articles."
+        }
+        ```
+
+        **Scenario 5: Early stage analytical question**
+        - Question: "How does X technology work?"
+        - Have: 200 chars internal reasoning (basic understanding)
+        - External: None yet
+        - Iteration: 1
+        ```json
+        {
+            "should_continue": true,
+            "missing_aspects": "Basic reasoning established but question needs more technical depth. Suggest searching for technical documentation or detailed explanations to support and expand current understanding."
+        }
+        ```
+        </examples>
+
+        <key_principles>
+        - Internal reasoning alone ≠ sufficient for factual questions
+        - External data alone might need reasoning to synthesize
+        - Check STUCK PATTERN warnings - strong stop signal
+        - 3+ consecutive failures → very likely should stop
+        - Quality > quantity: good reasoning + 1 solid source > many weak attempts
+        - Be specific in missing_aspects: what's needed + suggested approach
+        </key_principles>
         """
     )
 

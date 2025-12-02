@@ -43,8 +43,8 @@ class VerificationAgent(BaseAgent):
 
         Returns:
             {
-                "should_continue": bool,  # Changed from is_sufficient
-                "missing_aspects": str,   # What's missing (or why we're stopping)
+                "should_continue": bool,
+                "missing_aspects": str,
             }
         """
         max_iterations = 3
@@ -104,6 +104,7 @@ class VerificationAgent(BaseAgent):
 
         recent_5 = execution_history[-5:]
 
+        # Check for repeated tool failures
         recent_failures = [ex for ex in recent_5 if ex.get("status") == "failed"]
         if len(recent_failures) >= 3:
             failed_tool = recent_failures[0].get("subgraph", "unknown")
@@ -116,6 +117,7 @@ class VerificationAgent(BaseAgent):
                     "last_error": recent_failures[-1].get("error", "Unknown"),
                 }
 
+        # Check for similar queries
         recent_queries = [ex.get("query", "")[:50].lower() for ex in recent_5]
         if len(recent_queries) >= 3:
             first_words = set(recent_queries[0].split())
@@ -164,7 +166,8 @@ class VerificationAgent(BaseAgent):
         consecutive_failures: int,
     ) -> str:
         """
-        Build summary with clear signals about what's working and what's not.
+        Build summary with clear distinction between reasoning and external data.
+        Shows LATEST content (last 400 chars) to reflect most recent progress.
         """
         summary_parts = []
 
@@ -172,100 +175,106 @@ class VerificationAgent(BaseAgent):
         summary_parts.append("")
 
         if consecutive_failures > 0:
-            summary_parts.append(f"**Consecutive Failures**: {consecutive_failures}")
+            summary_parts.append(f"⚠️ **Consecutive Failures**: {consecutive_failures}")
             summary_parts.append("")
 
         if pattern_analysis["is_stuck"]:
             summary_parts.append(
-                f"**STUCK PATTERN DETECTED**: {pattern_analysis['description']}"
+                f"🔴 **STUCK PATTERN DETECTED**: {pattern_analysis['description']}"
             )
             summary_parts.append(
-                "   → Consider stopping and working with available information"
+                "   → Strong signal to stop and work with available information"
             )
             summary_parts.append("")
 
         has_reasoning = len(internal_reasoning) > 0
         has_external = len(accumulated_context) > 0
 
-        summary_parts.append("### Available Information:")
+        summary_parts.append("### What We Have:")
         summary_parts.append("")
 
         if has_reasoning:
+            reasoning_length = len(internal_reasoning)
             summary_parts.append(
-                f"✓ **Internal Reasoning**: {len(internal_reasoning)} chars"
+                f"**Internal Reasoning**: {reasoning_length} chars of analysis/thinking"
             )
-            summary_parts.append("  Source: Your own knowledge and analysis")
-            summary_parts.append("")
+        else:
+            summary_parts.append("**Internal Reasoning**: None yet")
 
         if has_external:
+            external_length = len(accumulated_context)
             successful_searches = [
                 ex for ex in execution_history if ex.get("status") == "success"
             ]
             summary_parts.append(
-                f"✓ **External Sources**: {len(accumulated_context)} chars"
+                f"**External Data**: {external_length} chars from {len(successful_searches)} successful tool calls"
             )
-            summary_parts.append(
-                f"  From {len(successful_searches)} successful searches:"
-            )
-            for ex in successful_searches[-3:]:
-                subgraph = ex.get("subgraph", "unknown")
-                query = ex.get("query", "")[:60]
-                result_count = ex.get("result_count", "?")
-                summary_parts.append(
-                    f'  • {subgraph}: "{query}" ({result_count} results)'
-                )
-            summary_parts.append("")
+        else:
+            summary_parts.append("**External Data**: None yet")
 
-        if not has_reasoning and not has_external:
-            summary_parts.append("**No information gathered yet**")
-            summary_parts.append("")
+        summary_parts.append("")
 
         if execution_history:
-            summary_parts.append("### Execution History:")
+            summary_parts.append("### Recent Attempts:")
             summary_parts.append("")
 
-            recent_10 = execution_history[-10:]
+            recent_10 = execution_history[-3:]
             success_count = sum(1 for ex in recent_10 if ex.get("status") == "success")
             fail_count = len(recent_10) - success_count
 
             summary_parts.append(
-                f"Recent attempts (last {len(recent_10)}): {success_count} success, {fail_count} failed"
+                f"Last {len(recent_10)} iterations: {success_count} ✓ success, {fail_count} ✗ failed"
             )
             summary_parts.append("")
 
-            for ex in recent_10[-5:]:
+            for ex in recent_10[-3:]:
                 iter_num = ex.get("iteration", "?")
                 status = "✓" if ex.get("status") == "success" else "✗"
                 subgraph = ex.get("subgraph", "unknown")
                 query = ex.get("query", "")[:50]
 
-                line = f'[{iter_num}] {status} {subgraph}: "{query}"'
-                if ex.get("status") == "failed":
-                    error = ex.get("error", "Unknown error")[:60]
-                    line += f" → Error: {error}"
+                line = f'  [{iter_num}] {status} {subgraph}: "{query}"'
+
+                if ex.get("status") == "success":
+                    result_count = ex.get("result_count", "?")
+                    line += f" → {result_count} results"
+                else:
+                    error = ex.get("error", "Unknown")[:60]
+                    line += f" → {error}"
 
                 summary_parts.append(line)
             summary_parts.append("")
 
         if has_reasoning:
-            summary_parts.append("### Internal Reasoning Preview:")
-            preview = (
-                internal_reasoning[:400] + "..."
-                if len(internal_reasoning) > 400
-                else internal_reasoning
-            )
+            summary_parts.append("### Internal Reasoning (Latest):")
+            summary_parts.append("")
+            if len(internal_reasoning) > 8000:
+                preview = "..." + internal_reasoning[-8000:]
+            else:
+                preview = internal_reasoning
             summary_parts.append(preview)
             summary_parts.append("")
 
         if has_external:
-            summary_parts.append("### External Sources Preview:")
-            preview = (
-                accumulated_context[:400] + "..."
-                if len(accumulated_context) > 400
-                else accumulated_context
-            )
+            summary_parts.append("### External Data (Latest):")
+            summary_parts.append("")
+            if len(accumulated_context) > 8000:
+                preview = "..." + accumulated_context[-8000:]
+            else:
+                preview = accumulated_context
             summary_parts.append(preview)
             summary_parts.append("")
+
+        summary_parts.append("### Note:")
+        summary_parts.append(
+            "- Internal Reasoning = analysis/thinking process (not concrete facts)"
+        )
+        summary_parts.append(
+            "- External Data = specific facts/numbers/details from tools"
+        )
+        summary_parts.append(
+            "- For factual questions: External Data required, reasoning alone insufficient"
+        )
 
         return "\n".join(summary_parts)
 

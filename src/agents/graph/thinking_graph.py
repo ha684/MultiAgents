@@ -32,7 +32,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         super().__init__()
         self.graph_name = "ThinkingGraph"
         self.compiled_graph = self._build_graph()
-        self.max_iterations = 30
+        self.max_iterations = 15
         self.min_knowledge_threshold = 500
 
     @property
@@ -338,9 +338,10 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         2. Document results: Add citations, compress, store in accumulated_context
         """
         iteration = state.get("iteration_count", 0)
-        query = state.get("direction", "")
+        phase_title = state.get("phase_title", "")
+        direction = state.get("direction", "")
         subgraph_name = state.get("selected_subgraph", "unknown")
-
+        query = f"{phase_title} {direction}"
         if state.get("_is_sql_iteration", False):
             sql_result = state.get("_sql_result", "")
 

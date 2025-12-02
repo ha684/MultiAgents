@@ -116,13 +116,7 @@ async def main():
     orchestrator = MainGraph()
 
     human_message_1 = HumanMessage(
-        content=(
-            "Nếu bạn phải thiết kế một framework đánh giá LLM dựa trên ba bài kiểm tra: "
-            "context attribution, hallucination tax và illusion of thinking, bạn sẽ tập trung vào những tiêu chí nào? "
-            "Ngoài ra, bạn sẽ xây dựng các tiêu chí định lượng hóa và đo lường kết quả như thế nào cho từng bài kiểm tra? "
-            "Theo bạn, mối liên hệ giữa ba khía cạnh này là gì? "
-            "Bạn có thể đề xuất sơ bộ một checklist hoặc quy trình tổng thể để áp dụng bộ tiêu chí này khi đánh giá một mô hình LLM thực tế không?"
-        ),
+        content="""Tìm cho tôi thông tin vì sao LMM thường sai khi đếm vật trong ảnh, sau đó check xem có bao nhiêu user đang hoạt động trong hệ thống?""",
         additional_kwargs=context_metadata,
     )
 

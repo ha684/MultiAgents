@@ -291,7 +291,7 @@ RAG_SEARCH_PROFILE = SubgraphProfile(
             ],
             exclude_when=[
                 "explicitly asks for 'latest' or 'recent' or 'current' information",
-                "asks for quantitative data or database queries (use sql_query)",
+                "asks for quantitative data or database queries",
                 "asks to verify breaking news or very recent events (within days)",
             ],
         ),
@@ -309,13 +309,6 @@ RAG_SEARCH_PROFILE = SubgraphProfile(
                 "• Needs domain knowledge or reference material\n"
                 "• Asks about things that might be documented\n"
                 "\n"
-                "PREFER this over web_search UNLESS:\n"
-                "• User explicitly needs 'latest/recent/current' information\n"
-                "• Query is clearly about breaking news or very recent events\n"
-                "• Asks to verify current status of external entities\n"
-                "\n"
-                "Philosophy: Try knowledge base first for informational queries. "
-                "Web search is for verified recency needs."
             ),
             expected_outcome="Relevant information from stored knowledge with source references",
         ),
@@ -392,8 +385,8 @@ WEB_SEARCH_PROFILE = SubgraphProfile(
                 "updated",
             ],
             exclude_when=[
-                "asks for quantitative database metrics (use sql_query)",
-                "general informational query without recency requirement (try rag_search first)",
+                "asks for quantitative database metrics",
+                "general informational query without recency requirement",
             ],
         ),
         action=RoutingAction(
@@ -409,12 +402,6 @@ WEB_SEARCH_PROFILE = SubgraphProfile(
                 "• Real-time data (stock prices, weather, live scores)\n"
                 "• Updates or announcements specifically mentioned as recent\n"
                 "\n"
-                "DO NOT route here for:\n"
-                "• General informational questions without recency needs\n"
-                "• Conceptual or how-to questions (prefer rag_search)\n"
-                "• Historical facts or established knowledge\n"
-                "\n"
-                "Transform vague queries into specific, time-aware search questions."
             ),
             expected_outcome="Current information with timestamps and source credibility",
         ),
@@ -628,7 +615,7 @@ def seed_base_subgraphs():
     Call this on application startup.
     """
     SubgraphRegistry.register(RAG_SEARCH_PROFILE)
-    SubgraphRegistry.register(WEB_SEARCH_PROFILE)
+    # SubgraphRegistry.register(WEB_SEARCH_PROFILE)
 
 
 def enable_sql(db_url: str, allow_tables: list[str]):

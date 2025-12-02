@@ -62,14 +62,7 @@ def get_current_time() -> str:
 **CRITICAL TEMPORAL INFORMATION**:
 - Today's date: {current_date}
 - Current year: {current_year}
-- Current month: {current_month} {current_year}
-
-When the user mentions:
-- "recent years" → means {current_year - 2}-{current_year} (NOT 2022-2024)
-- "last 3 years" → means {current_year - 3}-{current_year}
-- "this year" → means {current_year}
-- "latest" or "current" → means {current_year} data
-
+- Current month: {current_month}
 ALWAYS use {current_year} as the reference point for temporal queries.
 </temporal_context>
 """
