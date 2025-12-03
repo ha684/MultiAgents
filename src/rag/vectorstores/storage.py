@@ -1,5 +1,4 @@
 # src/rag/vectorstores/storage.py
-from typing import List, Optional
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
@@ -20,7 +19,7 @@ class VectorStorage:
     This class provides methods to store and retrieve vectors.
     """
 
-    def __init__(self, embeddings: Optional[Embeddings] = None):
+    def __init__(self, embeddings: Embeddings | None = None):
         embeddings = embeddings or embedding
         sparse_model_name = "Qdrant/bm42-all-minilm-l6-v2-attentions"
         sparse_embeddings = FastEmbedSparse(
@@ -47,7 +46,7 @@ class VectorStorage:
     def client(self) -> AsyncQdrantClient:
         return self.storage.client
 
-    async def add_chunks(self, chunks: List[Document]) -> List[str]:
+    async def add_chunks(self, chunks: list[Document]) -> list[str]:
         if not chunks:
             return []
 
@@ -55,7 +54,7 @@ class VectorStorage:
 
     async def update_chunks_status(
         self,
-        ids: List[str],
+        ids: list[str],
         active: bool,
         vector_collection_name: str = settings.vector_collection_name,
     ) -> models.UpdateResult:
@@ -103,7 +102,7 @@ class VectorStorage:
     async def delete_chunks(
         self,
         vector_collection_name: str = settings.vector_collection_name,
-        ids: Optional[List[str]] = None,
+        ids: list[str] | None = None,
     ) -> bool | None:
         """
         Delete document chunks from the vector storage.
@@ -162,7 +161,7 @@ class VectorStorage:
         doc_id: str,
         vector_collection_name: str = settings.vector_collection_name,
         limit: int = 100,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Get all chunk IDs for a specific document ID.
 
@@ -202,7 +201,7 @@ class VectorStorage:
         doc_id: str,
         vector_collection_name: str = settings.vector_collection_name,
         limit: int = 10000,
-    ) -> List[Document]:
+    ) -> list[Document]:
         """
         Get all chunks (as Document objects) for a specific document ID.
 

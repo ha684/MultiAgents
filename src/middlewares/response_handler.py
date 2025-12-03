@@ -1,7 +1,7 @@
 # src/middlewares/response_handler.py
-from datetime import datetime
 import json
-from typing import Any, Dict
+from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import Request
@@ -103,7 +103,7 @@ class ResponseHandlerMiddleware(BaseHTTPMiddleware):
 
     def _create_envelope(
         self, data: Any, status_code: int, request: Request
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Create standard response envelope"""
         is_success = 200 <= status_code < 400
 

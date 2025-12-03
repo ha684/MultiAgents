@@ -1,7 +1,6 @@
 # src/core/config/settings.py
-from datetime import timedelta
 import os
-from typing import List, Optional
+from datetime import timedelta
 
 from pydantic import ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -48,13 +47,13 @@ class Settings(BaseSettings):
 
     # Websearch configuration
     enable_websearch: bool = False
-    websearch_provider: Optional[str] = None
-    tavily_api_key: Optional[str] = None
-    firecrawl_api_url: Optional[str] = None
-    firecrawl_api_key: Optional[str] = None
+    websearch_provider: str | None = None
+    tavily_api_key: str | None = None
+    firecrawl_api_url: str | None = None
+    firecrawl_api_key: str | None = None
 
-    openai_api_key: Optional[str] = None
-    openai_model_name: Optional[str] = None
+    openai_api_key: str | None = None
+    openai_model_name: str | None = None
 
     # File storage configuration
     temp_dir: str = os.path.join(os.path.dirname(os.path.dirname(__file__)), "tmp")
@@ -77,31 +76,31 @@ class Settings(BaseSettings):
     session_expire_hours: int = 24
 
     # OAuth Configuration
-    google_client_id: Optional[str] = os.getenv("GOOGLE_CLIENT_ID")
-    google_client_secret: Optional[str] = os.getenv("GOOGLE_CLIENT_SECRET")
-    google_refresh_token: Optional[str] = os.getenv("GOOGLE_REFRESH_TOKEN")
+    google_client_id: str | None = os.getenv("GOOGLE_CLIENT_ID")
+    google_client_secret: str | None = os.getenv("GOOGLE_CLIENT_SECRET")
+    google_refresh_token: str | None = os.getenv("GOOGLE_REFRESH_TOKEN")
 
-    github_client_id: Optional[str] = os.getenv("GITHUB_CLIENT_ID")
-    github_client_secret: Optional[str] = os.getenv("GITHUB_CLIENT_SECRET")
+    github_client_id: str | None = os.getenv("GITHUB_CLIENT_ID")
+    github_client_secret: str | None = os.getenv("GITHUB_CLIENT_SECRET")
 
     oauth_redirect_url: str = "http://localhost:8000/auth/oauth/callback"
-    google_scopes: List[str] = ["https://www.googleapis.com/auth/gmail.send"]
+    google_scopes: list[str] = ["https://www.googleapis.com/auth/gmail.send"]
     frontend_url: str = "http://localhost:3000"
 
     # Rate Limiting
-    rate_limit_requests: int = 100
+    rate_limit_requests: int = 2000
     rate_limit_window_minutes: int = 1
     login_rate_limit_requests: int = 5
     login_rate_limit_window_minutes: int = 15
 
     # CORS Configuration
-    cors_allow_origins: List[str] = [
+    cors_allow_origins: list[str] = [
         "https://www.quanlytrithuc.com",
         "http://localhost:8080",
     ]
     cors_allow_credentials: bool = True
-    cors_allow_methods: List[str] = ["*"]
-    cors_allow_headers: List[str] = ["*"]
+    cors_allow_methods: list[str] = ["*"]
+    cors_allow_headers: list[str] = ["*"]
 
     email_verification_token_expire_minutes: int = 10
     password_reset_token_expire_hours: int = 1
@@ -111,14 +110,14 @@ class Settings(BaseSettings):
     )
 
     celery_worker_num: int = 3
-    rerank_model: Optional[str] = "nx-text-rerank-001"
+    rerank_model: str | None = "nx-text-rerank-001"
     cache_dir: str = "./.cache"
 
     @field_validator("websearch_provider")
     @classmethod
     def validate_websearch_provider(
-        cls, v: Optional[SearchProvider], info: ValidationInfo
-    ) -> Optional[SearchProvider]:
+        cls, v: SearchProvider | None, info: ValidationInfo
+    ) -> SearchProvider | None:
         """Validate that websearch provider is set when websearch is enabled."""
         if info.data.get("enable_websearch", False) and v is None:
             raise ValueError(
@@ -128,9 +127,7 @@ class Settings(BaseSettings):
 
     @field_validator("tavily_api_key")
     @classmethod
-    def validate_tavily_api_key(
-        cls, v: Optional[str], info: ValidationInfo
-    ) -> Optional[str]:
+    def validate_tavily_api_key(cls, v: str | None, info: ValidationInfo) -> str | None:
         """Validate that Tavily API key is provided when Tavily is selected as provider."""
         if (
             info.data.get("enable_websearch", False)
@@ -145,8 +142,8 @@ class Settings(BaseSettings):
     @field_validator("firecrawl_api_key")
     @classmethod
     def validate_firecrawl_api_key(
-        cls, v: Optional[str], info: ValidationInfo
-    ) -> Optional[str]:
+        cls, v: str | None, info: ValidationInfo
+    ) -> str | None:
         """Validate that Firecrawl API key is provided when Firecrawl is selected as provider."""
         if (
             info.data.get("enable_websearch", False)
@@ -161,8 +158,8 @@ class Settings(BaseSettings):
     @field_validator("firecrawl_api_url")
     @classmethod
     def validate_firecrawl_api_url(
-        cls, v: Optional[str], info: ValidationInfo
-    ) -> Optional[str]:
+        cls, v: str | None, info: ValidationInfo
+    ) -> str | None:
         """Validate that Firecrawl API URL is provided when Firecrawl is selected as provider."""
         if (
             info.data.get("enable_websearch", False)

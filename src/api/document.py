@@ -1,22 +1,23 @@
 # src/api/document.py
-from typing import List, Optional, Sequence, Dict, Any
 import uuid
+from collections.abc import Sequence
+from typing import Any
 
-from fastapi import APIRouter, UploadFile, File, Request, HTTPException, Depends
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
+from src.database.models.user import User
+from src.dependencies.auth import get_current_user
 from src.domain.schemas.document import (
+    DocumentListResponse,
+    DocumentProcessingStatusResponse,
     DocumentResponse,
     DocumentStatusEnum,
     DocumentUploadResponse,
-    DocumentListResponse,
-    DocumentProcessingStatusResponse,
     PaginationParams,
     SearchParams,
 )
 from src.domain.schemas.qa import DocumentQAResponse
 from src.services.document_service import DocumentService
-from src.database.models.user import User
-from src.dependencies.auth import get_current_user
 
 router = APIRouter(
     prefix="/documents", tags=["Document"], dependencies=[Depends(get_current_user)]
@@ -29,7 +30,7 @@ async def upload_document(
     request: Request,
     knowledge_base_id: uuid.UUID,
     file: UploadFile = File(...),
-    metadata: Optional[Dict[str, Any]] = None,
+    metadata: dict[str, Any] | None = None,
     current_user: User = Depends(get_current_user),
 ) -> DocumentUploadResponse:
     """
@@ -76,7 +77,7 @@ async def get_document(document_id: uuid.UUID) -> DocumentResponse:
 
 
 @router.get("/documents/{document_id}/content")
-async def get_document_content(document_id: uuid.UUID) -> Dict[str, Any]:
+async def get_document_content(document_id: uuid.UUID) -> dict[str, Any]:
     """
     Get full text content of a processed document.
     Only available after document processing is complete.
@@ -121,7 +122,7 @@ async def get_document_status(
 @router.post("/status")
 async def get_document_status_by_ids(
     document_ids: list[uuid.UUID],
-) -> List[DocumentProcessingStatusResponse]:
+) -> list[DocumentProcessingStatusResponse]:
     """
     Get processing status for multiple documents.
     """
@@ -136,8 +137,8 @@ async def list_documents(
     knowledge_base_id: uuid.UUID,
     skip: int = 0,
     limit: int = 10,
-    query: Optional[str] = None,
-    created_by: Optional[str] = None,
+    query: str | None = None,
+    created_by: str | None = None,
 ) -> DocumentListResponse:
     """
     List documents in a knowledge base.
@@ -194,8 +195,8 @@ async def get_qa_pairs(document_id: uuid.UUID) -> Sequence[DocumentQAResponse]:
 
 @router.post("/{document_id}/related")
 async def get_related_documents(
-    document_id: str, kb_id: str, config: Optional[Dict] = None
-) -> Dict:
+    document_id: str, kb_id: str, config: dict | None = None
+) -> dict:
     """
     Get related documents for a document.
     """

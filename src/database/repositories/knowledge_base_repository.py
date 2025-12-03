@@ -1,7 +1,7 @@
 # src/database/repositories/knowledge_base_repository.py
-from datetime import datetime
-from typing import List, Optional
+import builtins
 import uuid
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
@@ -24,7 +24,7 @@ class KnowledgeBaseRepository:
     async def create(
         self,
         name: str,
-        description: Optional[str],
+        description: str | None,
         user_id: str,
     ) -> KnowledgeBaseResponse:
         """Create a new knowledge base"""
@@ -44,8 +44,8 @@ class KnowledgeBaseRepository:
             raise e
 
     async def get(
-        self, kb_id: uuid.UUID, user_id: Optional[str] = None
-    ) -> Optional[KnowledgeBase]:
+        self, kb_id: uuid.UUID, user_id: str | None = None
+    ) -> KnowledgeBase | None:
         """Get a knowledge base by ID"""
         try:
             async with DatabaseSession() as session:
@@ -74,11 +74,11 @@ class KnowledgeBaseRepository:
     async def update_knowledge_base(
         self,
         kb_id: uuid.UUID,
-        name: Optional[str],
-        description: Optional[str],
-        is_active: Optional[bool],
+        name: str | None,
+        description: str | None,
+        is_active: bool | None,
         user_id: str,
-    ) -> Optional[KnowledgeBaseResponse]:
+    ) -> KnowledgeBaseResponse | None:
         try:
             async with DatabaseSession() as session:
                 stmt = select(KnowledgeBase).where(
@@ -194,7 +194,7 @@ class KnowledgeBaseRepository:
 
     async def build_list_response(
         self,
-        kb_list: List[KnowledgeBaseResponse],
+        kb_list: builtins.list[KnowledgeBaseResponse],
         total: int,
         skip: int,
         limit: int,

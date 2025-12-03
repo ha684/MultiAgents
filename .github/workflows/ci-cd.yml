@@ -62,18 +62,20 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
 
-      - name: Install Python dependencies
+      - name: Sync dependencies from lock file
         run: |
-          python -m pip install --upgrade pip
-          pip install pytest pytest-asyncio pytest-cov pytest-mock httpx
-          pip install -e .
+          uv sync --frozen --all-extras
 
       - name: Set up test database
         env:
@@ -81,10 +83,11 @@ jobs:
         run: |
           psql -h localhost -U postgres -c "CREATE DATABASE test_kms_db;" || true
 
-      - name: Run linting
+      - name: Auto-format code
         run: |
-          pip install ruff
-          ruff check src/ tests/ --fix || true
+          uv run black src/ tests/
+          uv run isort src/ tests/
+          uv run ruff check src/ tests/ --fix
 
       - name: Run unit tests
         env:
@@ -96,7 +99,7 @@ jobs:
           QDRANT_HOST: localhost
           QDRANT_PORT: 6333
         run: |
-          pytest tests/unit_test/ \
+          uv run pytest tests/unit_test/ \
             -v \
             --cov=src \
             --cov-report=xml \
@@ -115,7 +118,7 @@ jobs:
           QDRANT_HOST: localhost
           QDRANT_PORT: 6333
         run: |
-          pytest tests/integration_test/ \
+          uv run pytest tests/integration_test/ \
             -v \
             --cov=src \
             --cov-append \
@@ -134,7 +137,7 @@ jobs:
           QDRANT_HOST: localhost
           QDRANT_PORT: 6333
         run: |
-          pytest tests/e2e/ \
+          uv run pytest tests/e2e/ \
             -v \
             --cov=src \
             --cov-append \
@@ -173,27 +176,27 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff black isort mypy
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
-      - name: Run Ruff linter
+      - name: Sync dependencies from lock file
         run: |
-          ruff check src/ tests/ --output-format=github
+          uv sync --frozen --all-extras
 
-      - name: Run Black formatter check
+      - name: Format code (auto-fix)
         run: |
-          black --check src/ tests/
+          uv run black src/ tests/
+          uv run isort src/ tests/
+          uv run ruff check src/ tests/ --fix
 
-      - name: Run isort import sorting check
+      - name: Run linting checks
         run: |
-          isort --check-only src/ tests/
-
-      - name: Run type checking with mypy
-        continue-on-error: true
-        run: |
-          mypy src/ --ignore-missing-imports --no-strict-optional
+          uv run ruff check src/ tests/ --output-format=github
+          uv run black --check src/ tests/
+          uv run isort --check-only src/ tests/
+          uv run mypy src/ --ignore-missing-imports --no-strict-optional
 
   security-scan:
     name: Security Scanning
@@ -208,19 +211,20 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install bandit safety
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
-      - name: Run Bandit security scan
+      - name: Sync dependencies from lock file
         run: |
-          bandit -r src/ -f json -o bandit-report.json || true
+          uv sync --frozen --all-extras
 
-      - name: Run Safety dependency check
+      - name: Run security scans
         continue-on-error: true
         run: |
-          safety check --json || true
+          uv run bandit -r src/ -f json -o bandit-report.json || true
+          uv run safety check --json || true
 
       - name: Upload security reports
         uses: actions/upload-artifact@v4

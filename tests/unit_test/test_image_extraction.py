@@ -1,8 +1,9 @@
-import fitz  # PyMuPDF
+import json
 import os
 import re
-import json
 import string
+
+import fitz  # PyMuPDF
 
 # ====== REGEX ======
 ANSWER_RE = re.compile(r"^\s*(\d+)\s*[\.\)]")  # "1. ..." / "1) ..."
@@ -52,7 +53,7 @@ def rect_overlap_ratio(ax0, ax1, bx0, bx1):
 
 def answer_has_vector_underline(line_rects, hlines, y_tol=2.0, x_cover=0.5):
     """Fallback: so khớp đường kẻ ngang với từng dòng của đáp án."""
-    for x0, y0, x1, y1 in line_rects:
+    for x0, _y0, x1, y1 in line_rects:
         for lx0, lx1, ly in hlines:
             if abs(ly - y1) <= y_tol:
                 if rect_overlap_ratio(x0, x1, lx0, lx1) >= x_cover:
@@ -106,7 +107,9 @@ def extract_questions_answers_images(pdf_path, out_img_dir, out_json_path):
         # B) fallback vector underline (theo từng dòng, theo hlines cùng trang)
         if not has_ul:
             for rects, hls in zip(
-                current_answer["line_bboxes"], current_answer["line_hlines"]
+                current_answer["line_bboxes"],
+                current_answer["line_hlines"],
+                strict=False,
             ):
                 if answer_has_vector_underline([rects], hls):
                     has_ul = True

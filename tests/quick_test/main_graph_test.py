@@ -1,16 +1,17 @@
 # tests/intergration_test/main_graph_test.py
-from src.agents.main_graph import OrchestratorGraph
-from src.domain.schemas.chat import SearchProvider, WebSearchConfig
-from langchain_core.messages import HumanMessage
-from src.core.config.settings import settings
-from src.utils.logger_conf import logger
-from langchain_core.runnables.schema import StreamEvent
 import asyncio
 import time
 
+from langchain_core.messages import HumanMessage
+from langchain_core.runnables.schema import StreamEvent
 
-class OrchestratorStreamer:
-    """Helper class to visualize streaming from OrchestratorGraph"""
+from src.agents.main_graph import MainGraph
+from src.core.config.settings import settings
+from src.utils.logger_conf import logger
+
+
+class MainGraphStreamer:
+    """Helper class to visualize streaming from MainGraph"""
 
     def __init__(self):
         self.colors = {
@@ -33,12 +34,10 @@ class OrchestratorStreamer:
             print(f"{c}║{reset} {content}")
         print(f"{c}{'=' * 70}{reset}")
 
-    async def stream_orchestrator(
-        self, orchestrator: OrchestratorGraph, conversation: list
-    ):
-        """Stream orchestrator execution with visual feedback"""
+    async def stream_orchestrator(self, orchestrator: MainGraph, conversation: list):
+        """Stream MainGraph execution with visual feedback"""
 
-        self._print_box("🚀 STARTING ORCHESTRATOR", color="cyan")
+        self._print_box("🚀 STARTING MAIN GRAPH", color="cyan")
         print(f"📝 Query: {conversation[-1].content}\n")
 
         llm_buffer = ""
@@ -55,7 +54,7 @@ class OrchestratorStreamer:
 
             if kind == "on_chain_start":
                 stats["nodes"].append(name)
-                if name in ["SimpleSearchGraph", "ResearchGraph", "OrchestratorGraph"]:
+                if name in ["ThinkingGraph", "NormalGraph", "MainGraph"]:
                     self._print_box(f"🔄 Graph: {name}", color="cyan")
                 else:
                     self._print_box(f"🔄 NODE: {name}", color="blue")
@@ -63,7 +62,7 @@ class OrchestratorStreamer:
             elif kind == "on_chain_end":
                 output = event.get("data", {}).get("output")
 
-                if name == "OrchestratorGraph" and not is_graph_completed:
+                if name == "MainGraph" and not is_graph_completed:
                     is_graph_completed = True
                     final_result = output
                     continue
@@ -108,25 +107,39 @@ class OrchestratorStreamer:
 async def main():
     """Test orchestrator with streaming"""
 
-    context_metadata = {"kb_id": "068dbcfd-ff20-7647-8000-c7cfdf551423"}
-    web_search_config = WebSearchConfig(
-        provider=SearchProvider.TAVILY,
-        active=False,
-        api_key=settings.tavily_api_key,
-    )
-    context_metadata.update({"web_search_config": web_search_config.model_dump()})
-
+    context_metadata = {
+        "kb_id": "06926eb4-af94-7355-8000-765cda3cfeec",
+        "db_url": settings.database_url,
+        "allow_tables": ["conversations", "documents", "knowledge_bases", "users"],
+    }
     logger.info("Initializing OrchestratorGraph...")
-    orchestrator = OrchestratorGraph()
+    orchestrator = MainGraph()
 
-    human_message = HumanMessage(
-        content="Given the recent advancements in nanotechnology and AI-assisted mineral extraction, how would the projected market value and extraction yield of gold in Southeast Asia evolve over the next decade, considering current geopolitical trends, environmental constraints, and the financial strategies of major multinational mining corporations operating in the region?",
-        additional_kwargs={"message_metadata": context_metadata},
+    human_message_1 = HumanMessage(
+        content="""Tìm trên web các mô hình kinh doanh AI đang thịnh hành nhất (AI-as-a-service, agentic workflow, AI automation…). Sau đó, từ bảng documents, hãy cho biết có bao nhiêu tài liệu được upload trong 7 ngày gần nhất và ai là người upload chúng (join với bảng users nếu cần).""",
+        additional_kwargs=context_metadata,
     )
-    conversation = [human_message]
+
+    # # # Mô phỏng response từ model
+    # ai_response_1 = AIMessage(
+    #     content="Xin lỗi, tôi không có thông tin cụ thể về tổng số cuộc hội thoại hiện tại. Bạn có thể cung cấp thêm chi tiết hoặc làm rõ câu hỏi của bạn không?"
+    # )
+
+    # # # Turn 2: Câu hỏi vague thứ 2 (giống turn 1 nhưng hơi khác)
+    # human_message_2 = HumanMessage(
+    #     content="Tôi cần biết hiện trong database có bao nhiêu cuộc trò chuyện. Cũng như là tổng số user đang sử dụng hệ thống.",
+    #     additional_kwargs=context_metadata,
+    # )
+
+    # Xây dựng conversation history
+    conversation = [
+        human_message_1,
+        # ai_response_1,
+        # human_message_2,  # Câu hỏi vague lần 2
+    ]
 
     logger.info("OrchestratorGraph initialized successfully.\n")
-    streamer = OrchestratorStreamer()
+    streamer = MainGraphStreamer()
     await streamer.stream_orchestrator(orchestrator, conversation)
 
 

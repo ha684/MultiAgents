@@ -1,15 +1,12 @@
 # src/agents/basic/summary_agent.py
 
-from typing import List
 
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.messages import get_buffer_string
+from langchain_core.messages import HumanMessage, SystemMessage, get_buffer_string
 
 from src.agents.basic.base import BaseAgent
 from src.domain.schemas.chat import Message
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
-
 
 SUMMARY_PROMPT_TEMPLATE = """You are a conversation summary expert. Your task is to summarize a conversation history into a single comprehensive paragraph that preserves all important context.
 
@@ -41,14 +38,14 @@ class SummaryAgent(BaseAgent):
         super().__init__()
         logger.info("Summary Agent initialized successfully.")
 
-    def count_tokens(self, messages: List[Message]) -> int:
+    def count_tokens(self, messages: list[Message]) -> int:
         """Count tokens in conversation history."""
         return self.llm.get_num_tokens(get_buffer_string(messages))
 
-    async def ainvoke(self, messages: List[Message]) -> str:
+    async def ainvoke(self, messages: list[Message]) -> str:
         """Summarize conversation history to preserve key context while reducing tokens."""
         try:
-            conversation_text = self._format_messages_for_summary(messages)
+            conversation_text = get_buffer_string(messages)
             system_prompt = SystemMessage(content=SUMMARY_PROMPT_TEMPLATE)
             user_prompt = HumanMessage(
                 content=f"""Please analyze and summarize the following conversation history:{conversation_text}
@@ -59,18 +56,8 @@ class SummaryAgent(BaseAgent):
             return response.content
 
         except Exception as e:
-            logger.error(f"Error generating conversation summary: {e}")
+            logger.exception(f"Error generating conversation summary: {repr(e)}")
             return "Previous conversation context available but could not be fully summarized due to processing error."
-
-    def _format_messages_for_summary(self, messages: List[Message]) -> str:
-        """Format messages for summary analysis."""
-        formatted = []
-        for i, message in enumerate(messages):
-            role = "User" if isinstance(message, HumanMessage) else "Assistant"
-            content = getattr(message, "content", "")
-            formatted.append(f"{role}: {content}")
-
-        return "\n\n".join(formatted)
 
     def append_summary_to_user_message(
         self, user_message: HumanMessage, summary: str

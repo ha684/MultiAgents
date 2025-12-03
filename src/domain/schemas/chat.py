@@ -1,16 +1,15 @@
 # src/domain/schemas/chat.py
 from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, List, Literal, Optional, Self
-from zoneinfo import ZoneInfo
+from typing import Annotated, Any, Literal, Self
 
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field, field_serializer, model_validator
 from uuid_extensions import uuid7
 
 
-# Message Part Schemas
 class TextPart(BaseModel):
     type: Literal["text"] = "text"
     text: str
@@ -49,45 +48,31 @@ class DataPart(BaseModel):
 Part = Annotated[TextPart | FilePart | DataPart, Field(discriminator="type")]
 
 
-# Core Message Schemas
 class Message(BaseModel):
     id: str = Field(default_factory=lambda: uuid7().hex)
     role: Literal["user", "agent"]
     parts: list[Part]
     metadata: dict[str, Any] | None = None
-    retrieval_context: Optional[RetrievalContext] = None
+    retrieval_context: RetrievalContext | None = None
 
 
-# Retrieval Context Schemas
 class RetrievalContext(BaseModel):
     """Save all context retrieved for a message"""
 
-    original_query: str
-    contextualized_query: str
-    retrieved_at: datetime = Field(
-        default_factory=lambda: datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
-    )
     total_retrieved: int
     total_cited: int
-    cited_chunks: List[Document]
-    search_method: Literal["rag", "web"]
+    cited_chunks: list[Document]
     model_config = {"arbitrary_types_allowed": True}
 
     @field_serializer("cited_chunks")
-    def serialize_documents(self, documents: List[Document]) -> List[dict]:
+    def serialize_documents(self, documents: list[Document]) -> list[dict]:
         """Serialize LangChain Document objects to dicts"""
         return [
             {"page_content": doc.page_content, "metadata": doc.metadata}
             for doc in documents
         ]
 
-    @field_serializer("retrieved_at")
-    def serialize_datetime(self, dt: datetime) -> str:
-        """Serialize datetime to ISO format string"""
-        return dt.isoformat()
 
-
-# Web Search Schemas
 class SearchProvider(Enum):
     """Enumeration of available search providers."""
 
@@ -105,7 +90,6 @@ class WebSearchConfig(BaseModel):
         return provider.value
 
 
-# API Request Schemas
 class ChatRequest(BaseModel):
     message: Message
     agentic: bool = Field(
@@ -114,7 +98,6 @@ class ChatRequest(BaseModel):
     web_search: bool = Field(default=False)
 
 
-# Health Check Schemas
 class HealthCheckResponse(BaseModel):
     status: str
     timestamp: datetime
@@ -132,14 +115,14 @@ class Citation(BaseModel):
 
 
 class SupportCitation(BaseModel):
-    support_citation: List[Citation] = Field(
+    support_citation: list[Citation] = Field(
         ...,
         description="A list of citations that support the answer to the query.",
     )
 
 
 class CitationIndexes(BaseModel):
-    indexes: List[int | str]
+    indexes: list[int | str]
 
 
 class Reference(BaseModel):

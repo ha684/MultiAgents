@@ -2,10 +2,11 @@
 Integration tests for document management workflows.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
-from uuid import uuid4
 from io import BytesIO
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
+
+import pytest
 
 
 @pytest.mark.integration

@@ -1,5 +1,4 @@
 # src/agents/basic/query_context_agent.py
-from typing import List
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -129,7 +128,7 @@ class QueryContextAgent(BaseAgent):
         super().__init__()
         logger.info("Query Context Agent initialized successfully.")
 
-    async def ainvoke(self, history: List[BaseMessage]) -> AIMessage:
+    async def ainvoke(self, history: list[BaseMessage]) -> AIMessage:
         """
         Contextualizes the current query by using the user conversation history.
         Optionally uses the think tool for complex reformulations.
@@ -142,7 +141,7 @@ class QueryContextAgent(BaseAgent):
         user_content = HumanMessage(
             content=f"Reformulate the following query: {history[-1].content}"
         )
-        messages: List[BaseMessage] = [system_prompt] + history[:-1] + [user_content]
+        messages: list[BaseMessage] = [system_prompt] + history[:-1] + [user_content]
 
         try:
             response = await self.iterative_llm_call_text(

@@ -1,7 +1,6 @@
 # src/database/repositories/refresh_token_repository.py
-from datetime import datetime
-from typing import Optional
 import uuid
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, delete, update
@@ -42,7 +41,7 @@ class RefreshTokenRepository:
             logger.error(f"Error creating refresh token: {str(e)}")
             raise DatabaseException("Failed to create refresh token")
 
-    async def get_refresh_token(self, token_hash: str) -> Optional[RefreshToken]:
+    async def get_refresh_token(self, token_hash: str) -> RefreshToken | None:
         """Get refresh token by hash"""
         try:
             async with DatabaseSession() as session:

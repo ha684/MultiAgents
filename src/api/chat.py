@@ -2,10 +2,10 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
+from src.dependencies.auth import get_current_user
 from src.domain.schemas.chat import ChatRequest, Message
 from src.middlewares.endpoint_manager import endpoint_protection
 from src.services.chat_service import ChatService
-from src.dependencies.auth import get_current_user
 
 router = APIRouter(
     prefix="/chat", tags=["Chat"], dependencies=[Depends(get_current_user)]

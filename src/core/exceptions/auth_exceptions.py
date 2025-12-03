@@ -1,5 +1,4 @@
 # src/core/exceptions/auth_exceptions.py
-from typing import Optional
 
 from fastapi import status
 
@@ -132,7 +131,7 @@ class AccountLockedException(BaseException):
     def __init__(
         self,
         message: str = "Account is temporarily locked due to too many failed login attempts",
-        unlock_time: Optional[str] = None,
+        unlock_time: str | None = None,
     ):
         message = "Account is temporarily locked due to too many failed login attempts"
         if unlock_time:
@@ -165,7 +164,7 @@ class AccountSuspendedException(BaseException):
 # Rate Limiting Exceptions
 class RateLimitExceededException(BaseException):
     def __init__(
-        self, message: str = "Rate limit exceeded", retry_after: Optional[int] = None
+        self, message: str = "Rate limit exceeded", retry_after: int | None = None
     ):
         headers = {}
         if retry_after:
@@ -180,7 +179,7 @@ class RateLimitExceededException(BaseException):
 
 # Validation Exceptions
 class ValidationException(BaseException):
-    def __init__(self, message: str, field: Optional[str] = None):
+    def __init__(self, message: str, field: str | None = None):
         error_code = "VALIDATION_ERROR"
         if field:
             error_code = f"VALIDATION_ERROR_{field.upper()}"

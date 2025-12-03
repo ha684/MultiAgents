@@ -1,11 +1,14 @@
 # src/llm/custom_openai_service.py
 
 from __future__ import annotations
+
 import json
 import time
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any, override
 
 import jsonfinder
+import tiktoken
 from openai import (
     APIConnectionError,
     APIResponseValidationError,
@@ -17,7 +20,7 @@ from openai import (
 )
 from parlant.adapters.nlp.common import normalize_json_output
 from parlant.core.engines.alpha.prompt_builder import PromptBuilder
-from parlant.core.loggers import LogLevel, Logger
+from parlant.core.loggers import Logger, LogLevel
 from parlant.core.nlp.embedding import Embedder, EmbeddingResult
 from parlant.core.nlp.generation import SchematicGenerationResult, SchematicGenerator, T
 from parlant.core.nlp.generation_info import GenerationInfo, UsageInfo
@@ -26,11 +29,8 @@ from parlant.core.nlp.policies import policy, retry
 from parlant.core.nlp.service import NLPService
 from parlant.core.nlp.tokenization import EstimatingTokenizer
 from pydantic import ValidationError
-import tiktoken
-from typing_extensions import override
 
 from src.core.config.settings import settings
-
 
 RATE_LIMIT_ERROR_MESSAGE = (
     "NTQAI API rate limit exceeded. Possible reasons:\n"

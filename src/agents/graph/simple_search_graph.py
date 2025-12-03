@@ -1,14 +1,12 @@
 # src/agents/graph/simple_search_graph.py
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
-import tiktoken
 from langchain_core.messages import BaseMessage
 from langgraph.graph import StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from src.agents.basic import citation_agent
 from src.agents.graph.base import GraphAgentBase
 from src.agents.tools.server.mcp_retrieve_tools import rag_search, web_search
 from src.domain.entities.graph import RunConfig
@@ -26,7 +24,7 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
     """
 
     def __init__(self):
-        self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
+        super().__init__()
         self.graph_name = "SimpleSearchGraph"
         self.compiled_graph = self._build_graph()
 
@@ -39,33 +37,31 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
             graph_name=self.graph_name, recursion_limit=10, timeout_seconds=180
         )
 
-    async def retrieve_documents_node(self, state: SimpleSearchState) -> Dict[str, Any]:
+    async def retrieve_documents_node(self, state: SimpleSearchState) -> dict[str, Any]:
         """
         Retrieve documents from RAG or web search based on config
         """
-        conversation: List[BaseMessage] = state["conversation"]
+        conversation: list[BaseMessage] = state["conversation"]
+        web_search_active = state.get("web_search_active", False)
         last_human_message = conversation[-1]
-        kb_id = last_human_message.additional_kwargs["message_metadata"]["kb_id"]
-        web_search_config: Dict[str, str] = last_human_message.additional_kwargs[
-            "message_metadata"
-        ]["web_search_config"]
+        kb_id = last_human_message.additional_kwargs["kb_id"]
 
-        contextualized_query = state["contextualized_query"]
+        direction = state["direction"]
         context_metadata = {
             "kb_id": kb_id,
         }
 
-        if web_search_config.get("active"):
+        if web_search_active:
             logger.info("Using web search")
             retrieved_docs = await web_search(
-                query=contextualized_query,
+                query=direction,
             )
             search_method = "web"
 
         else:
             logger.info("Using RAG search")
             retrieved_docs = await rag_search(
-                query=contextualized_query, context_metadata=context_metadata
+                query=direction, context_metadata=context_metadata
             )
             search_method = "rag"
 
@@ -123,48 +119,36 @@ class SimpleSearchGraph(GraphAgentBase[SimpleSearchState]):
             "cited_documents": retrieved_docs,
             "response_metadata": response_meta,
             "early_terminate": early_terminate,
+            "direction": direction,
         }
 
-    async def filter_citations_node(self, state: SimpleSearchState) -> Dict[str, Any]:
-        logger.info("Simple Search - Filtering citations")
-
-        if state.get("early_terminate"):
-            logger.info("Early terminate is True -> skip citation filtering")
-            cited_docs = []
-            meta = {
-                **state.get("response_metadata", {}),
-                "sources_count": 0,
-                "total_cited": 0,
-                "filter_skipped": True,
-            }
-            return {"cited_documents": cited_docs, "response_metadata": meta}
-
+    async def filter_citations_node(self, state: SimpleSearchState) -> dict[str, Any]:
         retrieved_docs = state["cited_documents"]
         if not retrieved_docs:
             logger.warning("No documents to filter")
             return {}
 
-        citation_indexes = await citation_agent.ainvoke(
-            history=state["conversation"],
-            reference=retrieved_docs,
-        )
+        # citation_indexes = await citation_agent.ainvoke(
+        #     query=state["direction"],
+        #     reference=retrieved_docs,
+        # )
 
-        cited_docs = []
-        if citation_indexes.indexes:
-            cited_docs = [
-                retrieved_docs[i - 1]
-                for i in citation_indexes.indexes
-                if 0 < i <= len(retrieved_docs)
-            ]
+        # cited_docs = []
+        # if citation_indexes.indexes:
+        #     cited_docs = [
+        #         retrieved_docs[i - 1]
+        #         for i in citation_indexes.indexes
+        #         if 0 < i <= len(retrieved_docs)
+        #     ]
 
-        logger.info(f"Filtered to {len(cited_docs)} cited documents")
+        logger.info(f"Filtered to {len(retrieved_docs)} cited documents")
 
         return {
-            "cited_documents": cited_docs,
+            "cited_documents": retrieved_docs,
             "response_metadata": {
                 **state.get("response_metadata", {}),
-                "sources_count": len(cited_docs),
-                "total_cited": len(cited_docs),
+                "sources_count": len(retrieved_docs),
+                "total_cited": len(retrieved_docs),
             },
         }
 

@@ -1,6 +1,6 @@
 # src/database/models/user.py
-from datetime import datetime
 import enum
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import (
@@ -53,7 +53,9 @@ class User(Base):
     role = Column(Enum(UserRole), default=UserRole.USER, nullable=False)
 
     status = Column(
-        Enum(UserStatus), default=UserStatus.PENDING_VERIFICATION, nullable=False
+        Enum(UserStatus, values_callable=lambda obj: [e.value for e in obj]),
+        default=UserStatus.PENDING_VERIFICATION,
+        nullable=False,
     )
 
     created_at = Column(

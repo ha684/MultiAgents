@@ -1,13 +1,12 @@
 # src/rag/processors/loader/xls_loader.py
 import os
-from typing import List
 
+import pandas as pd
+import regex
 from langchain_core.document_loaders.base import BaseLoader
 from langchain_core.documents import Document
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
-import pandas as pd
-import regex
 
 from src.utils.logger_conf import logger
 
@@ -39,10 +38,7 @@ class XlsLoader(BaseLoader):
             "#FIELD!",  # Invalid field name in a data type reference
             "Circular Reference",  # Formula refers to its own cell
         ]
-        if any(regex.fullmatch(error, s) for error in excel_errors):
-            return True
-
-        return False
+        return bool(any(regex.fullmatch(error, s) for error in excel_errors))
 
     def convert_to_xlsx(self, file_path: str) -> str:
         """
@@ -65,7 +61,7 @@ class XlsLoader(BaseLoader):
                 raise
         return file_path
 
-    def load(self) -> List[Document]:
+    def load(self) -> list[Document]:
         """
         Load and parse the Excel file into documents with metadata.
         Each sheet is formatted as a table in `+----` style.
@@ -107,7 +103,7 @@ class XlsLoader(BaseLoader):
         normalize_rows = []
         max_columns = sheet.max_column if sheet.max_column else 0
 
-        for row_idx, row in enumerate(sheet.iter_rows(values_only=True)):
+        for _row_idx, row in enumerate(sheet.iter_rows(values_only=True)):
             current_row = [
                 str(cell).replace("\n", " <br> ") if cell is not None else ""
                 for cell in row

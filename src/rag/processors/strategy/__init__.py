@@ -5,7 +5,7 @@ This module contains different document processing strategies.
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from src.database.models.document import Document as DBDocument
 from src.rag.processors.strategy.base import BaseStrategy
@@ -14,7 +14,7 @@ from src.rag.processors.strategy.naive import NaiveStrategy
 from src.rag.processors.strategy.spreadsheet import SpreadsheetStrategy
 
 
-def get_strategy(document: DBDocument, config: Dict[str, Any]) -> BaseStrategy:
+def get_strategy(document: DBDocument, config: dict[str, Any]) -> BaseStrategy:
     """
     Factory method to get the appropriate strategy based on the document.
     Args:

@@ -1,7 +1,6 @@
 # src/core/security/jwt.py
-from datetime import datetime, timedelta
-from typing import Optional
 import uuid
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import jwt
@@ -25,7 +24,7 @@ class JWTManager:
         email: str,
         role: UserRole,
         session_id: str,
-        expires_delta: Optional[timedelta] = None,
+        expires_delta: timedelta | None = None,
     ) -> str:
         """Create a JWT access token"""
         now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
@@ -48,7 +47,7 @@ class JWTManager:
 
         return jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
 
-    def verify_token(self, token: str) -> Optional[TokenData]:
+    def verify_token(self, token: str) -> TokenData | None:
         """Verify and decode a JWT token"""
         try:
             payload = jwt.decode(
@@ -80,7 +79,7 @@ class JWTManager:
         except Exception:
             return None
 
-    def get_token_expiry(self, token: str) -> Optional[datetime]:
+    def get_token_expiry(self, token: str) -> datetime | None:
         """Get the expiry time of a token without full validation"""
         try:
             payload = jwt.decode(

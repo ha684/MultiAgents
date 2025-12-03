@@ -1,10 +1,11 @@
 # src/middlewares/endpoint_manager.py
 import asyncio
+import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from functools import wraps
-from typing import Any, Callable, Dict, Optional
-import uuid
+from typing import Any
 
 from fastapi import HTTPException
 
@@ -103,7 +104,7 @@ class EndpointProtector:
                                 -500:
                             ]
 
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         request_item["future"].set_exception(
                             HTTPException(status_code=504, detail="Processing timeout")
                         )
@@ -164,14 +165,14 @@ class EndpointProtector:
             )
             return result
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self.stats.timeout_requests += 1
             raise HTTPException(status_code=408, detail="Request timed out")
         finally:
             if self.stats.current_queued > 0:
                 self.stats.current_queued -= 1
 
-    def get_health_status(self) -> Dict[str, Any]:
+    def get_health_status(self) -> dict[str, Any]:
         """Get endpoint health status"""
         queue_size = self.request_queue.qsize()
         processing_utilization = (
@@ -225,7 +226,7 @@ class EndpointManager:
     """Manager for all protected endpoints"""
 
     def __init__(self):
-        self.protectors: Dict[str, EndpointProtector] = {}
+        self.protectors: dict[str, EndpointProtector] = {}
 
     def register_endpoint(self, config: EndpointProtectionConfig) -> EndpointProtector:
         """Register endpoint for protection"""
@@ -236,7 +237,7 @@ class EndpointManager:
         self.protectors[config.endpoint_name] = protector
         return protector
 
-    def get_protector(self, endpoint_name: str) -> Optional[EndpointProtector]:
+    def get_protector(self, endpoint_name: str) -> EndpointProtector | None:
         """Get protector for endpoint"""
         return self.protectors.get(endpoint_name)
 
@@ -245,7 +246,7 @@ class EndpointManager:
         for protector in self.protectors.values():
             await protector.start_workers()
 
-    def get_global_health(self) -> Dict[str, Any]:
+    def get_global_health(self) -> dict[str, Any]:
         """Get health for all endpoints"""
         return {
             name: protector.get_health_status()

@@ -1,8 +1,8 @@
 # src/middlewares/exception_handler.py
-from datetime import datetime
 import json
 import os
-from typing import Any, Dict
+from datetime import datetime
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException, Request
@@ -167,7 +167,7 @@ async def exception_handler(request: Request, exc: Exception) -> JSONResponse:
     return JSONResponse(status_code=status_code, content=error_envelope)
 
 
-def _log_message(message: str, level: str, extra: Dict[str, Any] = None):
+def _log_message(message: str, level: str, extra: dict[str, Any] = None):
     """Log message based on environment configuration"""
     if not ENABLE_EXCEPTION_LOGGING:
         return
@@ -235,16 +235,13 @@ def _is_streaming_request(request: Request) -> bool:
         if "text/event-stream" in accept_header:
             return True
 
-        if request.query_params.get("stream") == "true":
-            return True
-
-        return False
+        return request.query_params.get("stream") == "true"
     except Exception:
         return False
 
 
 def _create_streaming_error_response(
-    status_code: int, error_type: str, error_detail: Dict[str, Any]
+    status_code: int, error_type: str, error_detail: dict[str, Any]
 ) -> StreamingResponse:
     """Create SSE error response with proper formatting"""
 

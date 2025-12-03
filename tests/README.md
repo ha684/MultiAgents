@@ -1,9 +1,10 @@
-# Testing Guide for KMS Service
+# Testing Guide
 
-This document provides comprehensive information about testing the Knowledge Management System (KMS) Service.
+This document provides comprehensive information about testing.
 
 ## Table of Contents
 
+- [Quick Start](#quick-start)
 - [Overview](#overview)
 - [Test Structure](#test-structure)
 - [Setup](#setup)
@@ -13,12 +14,59 @@ This document provides comprehensive information about testing the Knowledge Man
 - [Writing Tests](#writing-tests)
 - [Troubleshooting](#troubleshooting)
 
+## Quick Start
+
+Get started with testing in under 2 minutes:
+
+```bash
+# 1. Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 2. Sync dependencies (fast!)
+make sync-dev
+
+# 3. Start test infrastructure
+make docker-test-up
+
+# 4. Run tests
+make test
+
+# 5. View coverage report
+make coverage-html
+```
+
+That's it! For detailed information, continue reading below.
+
 ## Overview
 
 The KMS Service uses pytest for testing with comprehensive coverage of:
 - **Unit Tests**: Test individual components in isolation
 - **Integration Tests**: Test interactions between components
 - **E2E Tests**: Test complete user workflows
+
+### Technology Stack
+
+- **Testing Framework**: [pytest](https://pytest.org/) with async support
+- **Package Manager**: [uv](https://github.com/astral-sh/uv) - An extremely fast Python package installer and resolver, written in Rust
+- **Coverage**: pytest-cov for test coverage reporting
+- **Mocking**: pytest-mock and unittest.mock
+
+### Why uv?
+
+This project uses **uv** for dependency management, providing significant benefits:
+
+| Feature | pip | uv | Improvement |
+|---------|-----|-----|-------------|
+| Dependency installation | ~60s | ~5s | **12x faster** ⚡ |
+| Lock file support | ❌ | ✅ | Reproducible builds 🔒 |
+| Cache management | Manual | Built-in | Automatic optimization 🚀 |
+| Parallel downloads | Limited | Full | Maximum speed 📦 |
+
+**Key benefits:**
+- ⚡ **10-100x faster** than pip for dependency resolution and installation
+- 🔒 **Deterministic builds** with `uv.lock` ensuring all environments are identical
+- 🎯 **Drop-in replacement** for pip with familiar commands
+- 🦀 **Written in Rust** for maximum performance and reliability
 
 ## Test Structure
 
@@ -45,14 +93,24 @@ tests/
 
 ### 1. Install Dependencies
 
+**Recommended: Using uv (fast & modern)**
+
+```bash
+# Sync all dependencies from lock file (recommended)
+make sync-dev
+
+# Or using uv directly
+uv sync --frozen --all-extras
+```
+
+**Alternative: Using make (legacy)**
+
 ```bash
 # Install development dependencies
 make install-dev
-
-# Or using pip directly
-pip install -e ".[test,dev]"
-pip install -r requirements-test.txt
 ```
+
+> **Note**: This project uses [uv](https://github.com/astral-sh/uv) for fast, reliable dependency management. Dependencies are locked in `uv.lock` for reproducibility.
 
 ### 2. Set Up Test Environment
 
@@ -87,7 +145,7 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
 
 ## Running Tests
 
-### Quick Commands
+### Quick Commands (Using Make)
 
 ```bash
 # Run all tests
@@ -101,41 +159,64 @@ make test-e2e          # E2E tests only
 # Run with coverage
 make test-cov
 
+# Quick test (fail fast)
+make test-quick
+
+# Parallel execution
+make test-parallel
+
 # Run in Docker
 make docker-test
+```
+
+### Direct Commands (Using uv)
+
+```bash
+# Run all tests
+uv run pytest tests/ -v
+
+# Run specific test types
+uv run pytest tests/unit_test/ -v -m "unit"
+uv run pytest tests/integration_test/ -v -m "integration"
+uv run pytest tests/e2e/ -v -m "e2e"
+
+# Run with coverage
+uv run pytest tests/ -v --cov=src --cov-report=term-missing
 ```
 
 ### Advanced Options
 
 ```bash
 # Run specific test file
-pytest tests/unit_test/test_auth_endpoints.py -v
+uv run pytest tests/unit_test/test_auth_endpoints.py -v
 
 # Run specific test
-pytest tests/unit_test/test_auth_endpoints.py::TestAuthEndpoints::test_login_success -v
+uv run pytest tests/unit_test/test_auth_endpoints.py::TestAuthEndpoints::test_login_success -v
 
 # Run with markers
-pytest -m "unit"              # Only unit tests
-pytest -m "integration"       # Only integration tests
-pytest -m "auth"              # Only auth-related tests
-pytest -m "slow"              # Only slow tests
-pytest -m "not slow"          # Skip slow tests
+uv run pytest -m "unit"              # Only unit tests
+uv run pytest -m "integration"       # Only integration tests
+uv run pytest -m "auth"              # Only auth-related tests
+uv run pytest -m "slow"              # Only slow tests
+uv run pytest -m "not slow"          # Skip slow tests
 
 # Run tests in parallel
-pytest tests/ -n auto
+uv run pytest tests/ -n auto
 
 # Run tests with verbose output
-pytest tests/ -vv
+uv run pytest tests/ -vv
 
 # Stop on first failure
-pytest tests/ -x
+uv run pytest tests/ -x
 
 # Show local variables in tracebacks
-pytest tests/ -l
+uv run pytest tests/ -l
 
 # Run with specific coverage
-pytest tests/unit_test/ --cov=src.api --cov-report=html
+uv run pytest tests/unit_test/ --cov=src.api --cov-report=html
 ```
+
+> **Tip**: All `pytest` commands can be run directly or via `uv run` for consistency with your environment.
 
 ## Test Types
 
@@ -219,16 +300,22 @@ class TestCompleteUserJourney:
 
 ### GitHub Actions
 
-The project includes a comprehensive GitHub Actions workflow that runs on:
+The project includes a comprehensive GitHub Actions workflow powered by **uv** for fast dependency installation that runs on:
 - Push to `main` or `develop` branches
 - Pull requests to `main` or `develop` branches
 
 **Pipeline stages:**
-1. **Test**: Runs all test suites with coverage
-2. **Code Quality**: Linting, formatting checks
+1. **Test**: Runs all test suites with coverage (using `uv sync` and `uv run`)
+2. **Code Quality**: Auto-formatting and linting checks
 3. **Security**: Security scanning with Bandit and Safety
 4. **Build**: Docker image build (on main branch)
 5. **Deploy**: Deployment to production (on main branch)
+
+**Key features:**
+- ⚡ **10-100x faster** dependency installation with `uv`
+- 🔒 **Reproducible builds** using `uv.lock`
+- 🔧 **Auto-formatting** before tests to prevent CI failures
+- 📊 **Coverage reports** uploaded to Codecov
 
 ### Local CI Simulation
 
@@ -239,10 +326,14 @@ make ci-local
 ```
 
 This will:
+- Clean up temporary files
+- Auto-format code (black, isort, ruff)
 - Run linting checks
 - Run security scans
 - Run all tests with coverage
 - Generate reports
+
+> **Note**: The local CI pipeline mirrors what runs in GitHub Actions, ensuring consistency between local and CI environments.
 
 ## Writing Tests
 
@@ -366,21 +457,30 @@ class TestMyFeature:
 
 3. **Import errors**
    ```bash
-   # Reinstall package in editable mode
-   pip install -e .
+   # Resync dependencies from lock file
+   make sync-dev
+   
+   # Or using uv directly
+   uv sync --frozen --all-extras
    ```
 
-4. **Fixtures not found**
+4. **Outdated dependencies**
+   ```bash
+   # Clean uv cache and resync
+   make clean-all
+   make sync-dev
+   ```
+
+5. **Fixtures not found**
    ```python
    # Ensure conftest.py is in tests/ directory
    # Check fixture names match usage
    ```
 
-5. **Async test warnings**
+6. **Async test warnings**
    ```python
    # Always use @pytest.mark.asyncio for async tests
-   # Install pytest-asyncio
-   pip install pytest-asyncio
+   # Dependencies should be synced from uv.lock which includes pytest-asyncio
    ```
 
 ### Debug Mode
@@ -389,16 +489,19 @@ Run tests with extra debugging:
 
 ```bash
 # Show print statements
-pytest tests/ -s
+uv run pytest tests/ -s
 
 # Show local variables on failure
-pytest tests/ -l
+uv run pytest tests/ -l
 
 # Use Python debugger
-pytest tests/ --pdb
+uv run pytest tests/ --pdb
 
 # Increase verbosity
-pytest tests/ -vv
+uv run pytest tests/ -vv
+
+# Full debug mode
+uv run pytest tests/ -vv -s -l --tb=long
 ```
 
 ### Coverage Reports
@@ -427,20 +530,41 @@ Target metrics for the project:
 
 ## Additional Resources
 
+### Testing
 - [pytest Documentation](https://docs.pytest.org/)
 - [pytest-asyncio Documentation](https://pytest-asyncio.readthedocs.io/)
 - [FastAPI Testing Guide](https://fastapi.tiangolo.com/tutorial/testing/)
 - [Coverage.py Documentation](https://coverage.readthedocs.io/)
 
+### Tools
+- [uv Documentation](https://github.com/astral-sh/uv) - Fast Python package manager
+- [uv User Guide](https://docs.astral.sh/uv/) - Official uv documentation
+- [Ruff](https://docs.astral.sh/ruff/) - Fast Python linter (same creators as uv)
+
 ## Contributing
 
 When adding new features:
 
-1. Write tests first (TDD approach)
-2. Ensure all tests pass
-3. Maintain or improve coverage
-4. Update this README if adding new test patterns
-5. Run `make ci-local` before committing
+1. **Sync dependencies** - `make sync-dev` to ensure you have latest deps
+2. **Write tests first** (TDD approach) - Create tests before implementation
+3. **Format code** - `make format` to auto-format your code
+4. **Run tests locally** - `make test` to verify functionality
+5. **Check code quality** - `make lint` to catch issues early
+6. **Run full CI pipeline** - `make ci-local` before committing
+7. **Maintain coverage** - Ensure coverage stays above 80%
+8. **Update documentation** - Update this README if adding new test patterns
+
+### Pre-commit Checklist
+
+```bash
+# Quick workflow before committing
+make format      # Auto-format code
+make lint        # Check for issues
+make test-quick  # Run tests (fail fast)
+make ci-local    # Full CI pipeline (when ready to commit)
+```
+
+> **Tip**: The CI/CD pipeline will auto-format your code, but it's better to do it locally first!
 
 ## Support
 

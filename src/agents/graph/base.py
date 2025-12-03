@@ -1,9 +1,11 @@
 # src/agents/graph/base.py
 from __future__ import annotations
-from abc import ABC, abstractmethod
+
 import asyncio
+from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from typing import AsyncGenerator, Generic, Literal, Optional, TypeVar
+from typing import Literal, TypeVar
 
 from langchain_core.runnables.schema import StreamEvent
 from langgraph.graph.state import CompiledStateGraph
@@ -11,14 +13,13 @@ from langgraph.graph.state import CompiledStateGraph
 from src.agents.basic.base import BaseAgent
 from src.domain.entities.graph import RunConfig
 from src.utils.logger_conf import logger
-from src.core.monitoring.langfuse import setup_langfuse
 
 StateT = TypeVar("StateT")
 Status = Literal["success", "timeout", "recursion_limit", "error"]
 
 
 @dataclass
-class InvokeResult(Generic[StateT]):
+class InvokeResult[StateT]:
     """
     Standardize the return result of the async graph node:
     - state: the final state after running the graph
@@ -28,10 +29,10 @@ class InvokeResult(Generic[StateT]):
 
     state: StateT
     status: Status
-    message: Optional[str] = None
+    message: str | None = None
 
 
-class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
+class GraphAgentBase[StateT](BaseAgent, ABC):
     """For agents running LangGraph; keep all run/stream/timeout logic here."""
 
     @property
@@ -42,7 +43,7 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
     def default_run_config(self) -> RunConfig: ...
 
     async def ainvoke(
-        self, state: StateT, config_override: Optional[RunConfig] = None
+        self, state: StateT, config_override: RunConfig | None = None
     ) -> InvokeResult[StateT]:
         run_cfg = config_override or self.default_run_config()
         lg_config = run_cfg.as_langgraph_config()
@@ -64,7 +65,7 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
             logger.warning("Recursion limit - returning last valid state")
             return InvokeResult(state=last_state, status="recursion_limit")
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning("Timeout - returning last valid state")
             return InvokeResult(state=last_state, status="timeout")
 
@@ -73,12 +74,12 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
             return InvokeResult(state=last_state, status="error", message=str(e))
 
     async def astream(
-        self, state: StateT, config_override: Optional[RunConfig] = None
-    ) -> AsyncGenerator[StreamEvent, None]:
+        self, state: StateT, config_override: RunConfig | None = None
+    ) -> AsyncGenerator[StreamEvent]:
         """Stream events - use for testing and monitoring"""
         run_cfg = config_override or self.default_run_config()
-        langfuse_handler = setup_langfuse()
-        run_cfg.extra["callbacks"] = [langfuse_handler]
+        # langfuse_handler = setup_langfuse()
+        # run_cfg.extra["callbacks"] = [langfuse_handler]
         lg_config = run_cfg.as_langgraph_config()
         last_state: StateT = state
 
@@ -90,7 +91,7 @@ class GraphAgentBase(BaseAgent, ABC, Generic[StateT]):
                     last_state = event
                     yield event
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 f"⚠️ '{run_cfg.graph_name}' timed out after {run_cfg.timeout_seconds}s."
             )

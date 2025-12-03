@@ -1,9 +1,10 @@
+# src/utils/stdout_wrapper.py
 import sys
 import tempfile
 from typing import TextIO
 
 
-class StdoutWrapper(TextIO):
+class StdoutWrapper:
     """
     `sys.stdout` wrapper for both Google Colab and local environment.
     """
@@ -33,6 +34,8 @@ class StdoutWrapper(TextIO):
     def fileno(self) -> int:
         return self.temp_file.fileno()
 
+
+SAFE_STDOUT: StdoutWrapper | TextIO
 
 try:
     SAFE_STDOUT = StdoutWrapper()

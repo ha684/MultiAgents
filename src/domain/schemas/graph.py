@@ -1,5 +1,5 @@
 # src/agents/graph/schemas.py
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -7,13 +7,13 @@ from pydantic import BaseModel, Field
 class RouteDecision(BaseModel):
     """Multi-route decision output"""
 
-    routes: List[str] = Field(description="List of subgraph names to execute, in order")
+    routes: list[str] = Field(description="List of subgraph names to execute, in order")
 
 
 class SearchPlanSchema(BaseModel):
     """Query planner output schema"""
 
-    queries: List[Dict[str, Any]] = Field(
+    queries: list[dict[str, Any]] = Field(
         description="Essential queries that must be executed"
     )
 
@@ -21,16 +21,18 @@ class SearchPlanSchema(BaseModel):
 class VerificationSchema(BaseModel):
     """Verification agent output schema"""
 
-    is_sufficient: bool = Field(
-        description="Whether the accumulated knowledge is sufficient to answer the original query"
+    should_continue: bool = Field(
+        description="Whether the agent should continue to research"
     )
-    missing_aspects: str = Field(description="Information gaps that need to be filled")
+    missing_aspects: str = Field(
+        description="Information gaps that need to be filled to continue researching"
+    )
 
 
 class DynamicQueriesSchema(BaseModel):
     """Dynamic query generator output schema"""
 
-    queries: List[Dict[str, Any]] = Field(
+    queries: list[dict[str, Any]] = Field(
         description="List of new targeted search queries"
     )
 
@@ -45,7 +47,7 @@ class ReflectionSchema(BaseModel):
 class SqlGenerationSchema(BaseModel):
     """SQL generation output schema"""
 
-    queries: List[Dict[str, Any]] = Field(
+    queries: list[dict[str, Any]] = Field(
         description="The generated SQL SELECT queries"
     )
 
@@ -57,7 +59,7 @@ class SqlValidationSchema(BaseModel):
     is_select_only: bool = Field(
         description="Whether the query is SELECT-only (no mutations)"
     )
-    issues: List[str] = Field(
+    issues: list[str] = Field(
         description="List of validation issues found", default_factory=list
     )
     sanitized_query: str = Field(
@@ -69,8 +71,8 @@ class SqlAnalysisSchema(BaseModel):
     """SQL analysis output schema"""
 
     needs_chart: bool = Field(description="Whether the query needs a chart")
-    chart_type: Optional[str] = Field(description="The type of chart")
-    required_queries: List[Dict[str, Any]] = Field(
+    chart_type: str | None = Field(description="The type of chart")
+    required_queries: list[dict[str, Any]] = Field(
         description="List of required queries"
     )
 
@@ -104,6 +106,6 @@ class RelevanceValidationSchema(BaseModel):
         description="Whether the query is relevant to the database"
     )
     reason: str = Field(description="The reason for the relevance validation")
-    suggested_rephrase: Optional[str] = Field(
+    suggested_rephrase: str | None = Field(
         description="The suggested rephrase for the query"
     )

@@ -1,9 +1,9 @@
 # src/domain/schemas/stream.py
+import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
-import uuid
+from typing import Any
 from zoneinfo import ZoneInfo
 
 
@@ -22,9 +22,9 @@ class StreamEvent:
     """Standardized stream event structure"""
 
     type: str
-    data: Dict[str, Any] = field(default_factory=dict)
-    id: Optional[str] = None
-    timestamp: Optional[str] = None
+    data: dict[str, Any] = field(default_factory=dict)
+    id: str | None = None
+    timestamp: str | None = None
 
     def __post_init__(self):
         if self.id is None:

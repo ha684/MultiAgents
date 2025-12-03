@@ -1,11 +1,14 @@
 # src/utils/__init__.py
-from datetime import datetime
 import json
 import re
-from typing import List
+from datetime import datetime
+from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
+import tiktoken
 from langchain_core.documents import Document
+
 from src.domain.schemas.chat import Message
 from src.utils.logger_conf import logger
 
@@ -42,7 +45,7 @@ def parse_response(content: str) -> dict | None:
                 content = content[4:]
             content = content.strip()
 
-        parsed = json.loads(content)
+        parsed = json.loads(content, strict=False)
         return parsed
     except (json.JSONDecodeError, ValueError, KeyError) as e:
         logger.debug(f"Failed to parse citation response: {e}")
@@ -51,7 +54,19 @@ def parse_response(content: str) -> dict | None:
 
 def get_current_time() -> str:
     """Get the current time in the Asia/Ho_Chi_Minh timezone"""
-    return datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).isoformat()
+    current_date = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh")).date()
+    current_year = current_date.year
+    current_month = current_date.month
+    temporal_context = f"""
+<temporal_context>
+**CRITICAL TEMPORAL INFORMATION**:
+- Today's date: {current_date}
+- Current year: {current_year}
+- Current month: {current_month}
+ALWAYS use {current_year} as the reference point for temporal queries.
+</temporal_context>
+"""
+    return temporal_context
 
 
 def get_message_id(m: Message | None) -> str | None:
@@ -76,26 +91,23 @@ def get_last_message_id(m: Message | None) -> str | None:
         return None
 
 
-def format_context_for_response(documents: List[Document]) -> str:
-    """Formats documents for the response prompt."""
+def format_context_for_response(documents: list[Document]) -> str:
     if not documents:
         return ""
 
-    xml_output = "<documents>\n"
-    for i, doc in enumerate(documents):
-        xml_output += f'  <document index="{i + 1}">\n'
-        content = getattr(doc, "page_content", "")
-        xml_output += "    <document_content>\n"
-        xml_output += f"{content}\n"
-        xml_output += "    </document_content>\n"
-        xml_output += "  </document>\n"
-    xml_output += "</documents>"
-    return xml_output
+    parts = ["# Retrieved documents:\n"]
+    for i, doc in enumerate(documents, start=1):
+        parts.append(f"[CITATION: {i}]\n{doc.page_content}\n")
+    return "\n".join(parts)
 
 
 def truncate_docs_by_tokens(
-    documents, max_tokens, tokenizer, min_tokens_per_doc=0, add_ellipsis=True
-):
+    documents: list[Document],
+    max_tokens: int,
+    tokenizer: tiktoken.Encoding,
+    min_tokens_per_doc: int = 0,
+    add_ellipsis: bool = True,
+) -> list[Document]:
     if not documents:
         return []
 
@@ -108,7 +120,7 @@ def truncate_docs_by_tokens(
 
     quotas = [max(min_tokens_per_doc, max_tokens * (L / total)) for L in lens]
     floors = [int(q) for q in quotas]
-    floors = [min(f, L) for f, L in zip(floors, lens)]
+    floors = [min(f, L) for f, L in zip(floors, lens, strict=False)]
     allocated = floors[:]
     leftover = max_tokens - sum(allocated)
 
@@ -136,3 +148,29 @@ def truncate_docs_by_tokens(
         final_docs.append(type(doc)(page_content=truncated_text, metadata=doc.metadata))
 
     return final_docs
+
+
+def normalize_url(meta: dict[str, Any]) -> str:
+    """Normalize URL by removing tracking params and fragments."""
+    url = (
+        meta.get("url")
+        or meta.get("source")
+        or meta.get("resolved_url")
+        or meta.get("original_filename")
+        or ""
+    )
+    try:
+        p = urlparse(url)
+        if not p.scheme or not p.netloc:
+            return url
+        q = [
+            (k, v)
+            for k, v in parse_qsl(p.query, keep_blank_values=True)
+            if not k.lower().startswith("utm_")
+        ]
+        new_query = urlencode(q, doseq=True)
+        return urlunparse(
+            (p.scheme.lower(), p.netloc.lower(), p.path, "", new_query, "")
+        )
+    except Exception:
+        return url

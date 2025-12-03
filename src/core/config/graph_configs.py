@@ -3,27 +3,70 @@ from src.domain.entities.graph import GraphMetadata, NodeMetadata
 from src.domain.schemas.stream import StreamPhase
 
 GRAPH_CONFIGS = {
-    "MainOrchestrator": GraphMetadata(
-        name="MainOrchestrator",
+    "MainGraph": GraphMetadata(
+        name="MainGraph",
         nodes={
-            "contextualize_query": NodeMetadata(
-                display_message="Understanding your question...",
+            "direct_response": NodeMetadata(
+                display_message="Processing your request...",
+                stream_phase=StreamPhase.SYNTHESIS,
+            ),
+            "execute_normal": NodeMetadata(
+                display_message="Executing fast path...",
                 stream_phase=StreamPhase.PROCESSING,
             ),
-            "router": NodeMetadata(
+            "execute_thinking": NodeMetadata(
+                display_message="Executing research mode...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+        },
+    ),
+    "NormalGraph": GraphMetadata(
+        name="NormalGraph",
+        nodes={
+            "generate_direction": NodeMetadata(
                 display_message="Planning approach...",
                 stream_phase=StreamPhase.PROCESSING,
             ),
-            "dispatch_subgraph": NodeMetadata(
-                display_message="Processing request...",
-                stream_phase=StreamPhase.PROCESSING,
-                show_in_ui=False,
+            "execute_subgraph": NodeMetadata(
+                display_message="Gathering information...",
+                stream_phase=StreamPhase.RETRIEVAL,
+                emit_on_complete=True,
             ),
-            "reflection": NodeMetadata(
-                display_message="Reflecting on findings...",
+            "synthesize_response": NodeMetadata(
+                display_message="Generating response...",
+                stream_phase=StreamPhase.SYNTHESIS,
+            ),
+        },
+    ),
+    "ThinkingGraph": GraphMetadata(
+        name="ThinkingGraph",
+        nodes={
+            "generate_direction": NodeMetadata(
+                display_message="Planning research step...",
                 stream_phase=StreamPhase.PROCESSING,
             ),
-            "final_response": NodeMetadata(
+            "execute_subgraph": NodeMetadata(
+                display_message="Gathering information...",
+                stream_phase=StreamPhase.RETRIEVAL,
+                emit_on_complete=True,
+            ),
+            "pure_reasoning": NodeMetadata(
+                display_message="Analyzing information...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+            "extract_learnings": NodeMetadata(
+                display_message="Extracting insights...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+            "evaluate_sufficiency": NodeMetadata(
+                display_message="Evaluating completeness...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+            "continue_iteration": NodeMetadata(
+                display_message="Continuing research...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+            "synthesize_response": NodeMetadata(
                 display_message="Generating response...",
                 stream_phase=StreamPhase.SYNTHESIS,
             ),
@@ -32,11 +75,6 @@ GRAPH_CONFIGS = {
     "SimpleSearchGraph": GraphMetadata(
         name="SimpleSearchGraph",
         nodes={
-            # "extract_filename": NodeMetadata(
-            #     display_message="Identifying sources...",
-            #     stream_phase=StreamPhase.RETRIEVAL,
-            #     show_in_ui=False,
-            # ),
             "retrieve_documents": NodeMetadata(
                 display_message="Searching knowledge base...",
                 stream_phase=StreamPhase.RETRIEVAL,
@@ -46,49 +84,6 @@ GRAPH_CONFIGS = {
                 display_message="Selecting relevant information...",
                 stream_phase=StreamPhase.PROCESSING,
                 emit_on_complete=True,
-            ),
-        },
-    ),
-    "ResearchGraph": GraphMetadata(
-        name="ResearchGraph",
-        nodes={
-            "query_planner": NodeMetadata(
-                display_message="Planning research strategy...",
-                stream_phase=StreamPhase.PROCESSING,
-            ),
-            "pre_flight_rag_check": NodeMetadata(
-                display_message="Checking knowledge base...",
-                stream_phase=StreamPhase.PROCESSING,
-            ),
-            "search_executor": NodeMetadata(
-                display_message="Gathering information...",
-                stream_phase=StreamPhase.RETRIEVAL,
-                emit_on_complete=True,
-            ),
-            "process_results": NodeMetadata(
-                display_message="Processing findings...",
-                stream_phase=StreamPhase.PROCESSING,
-            ),
-            "apply_retry": NodeMetadata(
-                display_message="Applying retry...",
-                stream_phase=StreamPhase.PROCESSING,
-            ),
-            "verification_agent": NodeMetadata(
-                display_message="Verifying information...",
-                stream_phase=StreamPhase.PROCESSING,
-            ),
-            "dynamic_query_generator": NodeMetadata(
-                display_message="Generating follow-up queries...",
-                stream_phase=StreamPhase.RETRIEVAL,
-            ),
-            "handle_no_plan": NodeMetadata(
-                display_message="Adjusting strategy...",
-                stream_phase=StreamPhase.PROCESSING,
-                show_in_ui=False,
-            ),
-            "reflection_node": NodeMetadata(
-                display_message="Reflecting on findings...",
-                stream_phase=StreamPhase.PROCESSING,
             ),
         },
     ),

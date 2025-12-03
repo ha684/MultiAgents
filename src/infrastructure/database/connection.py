@@ -1,8 +1,7 @@
 # src/infrastructure/database/connection.py
-from typing import Optional
 
-from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.ext.asyncio import (
+    AsyncAttrs,
     AsyncEngine,
     AsyncSession,
     async_sessionmaker,
@@ -24,7 +23,7 @@ class Base(AsyncAttrs, DeclarativeBase):
 class DatabaseConnection:
     """Manages async database connections and sessions"""
 
-    def __init__(self, db_url: Optional[str] = None, auto_create_tables: bool = False):
+    def __init__(self, db_url: str | None = None, auto_create_tables: bool = False):
         self.db_url = db_url or settings.database_url
         self.auto_create_tables = auto_create_tables
         self._initialized = False

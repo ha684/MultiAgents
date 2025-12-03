@@ -1,10 +1,10 @@
 # src/infrastructure/storage/minio_client.py
 import asyncio
-from datetime import timedelta
 import os
+from datetime import timedelta
 
 from minio.error import S3Error
-from miniopy_async import Minio
+from miniopy_async import Minio  # type: ignore[import]
 
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger

@@ -1,8 +1,8 @@
 # src/database/repositories/document_repository.py
-from datetime import datetime
 import json
-from typing import Any, Dict, List, Optional
 import uuid
+from datetime import datetime
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -13,9 +13,9 @@ from src.domain.schemas.document import (
     DocumentListResponse,
     DocumentProcessingStatusResponse,
     DocumentResponse,
+    DocumentStatusEnum,
     PaginationParams,
     SearchParams,
-    DocumentStatusEnum,
 )
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
@@ -31,14 +31,14 @@ class DocumentRepository:
         filename: str,
         original_filename: str,
         file_path: str,
-        file_size: Optional[int],
+        file_size: int | None,
         file_type: str,
-        description: Optional[str] = None,
-        mime_type: Optional[str] = None,
-        uploaded_by: Optional[str] = None,
-        id: Optional[uuid.UUID] = None,
-        doc_metadata: Optional[Dict[str, Any]] = None,
-        content_hash: Optional[str] = None,
+        description: str | None = None,
+        mime_type: str | None = None,
+        uploaded_by: str | None = None,
+        id: uuid.UUID | None = None,
+        doc_metadata: dict[str, Any] | None = None,
+        content_hash: str | None = None,
     ) -> Document:
         """Create a new document"""
         try:
@@ -66,7 +66,7 @@ class DocumentRepository:
             logger.error(f"Error creating document: {e.args[0]}")
             raise e
 
-    async def bulk_create(self, documents_data: List[Dict[str, Any]]) -> List[Document]:
+    async def bulk_create(self, documents_data: list[dict[str, Any]]) -> list[Document]:
         """Create multiple documents in a single transaction"""
         try:
             async with DatabaseSession() as session:
@@ -83,9 +83,11 @@ class DocumentRepository:
                         mime_type=doc_data.get("mime_type"),
                         uploaded_by=doc_data.get("uploaded_by"),
                         status="pending",
-                        doc_metadata=json.dumps(doc_data.get("doc_metadata"))
-                        if doc_data.get("doc_metadata")
-                        else None,
+                        doc_metadata=(
+                            json.dumps(doc_data.get("doc_metadata"))
+                            if doc_data.get("doc_metadata")
+                            else None
+                        ),
                     )
                     documents.append(document)
 
@@ -100,7 +102,7 @@ class DocumentRepository:
             logger.error(f"Error bulk creating documents: {e.args[0]}")
             raise e
 
-    async def get(self, document_id: uuid.UUID) -> Optional[Document]:
+    async def get(self, document_id: uuid.UUID) -> Document | None:
         """Get a document by ID"""
         try:
             async with DatabaseSession() as session:
@@ -111,7 +113,7 @@ class DocumentRepository:
             logger.error(f"Error getting document: {e.args[0]}")
             raise e
 
-    async def get_all_from_kb(self, kb_id: uuid.UUID) -> List[Document]:
+    async def get_all_from_kb(self, kb_id: uuid.UUID) -> list[Document]:
         """Get all documents from a knowledge base"""
         try:
             async with DatabaseSession() as session:
@@ -136,8 +138,8 @@ class DocumentRepository:
             raise e
 
     async def get_multiple_status(
-        self, document_ids: List[uuid.UUID]
-    ) -> List[DocumentProcessingStatusResponse]:
+        self, document_ids: list[uuid.UUID]
+    ) -> list[DocumentProcessingStatusResponse]:
         """Get processing status for multiple documents"""
         try:
             async with DatabaseSession() as session:
@@ -154,7 +156,7 @@ class DocumentRepository:
 
     async def get_status(
         self, document_id: uuid.UUID
-    ) -> Optional[DocumentProcessingStatusResponse]:
+    ) -> DocumentProcessingStatusResponse | None:
         """Get document processing status"""
         try:
             document = await self.get(document_id)
@@ -170,8 +172,8 @@ class DocumentRepository:
         document_id: uuid.UUID,
         status: str,
         total_chunks: int = 0,
-        error: Optional[str] = None,
-    ) -> Optional[Document]:
+        error: str | None = None,
+    ) -> Document | None:
         """Update document processing status"""
         try:
             async with DatabaseSession() as session:
@@ -199,8 +201,8 @@ class DocumentRepository:
             raise e
 
     async def update(
-        self, document_id: uuid.UUID, update_data: Dict[str, Any]
-    ) -> Optional[Document]:
+        self, document_id: uuid.UUID, update_data: dict[str, Any]
+    ) -> Document | None:
         """Update document with dictionary of fields"""
         try:
             async with DatabaseSession() as session:
@@ -228,7 +230,7 @@ class DocumentRepository:
         self,
         knowledge_base_id: uuid.UUID,
         pagination: PaginationParams,
-        search: Optional[SearchParams] = None,
+        search: SearchParams | None = None,
     ) -> DocumentListResponse:
         """List documents for a knowledge base with pagination and search"""
         try:
@@ -287,7 +289,7 @@ class DocumentRepository:
 
     async def find_by_hash(
         self, kb_id: uuid.UUID, content_hash: str
-    ) -> Optional[Document]:
+    ) -> Document | None:
         """Find document by hash with status information for retry logic"""
         try:
             async with DatabaseSession() as session:

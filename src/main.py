@@ -1,30 +1,31 @@
 # src/main.py
-from datetime import datetime
 import time
 from contextlib import asynccontextmanager
+from datetime import datetime
 from zoneinfo import ZoneInfo
-import yaml
 
 import uvicorn
-from fastapi import FastAPI, Request, HTTPException, Query
+import yaml
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse, HTMLResponse
-from prometheus_fastapi_instrumentator import Instrumentator
+from fastapi.responses import HTMLResponse, StreamingResponse
 from langchain.globals import set_llm_cache
+from prometheus_fastapi_instrumentator import Instrumentator
 
+from src.api import ROUTERS
 from src.core.config.settings import settings
-from src.utils.logger_conf import logger
-from src.infrastructure.database import database_connector
+from src.core.exceptions.base import BaseException
+from src.core.monitoring.observability import setup_tracing
+from src.domain.schemas.chat import HealthCheckResponse
 from src.infrastructure.cache import redis_client
-from src.rag.vectorstores import vector_storage_migration
+from src.infrastructure.database import database_connector
 from src.middlewares.endpoint_manager import endpoint_manager
-from src.middlewares.response_handler import ResponseHandlerMiddleware
 from src.middlewares.exception_handler import exception_handler
 from src.middlewares.rate_limit import RateLimitMiddleware
-from src.domain.schemas.chat import HealthCheckResponse
-from src.core.monitoring.observability import setup_tracing
-from src.api import ROUTERS
+from src.middlewares.response_handler import ResponseHandlerMiddleware
+from src.rag.vectorstores import vector_storage_migration
+from src.utils.logger_conf import logger
 
 
 @asynccontextmanager
@@ -97,9 +98,10 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-app.exception_handler(Exception)(exception_handler)
-app.exception_handler(HTTPException)(exception_handler)
-app.exception_handler(RequestValidationError)(exception_handler)
+app.add_exception_handler(BaseException, exception_handler)
+app.add_exception_handler(HTTPException, exception_handler)
+app.add_exception_handler(RequestValidationError, exception_handler)
+app.add_exception_handler(Exception, exception_handler)
 
 
 @app.get("/health")
@@ -158,7 +160,7 @@ for router in ROUTERS:
 
 if __name__ == "__main__":
     host = "0.0.0.0"
-    with open("etc/log_config.yml", "r", encoding="utf-8") as f:
+    with open("etc/log_config.yml", encoding="utf-8") as f:
         log_config = yaml.safe_load(f)
     logger.info(f"Starting server on host={host}, port={settings.port}")
     uvicorn.run("src.main:app", host=host, port=settings.port, log_config=log_config)

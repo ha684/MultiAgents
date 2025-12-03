@@ -1,6 +1,6 @@
 # src/services/auth_service.py
 from datetime import datetime, timedelta
-from typing import Any, List
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, select
@@ -133,9 +133,11 @@ class AuthService:
                 )
                 lock_until = user.account_locked_until
                 raise AccountLockedException(
-                    unlock_time=lock_until.strftime("%Y-%m-%d %H:%M:%S UTC")
-                    if lock_until
-                    else None
+                    unlock_time=(
+                        lock_until.strftime("%Y-%m-%d %H:%M:%S UTC")
+                        if lock_until
+                        else None
+                    )
                 )
 
             if user.status == UserStatus.SUSPENDED:
@@ -444,7 +446,7 @@ class AuthService:
         """Count all users"""
         return await self.user_repo.count_users()
 
-    async def get_users(self, offset: int, limit: int, order_by: Any) -> List[User]:
+    async def get_users(self, offset: int, limit: int, order_by: Any) -> list[User]:
         """Get users with pagination"""
         return await self.user_repo.get_users(offset, limit, order_by)
 

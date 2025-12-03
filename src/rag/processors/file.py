@@ -1,5 +1,6 @@
 # src/rag/processors/file.py
-from typing import List
+
+from typing import Any
 
 from src.core.config.celery_app import celery_app
 from src.utils.decorators import singleton
@@ -12,7 +13,7 @@ class FileProcessor:
     """
 
     @staticmethod
-    def process_files(document_ids: str | List[str]) -> str | List[str] | None:
+    def process_files(document_ids: str | list[str]) -> Any:
         """
         Start processing a document using Celery.
 

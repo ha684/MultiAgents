@@ -1,21 +1,21 @@
 # src/api/auth.py
-from datetime import datetime
-from zoneinfo import ZoneInfo
-from urllib.parse import urlencode
-import secrets
 import json
-from typing import Optional
+import secrets
+from datetime import datetime
+from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Body, Depends, Query, HTTPException
+import httpx
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
-import httpx
+from pydantic import BaseModel
 
-from src.dependencies.auth import get_current_user, require_admin
 from src.core.config.settings import settings
+from src.core.security import TokenManager
 from src.database.models.user import User, UserStatus
+from src.dependencies.auth import get_current_user, require_admin
 from src.domain.schemas.auth import (
     EmailVerificationRequest,
     PasswordChangeRequest,
@@ -26,9 +26,8 @@ from src.domain.schemas.auth import (
     UserProfileResponse,
     UserRegistrationRequest,
 )
-from src.services.auth_service import AuthService
-from src.core.security import TokenManager
 from src.infrastructure.cache import redis_client
+from src.services.auth_service import AuthService
 from src.utils.logger_conf import logger
 
 
@@ -47,7 +46,7 @@ auth_service = AuthService()
 
 @router.get("/google/login")
 async def google_oauth_redirect(
-    redirect_uri: Optional[str] = Query(
+    redirect_uri: str | None = Query(
         None, description="Frontend redirect URI after OAuth"
     ),
 ):
@@ -164,9 +163,11 @@ async def google_oauth_callback(
                 "google_id": google_user_id,
                 "avatar_url": picture,
                 "email_verified": email_verified,
-                "status": UserStatus.ACTIVE
-                if email_verified
-                else UserStatus.PENDING_VERIFICATION,
+                "status": (
+                    UserStatus.ACTIVE
+                    if email_verified
+                    else UserStatus.PENDING_VERIFICATION
+                ),
             }
             user = await auth_service.create_oauth_user(user_data)
 
@@ -363,9 +364,10 @@ async def change_password(
             str(current_user.id), password_data
         )
         if success:
-            return "Password changed successfully"
+            return {"message": "Password changed successfully"}
+
         else:
-            return "Password change failed"
+            return {"message": "Password change failed"}
     except Exception as e:
         raise e
 
@@ -375,7 +377,7 @@ async def request_password_reset(reset_data: PasswordResetRequest):
     """Request password reset"""
     try:
         await auth_service.request_password_reset(reset_data.email)
-        return "If the email exists, a password reset link has been sent"
+        return {"message": "If the email exists, a password reset link has been sent"}
     except Exception as e:
         raise e
 
@@ -463,11 +465,9 @@ async def list_users(
 async def validate_token(current_user: User = Depends(get_current_user)):
     """Validate current token and return user info"""
     return {
-        "data": {
-            "user_id": str(current_user.id),
-            "email": current_user.email,
-            "role": current_user.role.value,
-            "status": current_user.status.value,
-        },
+        "user_id": str(current_user.id),
+        "email": current_user.email,
+        "role": current_user.role.value,
+        "status": current_user.status.value,
         "message": "Token is valid",
     }

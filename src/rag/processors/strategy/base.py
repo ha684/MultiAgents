@@ -1,6 +1,6 @@
 # src/rag/processors/strategy/base.py
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List
+from typing import Any
 
 from langchain_core.documents import Document
 
@@ -13,9 +13,9 @@ class BaseStrategy(ABC):
     All concrete strategies should inherit from this class and implement the chunk method.
     """
 
-    _supported_file_types: List[str] = []
+    _supported_file_types: list[str] = []
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """
         Initialize the strategy with configuration.
 
@@ -25,7 +25,7 @@ class BaseStrategy(ABC):
         self.config = config
 
     @classmethod
-    def get_supported_file_types(cls) -> List[str]:
+    def get_supported_file_types(cls) -> list[str]:
         """
         Get the list of supported file types for this strategy.
 
@@ -50,7 +50,9 @@ class BaseStrategy(ABC):
         return file_extension in self._supported_file_types
 
     @abstractmethod
-    def chunk(self, file_path: str, document: DBDocument) -> List[Document]:
+    async def chunk(
+        self, file_path: str, document: DBDocument
+    ) -> tuple[list[Document], str]:
         """
         Process a document file according to the strategy.
 
@@ -59,6 +61,6 @@ class BaseStrategy(ABC):
             document: Document data (optional)
 
         Returns:
-            A list of Langchain Document objects
+            A tuple containing a list of Langchain Document objects and the full text of the document
         """
         raise NotImplementedError("Subclasses should implement this method.")

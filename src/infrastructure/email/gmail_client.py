@@ -1,13 +1,13 @@
 # src/infrastructure/email/gmail_client.py
 import base64
-from datetime import datetime, timedelta, timezone
+import os
+import re
+from datetime import UTC, datetime, timedelta
 from email import encoders
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from enum import Enum
-import os
-import re
 
 import httpx
 
@@ -68,16 +68,16 @@ class GmailAPI:
             elif "expired" in error_message.lower():
                 return ErrorType.EXPIRED_TOKEN
 
-        if status_code == 400:
-            if any(
+        if (
+            status_code == 400
+            and any(
                 keyword in error_message.lower()
                 for keyword in ["invalid", "malformed", "bad request"]
-            ):
-                if context == "send_email" and (
-                    "recipient" in error_message.lower()
-                    or "to" in error_message.lower()
-                ):
-                    return ErrorType.INVALID_EMAIL
+            )
+            and context == "send_email"
+            and ("recipient" in error_message.lower() or "to" in error_message.lower())
+        ):
+            return ErrorType.INVALID_EMAIL
 
         if (
             status_code == 429
@@ -113,7 +113,7 @@ class GmailAPI:
                     token_data = response.json()
                     self.access_token = token_data.get("access_token")
                     expires_in = token_data.get("expires_in", 3600)
-                    self.token_expires_at = datetime.now(timezone.utc) + timedelta(
+                    self.token_expires_at = datetime.now(UTC) + timedelta(
                         seconds=expires_in
                     )
                     logger.info("Access token obtained successfully!")
@@ -138,8 +138,7 @@ class GmailAPI:
     async def ensure_valid_token(self):
         """Ensure we have a valid access token"""
         if not self.access_token or (
-            self.token_expires_at
-            and datetime.now(timezone.utc) >= self.token_expires_at
+            self.token_expires_at and datetime.now(UTC) >= self.token_expires_at
         ):
             await self.get_access_token()
 

@@ -3,17 +3,17 @@ from src.core.config.celery_app import celery_app
 from src.utils.logger_conf import logger
 
 if __name__ == "__main__":
-    logger.info("Starting Celery worker for document processing")
+    logger.info("Starting Celery worker (Low Resource Mode)")
     celery_app.worker_main(
         argv=[
             "worker",
             "--loglevel=info",
             "--pool=prefork",
-            "--concurrency=4",
+            "--concurrency=1",
             "-Q",
             "document_processing",
-            "--max-tasks-per-child=100",
-            "--max-memory-per-child=200000",
+            "--max-tasks-per-child=20",
+            "--max-memory-per-child=100000",
             "-O",
             "fair",
             "--without-heartbeat",

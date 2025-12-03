@@ -1,8 +1,8 @@
 # src/domain/schemas/auth.py
+import re
 from datetime import datetime
 from enum import Enum
-import re
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
@@ -33,7 +33,7 @@ class UserRegistrationRequest(BaseModel):
     email: EmailStr
     username: str
     password: str
-    full_name: Optional[str] = None
+    full_name: str | None = None
 
     @field_validator("username")
     @classmethod
@@ -77,7 +77,7 @@ class UserRegistrationRequest(BaseModel):
 
     @field_validator("full_name")
     @classmethod
-    def validate_full_name(cls, v: Optional[str]) -> Optional[str]:
+    def validate_full_name(cls, v: str | None) -> str | None:
         """Validate the full_name if it's provided."""
         if v is not None:
             errors = []
@@ -149,7 +149,7 @@ class EmailVerificationRequest(BaseModel):
 class OAuthCallbackRequest(BaseModel):
     provider: str = Field(..., pattern="^(google|github)$")
     code: str
-    state: Optional[str] = None
+    state: str | None = None
 
 
 # Response Models
@@ -164,12 +164,12 @@ class UserProfileResponse(BaseModel):
     id: str
     email: str
     username: str
-    full_name: Optional[str]
+    full_name: str | None
     role: UserRole
     status: UserStatus
     email_verified: bool
     created_at: datetime
-    last_login_at: Optional[datetime]
+    last_login_at: datetime | None
 
     class Config:
         from_attributes = True
@@ -178,8 +178,8 @@ class UserProfileResponse(BaseModel):
 class UserSessionResponse(BaseModel):
     id: str
     session_id: str
-    ip_address: Optional[str]
-    user_agent: Optional[str]
+    ip_address: str | None
+    user_agent: str | None
     created_at: datetime
     last_activity: datetime
     expires_at: datetime
@@ -192,7 +192,7 @@ class UserSessionResponse(BaseModel):
 class PermissionResponse(BaseModel):
     id: str
     name: str
-    description: Optional[str]
+    description: str | None
     resource: str
     action: str
 
@@ -203,15 +203,15 @@ class PermissionResponse(BaseModel):
 class UserPermissionResponse(BaseModel):
     permission: PermissionResponse
     granted_at: datetime
-    expires_at: Optional[datetime]
-    resource_id: Optional[str]
+    expires_at: datetime | None
+    resource_id: str | None
 
     class Config:
         from_attributes = True
 
 
 class UserWithPermissionsResponse(UserProfileResponse):
-    permissions: List[UserPermissionResponse] = []
+    permissions: list[UserPermissionResponse] = []
 
 
 class StandardResponse(BaseModel):
@@ -219,11 +219,11 @@ class StandardResponse(BaseModel):
 
     success: bool
     message: str
-    data: Optional[Union[Dict[str, Any], List[Dict[str, Any]], Any]] = None
+    data: dict[str, Any] | list[dict[str, Any]] | Any | None = None
     timestamp: datetime = Field(
         default_factory=datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
     )
-    request_id: Optional[str] = None
+    request_id: str | None = None
     status_code: int = 200
 
     class Config:
@@ -233,17 +233,17 @@ class StandardResponse(BaseModel):
 class PaginatedResponse(BaseModel):
     success: bool = True
     message: str = "Success"
-    data: List[Any]
-    pagination: Dict[str, Any]
-    metadata: Optional[Dict[str, Any]] = None
+    data: list[Any]
+    pagination: dict[str, Any]
+    metadata: dict[str, Any] | None = None
 
 
 class ErrorResponse(BaseModel):
     success: bool = False
     message: str
-    error_code: Optional[str] = None
-    errors: Optional[List[str]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    error_code: str | None = None
+    errors: list[str] | None = None
+    metadata: dict[str, Any] | None = None
 
 
 # Internal Models
@@ -260,29 +260,29 @@ class TokenData(BaseModel):
 class ResourcePermissionCheck(BaseModel):
     resource: str  # e.g., 'document', 'knowledge_base'
     action: str  # e.g., 'read', 'write', 'delete'
-    resource_id: Optional[str] = None  # Specific resource ID
+    resource_id: str | None = None  # Specific resource ID
 
 
 class AccessControlContext(BaseModel):
     user_id: str
     role: UserRole
-    permissions: List[str]
-    resource_permissions: Dict[str, List[str]] = {}  # resource_id -> [permissions]
+    permissions: list[str]
+    resource_permissions: dict[str, list[str]] = {}  # resource_id -> [permissions]
 
 
 class RateLimitInfo(BaseModel):
     limit: int
     remaining: int
     reset_time: datetime
-    retry_after: Optional[int] = None
+    retry_after: int | None = None
 
 
 class RequestContext(BaseModel):
     request_id: str
-    user_id: Optional[str] = None
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
+    user_id: str | None = None
+    ip_address: str | None = None
+    user_agent: str | None = None
     timestamp: datetime
-    correlation_id: Optional[str] = None
+    correlation_id: str | None = None
     timestamp: datetime
-    correlation_id: Optional[str] = None
+    correlation_id: str | None = None

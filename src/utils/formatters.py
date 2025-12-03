@@ -1,7 +1,6 @@
 # src/utils/formatters.py
 import json
-from typing import Any, Dict, Optional, Union
-
+from typing import Any
 
 from src.core.config.graph_configs import GRAPH_CONFIGS
 from src.domain.schemas.stream import StreamEvent, StreamEventType, StreamPhase
@@ -13,9 +12,9 @@ class StreamEventBuilder:
 
     @staticmethod
     def create_sse_event(
-        event_type: Union[StreamEventType, str],
-        data: Dict[str, Any],
-        event_id: Optional[str] = None,
+        event_type: StreamEventType | str,
+        data: dict[str, Any],
+        event_id: str | None = None,
     ) -> str:
         """Create SSE formatted event"""
         if isinstance(event_type, StreamEventType):
@@ -50,11 +49,19 @@ class StreamEventBuilder:
         )
 
     @staticmethod
+    def thinking_delta(text: str, index: int = 0) -> str:
+        """Thinking chunk delta"""
+        return StreamEventBuilder.create_sse_event(
+            StreamEventType.MESSAGE_DELTA,
+            {"delta": {"type": "thinking_delta", "text": text}, "index": index},
+        )
+
+    @staticmethod
     def status_update(
-        phase: Union[StreamPhase, str],
+        phase: StreamPhase | str,
         message: str,
-        progress: Optional[float] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        progress: float | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         """Status update"""
         if isinstance(phase, StreamPhase):
@@ -75,9 +82,9 @@ class StreamEventBuilder:
 
     @staticmethod
     def message_stop(
-        final_message: Optional[str | Dict[str, Any]] = None,
-        references: Optional[list] = None,
-        metadata: Optional[dict] = None,
+        final_message: str | dict[str, Any] | None = None,
+        references: list | None = None,
+        metadata: dict | None = None,
     ) -> str:
         """End of message"""
         data = {}
@@ -94,7 +101,7 @@ class StreamEventBuilder:
         return StreamEventBuilder.create_sse_event(StreamEventType.MESSAGE_STOP, data)
 
     @staticmethod
-    def error(error_type: str, message: str, code: Optional[int] = None) -> str:
+    def error(error_type: str, message: str, code: int | None = None) -> str:
         """Error event"""
         data = {"type": error_type, "message": message}
 
@@ -112,14 +119,19 @@ class AgenticStreamHandler:
     """
 
     def __init__(self):
-        self.current_graph: Optional[str] = None
-        self.current_node: Optional[str] = None
+        self.current_graph: str | None = None
+        self.current_node: str | None = None
         self.graph_stack: list[str] = []
-        self.last_phase: Optional[StreamPhase] = None
-        self.last_emitted_message: Optional[str] = None
+        self.last_phase: StreamPhase | None = None
+        self.last_emitted_message: str | None = None
         self.content_index: int = 0
+        self.thinking_index: int = 0
+        self.tool_args_buffer: dict[str, str] = {}
+        self.inside_thought_value: dict[str, bool] = {}
+        self.thought_extracted_length: dict[str, int] = {}
+        self.last_emitted_completion: dict[str, Any] | None = None
 
-    async def handle_event(self, event: dict) -> Optional[str]:
+    async def handle_event(self, event: dict) -> str | None:
         """Process a single event and return SSE event if needed"""
         kind = event["event"]
         name = event.get("name", "")
@@ -135,7 +147,7 @@ class AgenticStreamHandler:
 
         return None
 
-    async def _handle_chain_start(self, name: str, event: dict) -> Optional[str]:
+    async def _handle_chain_start(self, name: str, event: dict) -> str | None:
         """Handle chain/node start
 
         Key insight: name here is the node name (e.g., "final_synthesizer")
@@ -185,7 +197,7 @@ class AgenticStreamHandler:
 
         return None
 
-    async def _handle_chain_end(self, name: str, event: dict) -> Optional[str]:
+    async def _handle_chain_end(self, name: str, event: dict) -> str | None:
         """Handle chain/node end"""
         if name in GRAPH_CONFIGS:
             if self.graph_stack:
@@ -208,7 +220,7 @@ class AgenticStreamHandler:
 
         return await self._emit_rich_feedback(output)
 
-    async def _emit_completion_status(self, output: dict) -> Optional[str]:
+    async def _emit_completion_status(self, output: dict) -> str | None:
         """Emit status based on node completion"""
 
         def extract_urls_and_favicons(items):
@@ -216,76 +228,62 @@ class AgenticStreamHandler:
             urls = []
             favicons = []
             for item in items:
-                if url := item.metadata.get("original_filename", ""):
+                metadata = (
+                    item.metadata
+                    if hasattr(item, "metadata")
+                    else item.get("metadata", {})
+                )
+
+                url = (
+                    metadata.get("source")
+                    or metadata.get("url")
+                    or metadata.get("original_filename")
+                    or ""
+                )
+                if url:
                     urls.append(url)
-                if favicon := item.metadata.get("favicon", ""):
+
+                if favicon := metadata.get("favicon", ""):
                     favicons.append(favicon)
             return urls, favicons
 
-        def build_retrieval_status(message, sources_count, urls=None, favicons=None):
-            """Build retrieval status with optional web metadata"""
-            metadata = {"sources_count": sources_count}
-            if urls and favicons:
-                metadata.update({"urls": urls, "favicons": favicons})
+        if "_sql_result" in output:
+            sql_result = output["_sql_result"]
+
+            completion_key = {"type": "sql", "result": str(sql_result)[:200]}
+            if self.last_emitted_completion == completion_key:
+                return None
+            self.last_emitted_completion = completion_key
+
             return StreamEventBuilder.status_update(
                 phase=StreamPhase.RETRIEVAL,
-                message=message,
-                metadata=metadata,
+                message="Executed SQL Query",
+                metadata={"sql_result_preview": str(sql_result)[:200]},
             )
 
-        if "retrieval_contexts" in output:
-            retrieval = output["retrieval_contexts"]
-            total_cited = retrieval.get("total_cited", 0)
-            total_retrieved = retrieval.get("total_retrieved", 0)
+        documents = output.get("cited_documents") or output.get("_temp_documents") or []
 
-            if total_cited > 0 and retrieval.get("search_method") == "web":
-                urls, favicons = extract_urls_and_favicons(
-                    retrieval.get("cited_chunks", [])
-                )
-                return build_retrieval_status(
-                    f"Found {total_cited} relevant sources",
-                    total_cited,
-                    urls,
-                    favicons,
-                )
-            elif total_retrieved > 0:
-                return build_retrieval_status(
-                    f"Retrieved total {total_retrieved} documents",
-                    total_retrieved,
-                )
-            else:
-                return build_retrieval_status("No documents found", 0)
-
-        if "search_results" in output:
-            search_results = output["search_results"]
-            documents = search_results.get("documents", [])
-            search_type = search_results.get("search_type", "")
-            doc_count = len(documents)
-
-            if doc_count == 0:
-                return build_retrieval_status("No documents found", 0)
-
-            message = f"Searched: {search_results.get('query', '')}"
-
-            if search_type == "web":
-                urls, favicons = extract_urls_and_favicons(documents)
-                metadata = {
-                    "search_count": doc_count,
-                    "urls": urls,
-                    "favicons": favicons,
-                }
-            else:
-                metadata = {"search_count": doc_count}
+        if documents:
+            count = len(documents)
+            urls, favicons = extract_urls_and_favicons(documents)
+            completion_key = {"type": "documents", "urls": tuple(sorted(urls))}
+            if self.last_emitted_completion == completion_key:
+                return None
+            self.last_emitted_completion = completion_key
 
             return StreamEventBuilder.status_update(
                 phase=StreamPhase.RETRIEVAL,
-                message=message,
-                metadata=metadata,
+                message=f"Found {count} relevant sources",
+                metadata={
+                    "sources_count": count,
+                    "urls": urls,
+                    "favicons": favicons,
+                },
             )
 
         return None
 
-    async def _emit_rich_feedback(self, output: dict) -> Optional[str]:
+    async def _emit_rich_feedback(self, output: dict) -> str | None:
         """Emit rich feedback for certain outputs"""
 
         if "all_search_history" in output:
@@ -312,7 +310,7 @@ class AgenticStreamHandler:
 
         return None
 
-    async def _handle_llm_stream(self, name: str, event: dict) -> Optional[str]:
+    async def _handle_llm_stream(self, name: str, event: dict) -> str | None:
         """Handle LLM streaming
 
         Key insight: name here is the model name (e.g., "ChatOpenAI"),
@@ -339,8 +337,8 @@ class AgenticStreamHandler:
                             node_meta = cfg.get_node_meta(self.current_node)
                             break
 
-                if node_meta and node_meta.stream_phase == StreamPhase.SYNTHESIS:
-                    self.last_phase = StreamPhase.SYNTHESIS
+                if node_meta:
+                    self.last_phase = node_meta.stream_phase
 
         if self.last_phase == StreamPhase.SYNTHESIS:
             if chunk.content:
@@ -353,18 +351,77 @@ class AgenticStreamHandler:
         else:
             if hasattr(chunk, "tool_call_chunks") and chunk.tool_call_chunks:
                 for tc in chunk.tool_call_chunks:
-                    tool_name = tc.get("name")
-                    if tool_name == "think":
-                        args = tc.get("args", "")
-                        if args:
-                            return StreamEventBuilder.status_update(
-                                phase=StreamPhase.ANALYSIS,
-                                message=args,
-                            )
-            elif chunk.content:
+                    args = tc.get("args", "")
+
+                    if not args:
+                        continue
+
+                    tc_id = tc.get("id", "default")
+
+                    if tc_id not in self.tool_args_buffer:
+                        self.tool_args_buffer[tc_id] = ""
+                        self.thought_extracted_length[tc_id] = 0
+
+                    self.tool_args_buffer[tc_id] += args
+
+                    new_text = self._extract_incremental_thinking(tc_id)
+
+                    if new_text:
+                        evt = StreamEventBuilder.thinking_delta(
+                            new_text, index=self.thinking_index
+                        )
+                        self.thinking_index += 1
+                        return evt
+
+            if chunk.content:
                 return StreamEventBuilder.status_update(
                     phase=StreamPhase.ANALYSIS,
                     message=chunk.content,
                 )
+
+        return None
+
+    def _extract_incremental_thinking(self, tool_call_id: str) -> str | None:
+        """Extract NEW thinking text from buffered JSON.
+
+        Returns only the new text that hasn't been extracted yet for this tool call.
+        Handles both complete and partial JSON gracefully.
+        """
+        buffer = self.tool_args_buffer.get(tool_call_id, "")
+        previously_extracted = self.thought_extracted_length.get(tool_call_id, 0)
+
+        if not buffer:
+            return None
+
+        try:
+            parsed = json.loads(buffer)
+            if isinstance(parsed, dict):
+                thought_text = parsed.get("thought") or parsed.get("thinking") or ""
+
+                if thought_text and len(thought_text) > previously_extracted:
+                    new_text = thought_text[previously_extracted:]
+                    self.thought_extracted_length[tool_call_id] = len(thought_text)
+                    return new_text
+        except json.JSONDecodeError:
+            import re
+
+            pattern = (
+                r'["\'](?:thought|thinking)["\']:\s*["\']([^"\'\\]*(?:\\.[^"\'\\]*)*)'
+            )
+            match = re.search(pattern, buffer, re.IGNORECASE | re.DOTALL)
+
+            if match:
+                thought_text = match.group(1)
+
+                thought_text = (
+                    thought_text.replace('\\"', '"')
+                    .replace("\\n", "\n")
+                    .replace("\\t", "\t")
+                )
+
+                if len(thought_text) > previously_extracted:
+                    new_text = thought_text[previously_extracted:]
+                    self.thought_extracted_length[tool_call_id] = len(thought_text)
+                    return new_text
 
         return None

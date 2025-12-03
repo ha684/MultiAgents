@@ -1,14 +1,13 @@
 # src/agents/basic/folder_categorization_agent.py
 
 import json
-from typing import Dict
 
 from langchain_core.prompts import ChatPromptTemplate
 
+from src.agents.prompts.get_prompt_template import load_prompt_template
 from src.core.config.llm_config import SupportedLLMProviders
 from src.domain.schemas.agent import RelevantFolder
 from src.llm.factory import get_llm
-from src.agents.prompts.get_prompt_template import load_prompt_template
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
@@ -30,7 +29,7 @@ class FolderCategorizationAgent:
         logger.info("Folder Categorization Agent initialized successfully.")
 
     async def get_relevant_folder(
-        self, query: str, folder_structure: Dict
+        self, query: str, folder_structure: dict
     ) -> RelevantFolder:
         input_data = {
             "query": query,

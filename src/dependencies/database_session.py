@@ -1,5 +1,5 @@
 # src/dependencies/database_session.py
-from typing import Optional
+import contextlib
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,7 +29,7 @@ class DatabaseSession:
 
     def __init__(self):
         self.db_connection = database_connector
-        self.session: Optional[AsyncSession] = None
+        self.session: AsyncSession | None = None
 
     async def __aenter__(self) -> AsyncSession:
         try:
@@ -62,18 +62,14 @@ class DatabaseSession:
             logger.error(
                 f"Database transaction error during {'rollback' if exc_type else 'commit'}: {e}"
             )
-            try:
+            with contextlib.suppress(Exception):
                 await self.session.rollback()
-            except Exception:
-                pass
             raise DatabaseTransactionError(f"Transaction failed: {str(e)}")
 
         except Exception as e:
             logger.error(f"Unexpected error during session cleanup: {e}")
-            try:
+            with contextlib.suppress(Exception):
                 await self.session.rollback()
-            except Exception:
-                pass
             raise DatabaseTransactionError(f"Session cleanup failed: {str(e)}")
 
         finally:

@@ -1,5 +1,4 @@
 # src/core/security/access_control.py
-from typing import Optional
 
 from src.core.config.settings import ROLE_PERMISSIONS
 from src.database.models.user import UserRole
@@ -19,7 +18,7 @@ class AccessControlManager:
         user_permissions: list,
         resource: str,
         action: str,
-        resource_id: Optional[str] = None,
+        resource_id: str | None = None,
     ) -> bool:
         """Check if user has access to a specific resource"""
         # Check for general resource permission

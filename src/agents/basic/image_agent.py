@@ -99,7 +99,7 @@ class ImageExtractionAgent(BaseAgent):
         base64_data = base64.b64encode(image_data).decode("utf-8")
         return f"data:{mime_type};base64,{base64_data}"
 
-    async def extract(self, image_path: str) -> str | None:
+    async def ainvoke(self, image_path: str) -> str | None:
         """
         Extract text from image using vision model
         """

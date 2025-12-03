@@ -2,9 +2,10 @@
 Unit tests for chunks endpoints.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 
 @pytest.mark.unit

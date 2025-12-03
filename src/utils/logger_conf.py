@@ -1,7 +1,9 @@
 # src/utils/logger_conf.py
-from loguru import logger
-from .stdout_wrapper import SAFE_STDOUT
 import os
+
+from loguru import logger
+
+from .stdout_wrapper import SAFE_STDOUT
 
 logs_dir = "logs"
 os.makedirs(logs_dir, exist_ok=True)

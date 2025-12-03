@@ -1,15 +1,15 @@
 # src/services/chat_service.py
 import uuid
-from typing import Any, AsyncGenerator, Dict, Generator, List, Union, cast
+from collections.abc import AsyncGenerator, Generator
+from typing import Any
 
 import tiktoken
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
-from qdrant_client.models import Filter, models
+from qdrant_client.models import Filter
 
 from src.agents import Agent
 from src.agents.basic import (
     citation_agent,
-    file_name_agent,
     query_context_agent,
     response_agent,
     summary_agent,
@@ -42,7 +42,7 @@ class ChatService:
         self.agent = Agent()
         self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
 
-    def _format_history(self, history: List[Message]) -> List[BaseMessage]:
+    def _format_history(self, history: list[Message]) -> list[BaseMessage]:
         """Converts simple dict history to LangChain message objects with metadata preserved."""
         formatted_messages = []
         for item in history:
@@ -93,11 +93,11 @@ class ChatService:
 
     async def _manage_conversation_length(
         self,
-        conversation: List[BaseMessage],
+        conversation: list[BaseMessage],
         num_recent_messages: int,
         conversation_details: Conversation,
         user_id: str,
-    ) -> List[BaseMessage]:
+    ) -> list[BaseMessage]:
         """Manage conversation length using token counting and summarization."""
         min_messages_to_keep = 4
         max_conversation_tokens = 4096
@@ -141,7 +141,7 @@ class ChatService:
                 return recent_messages
         return conversation
 
-    async def prepare_conversation(self, user_message: Message) -> List[BaseMessage]:
+    async def prepare_conversation(self, user_message: Message) -> list[BaseMessage]:
         """Prepare conversation history without saving the user message yet."""
         conversation_id = user_message.metadata.get("conversation_id")
         user_id = user_message.metadata.get("user_id")
@@ -163,7 +163,7 @@ class ChatService:
                     SystemMessage(content=f"Conversation Summary:\n{summary_text}")
                 )
 
-            conversation_history.append(user_message)  # type: ignore
+            conversation_history.append(user_message)
             formatted_conversation.extend(self._format_history(conversation_history))
 
             managed_conversation = await self._manage_conversation_length(
@@ -190,17 +190,16 @@ class ChatService:
 
     async def _retrieve(
         self,
-        conversation: List[BaseMessage],
+        conversation: list[BaseMessage],
         web_search_config: WebSearchConfig,
-        metadata: Dict[str, Any],
+        metadata: dict[str, Any],
     ) -> RetrievalContext:
         """Retrieves relevant documents based on the query and knowledge base ID."""
         embed_top = 50
-        rerank_top = 20
+        rerank_top = 15
         original_query = conversation[-1].content
         kb_id = metadata.get("kb_id")
         contextualized_query = original_query
-        cited_docs = []
         retrieved_docs = []
         max_tokens = 8192
 
@@ -227,21 +226,7 @@ class ChatService:
                     )
                     search_method = "web"
             else:
-                with tracer.start_as_current_span("FilenameAgent.extract_filename"):
-                    requested_filename = await file_name_agent.ainvoke(
-                        query=original_query
-                    )
-
                 filters: Filter = Filter(must=[])
-
-                if requested_filename:
-                    logger.info(f"Requested filename: {requested_filename}")
-                    cast(List[models.Condition], filters.must).append(
-                        models.FieldCondition(
-                            key="metadata.original_filename",
-                            match=models.MatchText(text=requested_filename),
-                        )
-                    )
 
                 logger.info(f"Filter applied: {filters}")
                 with tracer.start_as_current_span("vector_retrieval.retrieve"):
@@ -290,28 +275,28 @@ class ChatService:
             for i, doc in enumerate(retrieved_docs):
                 doc.metadata["original_index"] = i
 
-            if retrieved_docs:
-                with tracer.start_as_current_span("CitationAgent.extract_citations"):
-                    citation_indexes = await citation_agent.ainvoke(
-                        history=conversation,
-                        reference=retrieved_docs,
-                    )
-                if citation_indexes.indexes:
-                    cited_docs = [
-                        retrieved_docs[i - 1]
-                        for i in citation_indexes.indexes
-                        if 0 < i <= len(retrieved_docs)
-                    ]
-                logger.info(
-                    f"Extracted {len(cited_docs)} citations for query: {original_query} in knowledgebase: {kb_id}"
-                )
+            # if retrieved_docs:
+            #     with tracer.start_as_current_span("CitationAgent.extract_citations"):
+            #         citation_indexes = await citation_agent.ainvoke(
+            #             query=contextualized_query,
+            #             reference=retrieved_docs,
+            #         )
+            #     if citation_indexes.indexes:
+            #         cited_docs = [
+            #             retrieved_docs[i - 1]
+            #             for i in citation_indexes.indexes
+            #             if 0 < i <= len(retrieved_docs)
+            #         ]
+            #     logger.info(
+            #         f"Extracted {len(cited_docs)} citations for query: {original_query} in knowledgebase: {kb_id}"
+            #     )
 
             retrieval_context = RetrievalContext(
                 original_query=original_query,
                 contextualized_query=contextualized_query,
                 total_retrieved=len(retrieved_docs),
-                total_cited=len(cited_docs),
-                cited_chunks=cited_docs,
+                total_cited=len(retrieved_docs),
+                cited_chunks=retrieved_docs,
                 search_method=search_method,
             )
 
@@ -319,10 +304,10 @@ class ChatService:
 
     async def _retrieve_stream(
         self,
-        conversation: List[BaseMessage],
+        conversation: list[BaseMessage],
         web_search_config: WebSearchConfig,
-        metadata: Dict[str, Any],
-    ) -> Generator[Union[str, RetrievalContext], None, None]:
+        metadata: dict[str, Any],
+    ) -> Generator[str | RetrievalContext]:
         """Retrieves relevant documents based on the query and knowledge base ID."""
         embed_top = 50
         rerank_top = 20
@@ -387,19 +372,7 @@ class ChatService:
                 "Searching for relevant documents...",
                 progress=0.3,
             )
-            requested_filename = await file_name_agent.ainvoke(query=original_query)
-
             filters: Filter = Filter(must=[])
-
-            if requested_filename:
-                logger.info(f"Requested filename: {requested_filename}")
-                cast(List[models.Condition], filters.must).append(
-                    models.FieldCondition(
-                        key="metadata.original_filename",
-                        match=models.MatchText(text=requested_filename),
-                    )
-                )
-
             retrieved_docs = await vector_retrieval.retrieve(
                 kb_id=str(kb_id),
                 query=contextualized_query,
@@ -447,7 +420,7 @@ class ChatService:
                 progress=0.8,
             )
             citation_indexes = await citation_agent.ainvoke(
-                history=conversation,
+                query=contextualized_query,
                 reference=retrieved_docs,
             )
             if citation_indexes.indexes:
@@ -475,9 +448,9 @@ class ChatService:
     async def ask_normal(
         self,
         user_message: Message,
-        conversation: List[BaseMessage],
+        conversation: list[BaseMessage],
         web_search_config: WebSearchConfig,
-        metadata: Dict[str, Any],
+        metadata: dict[str, Any],
     ) -> Message:
         """Handles non-streaming (full text) response."""
         try:
@@ -485,7 +458,7 @@ class ChatService:
                 conversation, web_search_config, metadata
             )
             with tracer.start_as_current_span("ResponseAgent.generate_response"):
-                response = await response_agent.ainvoke(
+                response = await response_agent.ainvoke_deprecated(
                     contexts=retrieval_context.cited_chunks,
                     history=conversation,
                 )
@@ -524,10 +497,10 @@ class ChatService:
     async def ask_stream(
         self,
         user_message: Message,
-        conversation: List[BaseMessage],
+        conversation: list[BaseMessage],
         web_search_config: WebSearchConfig,
-        metadata: Dict[str, Any],
-    ) -> AsyncGenerator[str | BaseMessage, None]:
+        metadata: dict[str, Any],
+    ) -> AsyncGenerator[str | BaseMessage]:
         """Handles streaming response with robust error handling."""
         try:
             yield StreamEventBuilder.message_start()
@@ -612,9 +585,9 @@ class ChatService:
     async def _stream_agentic_workflow(
         self,
         user_message: Message,
-        conversation: List[BaseMessage],
-        metadata: Dict[str, Any],
-    ) -> AsyncGenerator[str, None]:
+        conversation: list[BaseMessage],
+        metadata: dict[str, Any],
+    ) -> AsyncGenerator[str]:
         """Stream agentic workflow with clean, focused updates"""
         try:
             yield StreamEventBuilder.message_start()
@@ -630,14 +603,11 @@ class ChatService:
 
                 if (
                     event["event"] == "on_chain_end"
-                    and event.get("name") == "MainOrchestrator"
+                    and event.get("name") == "MainGraph"
                 ):
                     final_state = event.get("data", {}).get("output")
 
-                if (
-                    event["event"] == "on_chain_end"
-                    and event["name"] != "MainOrchestrator"
-                ):
+                if event["event"] == "on_chain_end" and event["name"] != "MainGraph":
                     node_output = event.get("data", {}).get("output")
                     if node_output:
                         last_known_state = node_output
@@ -651,11 +621,8 @@ class ChatService:
             )
 
             response_metadata = final_state.get("response_metadata", {})
-            retrieval_contexts = final_state.get("retrieval_contexts", {})
 
-            cited_chunks = retrieval_contexts.get("cited_chunks", [])
-            if not cited_chunks:
-                cited_chunks = final_state.get("cited_documents", [])
+            cited_chunks = final_state.get("cited_documents", [])
 
             references = [
                 doc.model_dump() if hasattr(doc, "model_dump") else doc
@@ -664,19 +631,12 @@ class ChatService:
 
             agent_message = Message(
                 role="agent",
-                parts=[TextPart(type="text", text=final_state["final_answer"])],
+                parts=[TextPart(type="text", text=final_state.get("final_answer", ""))],
                 metadata=response_metadata,
                 retrieval_context=RetrievalContext(
-                    original_query=retrieval_contexts.get(
-                        "original_query", conversation[-1].content
-                    ),
-                    contextualized_query=retrieval_contexts.get(
-                        "contextualized_query", ""
-                    ),
-                    total_retrieved=retrieval_contexts.get("total_retrieved", 0),
+                    total_retrieved=len(cited_chunks),
                     total_cited=len(cited_chunks),
                     cited_chunks=cited_chunks,
-                    search_method=retrieval_contexts.get("search_method", "rag"),
                 ),
             )
 
@@ -720,9 +680,7 @@ class ChatService:
                 )
             return response
 
-    async def ask_sse(
-        self, request: ChatRequest
-    ) -> AsyncGenerator[str | BaseMessage, None]:
+    async def ask_sse(self, request: ChatRequest) -> AsyncGenerator[str | BaseMessage]:
         """Process a chat request and return a streaming response."""
         request = self.sanitize_request(request)
         web_search_config = _setup_web_search_config(request)

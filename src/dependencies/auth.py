@@ -1,7 +1,6 @@
 # src/auth/dependencies.py
 import os
 from datetime import datetime
-from typing import List, Optional
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
@@ -35,20 +34,21 @@ API_KEY = os.getenv("API_KEY", "1234567890")
 
 
 async def get_current_user_token(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> TokenData:
     """Extract and validate JWT token from request"""
-    if APP_ENV == "development" or credentials.credentials == API_KEY:
-        print("--- ⚠️ DEV MODE: Bypassing token auth ---")
-        return TokenData(
-            user_id="hafizh",
-            email="hafizh@gmail.com",
-            role=UserRole.ADMIN,
-            session_id="1234567890",
-            exp=1730150400,
-            iat=1730150400,
-            jti="1234567890",
-        )
+    if credentials and hasattr(credentials, "credentials"):
+        if APP_ENV == "development" or credentials.credentials == API_KEY:
+            print("--- ⚠️ DEV MODE: Bypassing token auth ---")
+            return TokenData(
+                user_id="hafizh",
+                email="hafizh@gmail.com",
+                role=UserRole.ADMIN,
+                session_id="1234567890",
+                exp=1730150400,
+                iat=1730150400,
+                jti="1234567890",
+            )
 
     if not credentials:
         raise TokenNotFoundException()
@@ -94,7 +94,7 @@ def require_role(required_role: UserRole):
     return role_dependency
 
 
-def require_roles(required_roles: List[UserRole]):
+def require_roles(required_roles: list[UserRole]):
     """Dependency factory for multiple role access control"""
 
     async def roles_dependency(current_user: User = Depends(get_current_user)) -> User:

@@ -8,9 +8,10 @@ Create Date: 2025-10-09 08:27:43.535309
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "b896907133a9"
@@ -242,7 +243,12 @@ def upgrade() -> None:
         ),
         sa.Column("is_active", sa.BOOLEAN(), autoincrement=False, nullable=True),
         sa.Column("summary", sa.TEXT(), autoincrement=False, nullable=True),
-        sa.Column("summarized_up_to_message_order", sa.INTEGER(), autoincrement=False, nullable=True),
+        sa.Column(
+            "summarized_up_to_message_order",
+            sa.INTEGER(),
+            autoincrement=False,
+            nullable=True,
+        ),
         sa.Column(
             "created_at",
             postgresql.TIMESTAMP(timezone=True),

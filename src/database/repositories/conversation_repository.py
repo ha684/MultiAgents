@@ -3,17 +3,21 @@
 Database service layer for handling all database operations
 """
 
-from datetime import datetime
-from typing import Any, Dict, List, Optional
 import uuid
+from datetime import datetime
+from typing import Any
 
 from sqlalchemy import desc, select
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.database.models.conversation import ConversationModel, MessageModel
-from src.database.models.conversation import MessageStatus
+from src.database.models.conversation import (
+    ConversationModel,
+    MessageModel,
+    MessageStatus,
+)
 from src.dependencies.database_session import DatabaseSession
 from src.domain.schemas.chat import (
+    Conversation,
     DataPart,
     FileContent,
     FilePart,
@@ -21,7 +25,6 @@ from src.domain.schemas.chat import (
     Part,
     RetrievalContext,
     TextPart,
-    Conversation,
 )
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
@@ -54,7 +57,7 @@ class ConversationRepository:
 
     async def get_conversation(
         self, conversation_id: uuid.UUID, user_id: str
-    ) -> Optional[Conversation]:
+    ) -> Conversation | None:
         """Get a conversation by ID"""
         try:
             async with DatabaseSession() as session:
@@ -150,7 +153,7 @@ class ConversationRepository:
             logger.error(f"Error updating conversation summary: {e}")
             raise
 
-    async def list_conversations(self, user_id: str) -> List[Conversation]:
+    async def list_conversations(self, user_id: str) -> list[Conversation]:
         """List all conversations, optionally filtered by app_name and user"""
         try:
             async with DatabaseSession() as session:
@@ -174,8 +177,8 @@ class ConversationRepository:
             raise e
 
     async def add_messages(
-        self, messages: List[Message], conversation_id: uuid.UUID
-    ) -> List[str]:
+        self, messages: list[Message], conversation_id: uuid.UUID
+    ) -> list[str]:
         """Add multiple messages to the database in a single transaction"""
         try:
             async with DatabaseSession() as session:
@@ -200,9 +203,11 @@ class ConversationRepository:
                         parts=self._serialize_parts(message.parts),
                         message_metadata=message.metadata,
                         message_order=max_order + idx + 1,
-                        retrieval_context=message.retrieval_context.model_dump()
-                        if message.retrieval_context
-                        else None,
+                        retrieval_context=(
+                            message.retrieval_context.model_dump()
+                            if message.retrieval_context
+                            else None
+                        ),
                         status=status,
                     )
                     message_models.append(msg_model)
@@ -221,7 +226,7 @@ class ConversationRepository:
 
     async def get_messages(
         self, conversation_id: uuid.UUID, last_summarized_order: int | None = None
-    ) -> List[Message]:
+    ) -> list[Message]:
         """Get all messages for a conversation"""
         try:
             async with DatabaseSession() as session:
@@ -290,7 +295,7 @@ class ConversationRepository:
             logger.error(f"Error updating message status {message_id}")
             raise e
 
-    def _serialize_parts(self, parts: List[Part]) -> List[Dict[str, Any]]:
+    def _serialize_parts(self, parts: list[Part]) -> list[dict[str, Any]]:
         """Serialize message parts to JSON"""
         serialized = []
         for part in parts:
@@ -318,7 +323,7 @@ class ConversationRepository:
                 )
         return serialized
 
-    def _deserialize_parts(self, parts_data: List[Dict[str, Any]]) -> List[Part]:
+    def _deserialize_parts(self, parts_data: list[dict[str, Any]]) -> list[Part]:
         """Deserialize parts from JSON"""
         parts = []
         for part_data in parts_data:
@@ -340,19 +345,21 @@ class ConversationRepository:
                 )
         return parts
 
-    def _serialize_message(self, message: Message) -> Dict[str, Any]:
+    def _serialize_message(self, message: Message) -> dict[str, Any]:
         """Serialize a message to JSON"""
         return {
             "id": message.id,
             "role": message.role,
             "parts": self._serialize_parts(message.parts),
             "metadata": message.metadata,
-            "retrieval_context": message.retrieval_context.model_dump()
-            if message.retrieval_context
-            else None,
+            "retrieval_context": (
+                message.retrieval_context.model_dump()
+                if message.retrieval_context
+                else None
+            ),
         }
 
-    def _deserialize_message(self, message_data: Optional[Dict[str, Any]]) -> Message:
+    def _deserialize_message(self, message_data: dict[str, Any] | None) -> Message:
         """Deserialize a message from JSON"""
         if message_data is None:
             return {}
@@ -361,9 +368,11 @@ class ConversationRepository:
             role=message_data["role"],
             parts=self._deserialize_parts(message_data["parts"]),
             metadata=message_data.get("metadata"),
-            retrieval_context=RetrievalContext(**message_data.get("retrieval_context"))
-            if message_data.get("retrieval_context")
-            else None,
+            retrieval_context=(
+                RetrievalContext(**message_data.get("retrieval_context"))
+                if message_data.get("retrieval_context")
+                else None
+            ),
         )
 
     def _model_to_message(self, msg_model: MessageModel) -> Message:
@@ -374,7 +383,9 @@ class ConversationRepository:
             role=msg_model.role,
             parts=self._deserialize_parts(msg_model.parts),
             metadata=msg_model.message_metadata,
-            retrieval_context=RetrievalContext(**msg_model.retrieval_context)
-            if msg_model.retrieval_context
-            else None,
+            retrieval_context=(
+                RetrievalContext(**msg_model.retrieval_context)
+                if msg_model.retrieval_context
+                else None
+            ),
         )

@@ -1,10 +1,10 @@
 # src/infrastructure/events/redis_publisher.py
-import json
 import asyncio
+import json
 
-from src.utils.decorators import singleton
-from src.infrastructure.events.base import BaseEventPublisher
 from src.infrastructure.cache import redis_client
+from src.infrastructure.events.base import BaseEventPublisher
+from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
 

@@ -4,13 +4,19 @@ SQL Graph - Text-to-SQL subgraph for database querying with natural language
 """
 
 from __future__ import annotations
-import json
-from typing import Any, Dict, List, Optional
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+import json
+from typing import Any
+
+import pandas as pd
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+)
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-import pandas as pd
 
 from src.agents.graph.base import GraphAgentBase
 from src.agents.prompts.agent_prompts import PromptTemplates
@@ -38,7 +44,10 @@ class SqlGraph(GraphAgentBase[SqlState]):
     - Supports multi-query execution for complex requests
     - Auto-generates Vega-Lite charts when appropriate
     - Security: Only SELECT queries allowed
+    - Auto-retry on execution failure with error feedback
     """
+
+    MAX_QUERY_RETRIES = 2  # Maximum retries for failed query execution
 
     def __init__(self, sql_database: AsyncSQLDatabase):
         super().__init__()
@@ -54,7 +63,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
     def default_run_config(self) -> RunConfig:
         return RunConfig(
-            graph_name=self.graph_name, recursion_limit=10, timeout_seconds=180
+            graph_name=self.graph_name, recursion_limit=20, timeout_seconds=180
         )
 
     async def validate_relevance_node(self, state: SqlState) -> SqlState:
@@ -62,27 +71,20 @@ class SqlGraph(GraphAgentBase[SqlState]):
         Validates if user query is relevant to available database tables.
         Fast check before expensive analysis/generation steps.
         """
-        logger.info("[validate_relevance] Checking query relevance to database.")
         max_iterations = 3
-
-        system_prompt = SystemMessage(
-            content=PromptTemplates.RELEVANCE_VALIDATION_SYSTEM_PROMPT
-        )
-
         schema_info = await self.sql_database.get_table_info()
         available_tables = ", ".join(self.sql_database.get_usable_table_names())
 
-        user_prompt = HumanMessage(
-            content=PromptTemplates.RELEVANCE_VALIDATION_HUMAN_PROMPT.format(
-                user_query=state["contextualized_query"],
-                available_tables=available_tables,
-                database_schema=schema_info,
-            )
-        )
+        direction = state["direction"]
 
-        messages: List[BaseMessage] = [system_prompt, user_prompt]
+        messages: list[BaseMessage] = [
+            SystemMessage(content=PromptTemplates.RELEVANCE_VALIDATION_SYSTEM_PROMPT),
+            AIMessage(
+                content=f"Available tables: {available_tables}\n\nDatabase schema:\n{schema_info}"
+            ),
+            HumanMessage(content=f"Query:\n{direction}"),
+        ]
 
-        logger.info("[validate_relevance] Calling LLM for relevance check.")
         response = await self.iterative_llm_call_structured(
             messages=messages,
             llm_with_tools=self.thinking_llm,
@@ -147,72 +149,71 @@ class SqlGraph(GraphAgentBase[SqlState]):
         )
         return "analyze_query"
 
-    async def analyze_query_node(self, state: SqlState) -> Dict[str, Any]:
+    async def analyze_query_node(self, state: SqlState) -> dict[str, Any]:
         """
         Analyzes user query to determine:
         1. What data is needed
         2. Whether visualization is appropriate
         3. How many queries might be needed
         """
-        logger.info("[analyze_query] Starting query analysis node.")
-        logger.debug(
-            f"[analyze_query] Contextualized query: {state['contextualized_query']}"
-        )
         max_iterations = 5
 
-        system_prompt = SystemMessage(
-            content=PromptTemplates.SQL_ANALYSIS_SYSTEM_PROMPT
-        )
-
         schema_info = await self.sql_database.get_table_info()
+        direction = state["direction"]
 
-        user_prompt = HumanMessage(
-            content=PromptTemplates.SQL_ANALYSIS_HUMAN_PROMPT.format(
-                user_query=state["contextualized_query"],
-                database_schema=schema_info,
+        messages: list[BaseMessage] = [
+            SystemMessage(content=PromptTemplates.SQL_ANALYSIS_SYSTEM_PROMPT),
+            AIMessage(content=f"Database schema:\n{schema_info}"),
+            HumanMessage(content=f"Direction:\n{direction}"),
+        ]
+
+        try:
+            response = await self.iterative_llm_call_structured(
+                messages=messages,
+                llm_with_tools=self.thinking_llm,
+                available_tools={"think": think},
+                max_iterations=max_iterations,
+                parse_fn=parse_sql_analysis_response,
+                retry_prompt="Please provide the analysis in correct JSON format.",
             )
-        )
 
-        messages: List[BaseMessage] = [system_prompt, user_prompt]
+            logger.debug(f"[analyze_query] LLM raw response:\n{response}")
 
-        logger.info("[analyze_query] Calling LLM for query analysis.")
-        response = await self.iterative_llm_call_structured(
-            messages=messages,
-            llm_with_tools=self.thinking_llm,
-            available_tools={"think": think},
-            max_iterations=max_iterations,
-            parse_fn=parse_sql_analysis_response,
-            retry_prompt="Please provide the analysis in correct JSON format.",
-        )
+            if not response:
+                logger.error(
+                    "[analyze_query] Failed to analyze query after multiple attempts."
+                )
+                return {
+                    "query_results": [],
+                    "analysis": None,
+                    "response_metadata": {
+                        "route": "sql_query",
+                        "query_successful": False,
+                        "error": "analysis_failed",
+                    },
+                }
 
-        if not response:
-            logger.error(
-                "[analyze_query] Failed to analyze query after multiple attempts."
-            )
+            return {"analysis": response}
+        except Exception as e:
+            import traceback
+
+            logger.error("!!! CRASH INSIDE analyze_query_node !!!")
+            logger.error(f"Error type: {type(e)}")
+            logger.error(f"Error message: {e}")
+            traceback.print_exc()
+
             return {
                 "query_results": [],
                 "analysis": None,
-                "response_metadata": {
-                    "route": "sql_query",
-                    "query_successful": False,
-                    "error": "analysis_failed",
-                },
+                "response_metadata": {"route": "sql_query", "error": str(e)},
             }
 
-        logger.info(
-            f"[analyze_query] Query analysis complete: needs_chart={response.get('needs_chart')}, "
-            f"query_count={len(response.get('required_queries', []))}"
-        )
-        logger.debug(f"[analyze_query] Returning analysis: {response}")
-
-        return {"analysis": response}
-
-    async def generate_sql_queries_node(self, state: SqlState) -> Dict[str, Any]:
+    async def generate_sql_queries_node(self, state: SqlState) -> dict[str, Any]:
         """
         Generates SQL queries based on the analysis.
         Can generate multiple queries if needed for complex requests.
+        Supports retry with error feedback from previous execution failures.
         """
-        logger.info("[generate_sql_queries] Starting SQL generation node.")
         max_iterations = 5
         query_plan = state.get("analysis", {}).get("required_queries")
 
@@ -230,25 +231,38 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 },
             }
 
-        logger.debug(f"[generate_sql_queries] Using query plan: {query_plan}")
-
-        system_prompt = SystemMessage(
-            content=PromptTemplates.SQL_GENERATION_SYSTEM_PROMPT
-        )
-
         schema_info = await self.sql_database.get_table_info()
+        direction = state["direction"]
 
-        user_prompt = HumanMessage(
-            content=PromptTemplates.SQL_GENERATION_HUMAN_PROMPT.format(
-                user_query=state["contextualized_query"],
-                database_schema=schema_info,
-                query_plan=json.dumps(query_plan, indent=2),
+        execution_errors = state.get("execution_errors")
+        retry_count = state.get("retry_count", 0)
+        is_retry = execution_errors is not None and retry_count > 0
+
+        context_content = f"Database schema:\n{schema_info}\n\nQuery plan:\n{json.dumps(query_plan, indent=2)}"
+
+        if is_retry:
+            logger.info(
+                f"[generate_sql_queries] Retry attempt {retry_count}. "
+                f"Including {len(execution_errors)} error(s) for feedback."
             )
-        )
+            error_feedback = (
+                "\n\n⚠️ PREVIOUS EXECUTION FAILED - Please fix the following errors:\n"
+            )
+            for err in execution_errors:
+                error_feedback += f"\n- Query purpose: {err['purpose']}\n"
+                error_feedback += f"  Failed SQL: {err['query']}\n"
+                error_feedback += f"  Error: {err['error']}\n"
+            error_feedback += (
+                "\nPlease generate corrected SQL queries that avoid these errors."
+            )
+            context_content += error_feedback
 
-        messages: List[BaseMessage] = [system_prompt, user_prompt]
+        messages: list[BaseMessage] = [
+            SystemMessage(content=PromptTemplates.SQL_GENERATION_SYSTEM_PROMPT),
+            AIMessage(content=context_content),
+            HumanMessage(content=f"Direction:\n{direction}"),
+        ]
 
-        logger.info("[generate_sql_queries] Calling LLM to generate SQL.")
         response = await self.iterative_llm_call_structured(
             messages=messages,
             llm_with_tools=self.thinking_llm,
@@ -272,26 +286,28 @@ class SqlGraph(GraphAgentBase[SqlState]):
             }
 
         generated_queries = response["queries"]
+        log_prefix = "[generate_sql_queries]"
+        if is_retry:
+            log_prefix += f" (retry {retry_count})"
         logger.info(
-            f"[generate_sql_queries] Successfully generated {len(generated_queries)} SQL queries."
-        )
-        logger.debug(
-            f"[generate_sql_queries] Returning generated queries: {generated_queries}"
+            f"{log_prefix} Successfully generated {len(generated_queries)} SQL queries."
         )
 
         return {
             "generated_queries": generated_queries,
+            "execution_errors": None,  # Clear errors after regeneration
             "response_metadata": {
                 "query_count": len(generated_queries),
+                "is_retry": is_retry,
+                "retry_count": retry_count,
             },
         }
 
-    async def validate_queries_node(self, state: SqlState) -> Dict[str, Any]:
+    async def validate_queries_node(self, state: SqlState) -> dict[str, Any]:
         """
         Validates all generated SQL queries.
         Ensures they are SELECT-only and safe to execute.
         """
-        logger.info("[validate_queries] Starting query validation node.")
         generated_queries = state.get("generated_queries")
 
         if not generated_queries:
@@ -315,9 +331,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
         for idx, query_info in enumerate(generated_queries):
             query = query_info.get("query", "")
             purpose = query_info.get("purpose", f"Query {idx + 1}")
-            logger.debug(
-                f"[validate_queries] Validating query for purpose: '{purpose}'"
-            )
             validation = self.validator.validate_query(query)
 
             validation_results.append(
@@ -353,15 +366,11 @@ class SqlGraph(GraphAgentBase[SqlState]):
             }
 
         logger.info("[validate_queries] All SQL queries validated successfully.")
-        logger.debug(
-            f"[validate_queries] Returning validation results: {validation_results}"
-        )
 
         return {"query_results": validation_results}
 
     def route_after_validation(self, state: SqlState) -> str:
         """Routes after SQL validation."""
-        logger.info("[route_after_validation] Deciding route after validation.")
 
         validation_results = state.get("query_results", [])
         if not validation_results:
@@ -375,12 +384,11 @@ class SqlGraph(GraphAgentBase[SqlState]):
         )
         return "execute_queries"
 
-    async def execute_queries_node(self, state: SqlState) -> Dict[str, Any]:
+    async def execute_queries_node(self, state: SqlState) -> dict[str, Any]:
         """
         Executes all validated SQL queries sequentially.
         Uses DatabaseSession for proper transaction management.
         """
-        logger.info("[execute_queries] Starting query execution node.")
         MAX_ROWS_PER_QUERY = 5
         validation_results = state.get("query_results", [])
 
@@ -396,9 +404,9 @@ class SqlGraph(GraphAgentBase[SqlState]):
             }
 
         logger.info(f"[execute_queries] Executing {len(validation_results)} queries.")
-        all_results: List[Dict[str, Any]] = []
+        all_results: list[dict[str, Any]] = []
 
-        for idx, validation_info in enumerate(validation_results):
+        for _idx, validation_info in enumerate(validation_results):
             sanitized_query = validation_info["validation"]["sanitized_query"]
             is_valid = validation_info["validation"]["is_valid"]
             purpose = validation_info["purpose"]
@@ -434,8 +442,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
                     }
                 )
                 continue
-
-            rows: List[Dict[str, Any]] = json.loads(result) or []
+            rows: list[dict[str, Any]] = result or []
             total_rows = len(rows)
             truncated = total_rows > MAX_ROWS_PER_QUERY
             preview_rows = rows[:MAX_ROWS_PER_QUERY]
@@ -453,8 +460,25 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         failed_queries = [r for r in all_results if not r["success"]]
         if failed_queries:
+            current_retry = state.get("retry_count", 0)
+            # Build execution errors for retry feedback
+            execution_errors = [
+                {
+                    "purpose": fq["purpose"],
+                    "query": fq["query"],
+                    "error": fq.get("error", "Unknown error"),
+                }
+                for fq in failed_queries
+            ]
+            logger.warning(
+                f"[execute_queries] {len(failed_queries)} queries failed. "
+                f"Retry count: {current_retry}/{self.MAX_QUERY_RETRIES}"
+            )
+
             return {
                 "query_results": all_results,
+                "retry_count": current_retry + 1,
+                "execution_errors": execution_errors,
                 "response_metadata": {
                     "route": "sql_query",
                     "query_successful": False,
@@ -467,16 +491,36 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         return {
             "query_results": all_results,
+            "execution_errors": None,  # Clear errors on success
             "response_metadata": {
                 **state.get("response_metadata", {}),
+                "query_successful": True,
                 "total_queries": len(all_results),
                 "max_rows_per_query": MAX_ROWS_PER_QUERY,
             },
         }
 
     def route_after_execution(self, state: SqlState) -> str:
-        """Routes after query execution."""
-        logger.info("[route_after_execution] Deciding route after execution.")
+        """Routes after query execution. Supports retry on failure."""
+        # Check for execution failures and retry if allowed
+        execution_errors = state.get("execution_errors")
+        retry_count = state.get("retry_count", 0)
+
+        if execution_errors and retry_count <= self.MAX_QUERY_RETRIES:
+            logger.info(
+                f"[route_after_execution] Execution failed. "
+                f"Retrying query generation ({retry_count}/{self.MAX_QUERY_RETRIES})."
+            )
+            return "generate_sql_queries"
+
+        if execution_errors and retry_count > self.MAX_QUERY_RETRIES:
+            logger.error(
+                f"[route_after_execution] Max retries ({self.MAX_QUERY_RETRIES}) exceeded. "
+                "Ending graph with error."
+            )
+            return END
+
+        # Success path - check if chart is needed
         analysis = state.get("analysis", {})
         if analysis.get("needs_chart") and analysis.get("chart_type"):
             logger.info(
@@ -486,12 +530,11 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         return END
 
-    async def generate_chart_node(self, state: SqlState) -> Dict[str, Any]:
+    async def generate_chart_node(self, state: SqlState) -> dict[str, Any]:
         """
         Generates Vega-Lite chart specification based on query results.
         Only called when analysis indicates visualization is appropriate.
         """
-        logger.info("[generate_chart] Starting chart generation node.")
         max_iterations = 5
 
         if not state.get("query_results"):
@@ -499,10 +542,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
                 "[generate_chart] No query results found in state for chart generation. Skipping."
             )
             return {"chart_spec": None}
-
-        system_prompt = SystemMessage(
-            content=PromptTemplates.CHART_GENERATION_SYSTEM_PROMPT
-        )
 
         data_summary = []
         for result in state["query_results"]:
@@ -522,9 +561,11 @@ class SqlGraph(GraphAgentBase[SqlState]):
                     {
                         "purpose": result["purpose"],
                         "sample_data": result["results"][:3],
-                        "columns": list(result["results"][0].keys())
-                        if result["results"]
-                        else [],
+                        "columns": (
+                            list(result["results"][0].keys())
+                            if result["results"]
+                            else []
+                        ),
                         "statistical_summary": statistical_summary_str,
                     }
                 )
@@ -535,18 +576,17 @@ class SqlGraph(GraphAgentBase[SqlState]):
             )
             return {"chart_spec": None}
 
-        logger.debug(f"[generate_chart] Prepared data summary for LLM: {data_summary}")
-        user_prompt = HumanMessage(
-            content=PromptTemplates.CHART_GENERATION_HUMAN_PROMPT.format(
-                user_query=state["contextualized_query"],
-                chart_type=state.get("analysis", {}).get("chart_type", "auto"),
-                data_summary=json.dumps(data_summary, indent=2, default=str),
-            )
-        )
+        chart_type = state.get("analysis", {}).get("chart_type", "auto")
+        direction = state["direction"]
 
-        messages: List[BaseMessage] = [system_prompt, user_prompt]
+        messages: list[BaseMessage] = [
+            SystemMessage(content=PromptTemplates.CHART_GENERATION_SYSTEM_PROMPT),
+            AIMessage(
+                content=f"Suggested chart type: {chart_type}\n\nQuery results summary:\n{json.dumps(data_summary, indent=2, default=str)}"
+            ),
+            HumanMessage(content=f"Direction:\n{direction}"),
+        ]
 
-        logger.info("[generate_chart] Calling LLM to generate Vega-Lite spec.")
         response = await self.iterative_llm_call_structured(
             messages=messages,
             llm_with_tools=self.thinking_llm,
@@ -572,9 +612,6 @@ class SqlGraph(GraphAgentBase[SqlState]):
             "has_chart": True,
             "chart_type": chart_type,
         }
-        logger.debug(
-            f"[generate_chart] Returning chart spec and updated metadata: {updated_metadata}"
-        )
 
         return {
             "chart_spec": response["vega_spec"],
@@ -620,6 +657,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
             self.route_after_execution,
             {
                 "generate_chart": "generate_chart",
+                "generate_sql_queries": "generate_sql_queries",  # Retry on failure
                 END: END,
             },
         )
@@ -629,7 +667,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         return workflow.compile(name=self.graph_name)
 
 
-def parse_sql_analysis_response(content: str) -> Optional[SqlAnalysisSchema]:
+def parse_sql_analysis_response(content: str) -> SqlAnalysisSchema | None:
     """Parse SQL analysis response"""
     try:
         parsed = parse_response(content)
@@ -637,17 +675,17 @@ def parse_sql_analysis_response(content: str) -> Optional[SqlAnalysisSchema]:
             logger.warning(
                 "[Parser] Failed to parse SQL analysis response (null result)."
             )
-            return None
+            return content
         response = SqlAnalysisSchema(**parsed)
         return response.model_dump()
     except Exception as e:
         logger.error(
             f"[Parser] Error parsing SQL analysis response: {e}", exc_info=True
         )
-        return None
+        return content
 
 
-def parse_sql_generation_response(content: str) -> Optional[SqlGenerationSchema]:
+def parse_sql_generation_response(content: str) -> SqlGenerationSchema | None:
     """Parse SQL generation response"""
     try:
         parsed = parse_response(content)
@@ -665,7 +703,7 @@ def parse_sql_generation_response(content: str) -> Optional[SqlGenerationSchema]
         return None
 
 
-def parse_chart_generation_response(content: str) -> Optional[ChartGenerationSchema]:
+def parse_chart_generation_response(content: str) -> ChartGenerationSchema | None:
     """Parse chart generation response"""
     try:
         parsed = parse_response(content)
@@ -685,7 +723,7 @@ def parse_chart_generation_response(content: str) -> Optional[ChartGenerationSch
 
 def parse_relevance_validation_response(
     content: str,
-) -> Optional[RelevanceValidationSchema]:
+) -> RelevanceValidationSchema | None:
     """Parse relevance validation response"""
     try:
         parsed = parse_response(content)

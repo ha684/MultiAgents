@@ -1,6 +1,6 @@
 # src/services/web_search/firecrawl.py
 
-from typing import Any, List, Optional
+from typing import Any
 
 import httpx
 from langchain_core.documents import Document
@@ -18,8 +18,8 @@ class FireCrawlService(BaseSearchService):
         self.api_base_url = self.api_base_url.rstrip("/") if self.api_base_url else None
 
     async def search(
-        self, api_key: Optional[str], query: str, max_results: int = 5, **kwargs: Any
-    ) -> Optional[List[Document]]:
+        self, api_key: str | None, query: str, max_results: int = 5, **kwargs: Any
+    ) -> list[Document] | None:
         """Searches using Firecrawl API with an optional provided key."""
         if not self.api_base_url:
             raise ValueError("FIRECRAWL_API_URL not found in environment variables")

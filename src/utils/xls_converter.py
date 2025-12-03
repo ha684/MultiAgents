@@ -29,7 +29,7 @@ def convert_to_xlsx(file_path: Path) -> Path:
                         for col in df.columns
                     ]
 
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)  # type: ignore
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
 
             logger.info(f"Converted {file_path} to {xlsx_path}")
             return xlsx_path

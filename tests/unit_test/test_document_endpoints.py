@@ -2,10 +2,11 @@
 Unit tests for document endpoints.
 """
 
-import pytest
+from io import BytesIO
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
-from io import BytesIO
+
+import pytest
 
 
 @pytest.mark.unit

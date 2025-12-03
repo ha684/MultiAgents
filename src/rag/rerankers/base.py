@@ -1,6 +1,6 @@
 # src/rag/rerankers/base.py
 from abc import ABC, abstractmethod
-from typing import List, Sequence
+from collections.abc import Sequence
 
 from pydantic import BaseModel
 
@@ -23,7 +23,7 @@ class BaseReranker(ABC):
     """
 
     @abstractmethod
-    async def rerank(self, query: str, documents: List[str]) -> Sequence[Rank]:
+    async def rerank(self, query: str, documents: list[str]) -> Sequence[Rank]:
         """Reorders documents based on the given query.
 
         Args:

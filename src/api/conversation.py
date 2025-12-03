@@ -1,5 +1,4 @@
 # src/api/conversation.py
-from typing import Dict, List
 import uuid
 
 from fastapi import APIRouter, Depends
@@ -19,7 +18,7 @@ conversation_service = ConversationService()
 @router.get("/conversation/list")
 async def list_conversations(
     current_user: User = Depends(get_current_user),
-) -> List[Conversation]:
+) -> list[Conversation]:
     """List the conversations"""
     result = await conversation_service.list_conversation(current_user.id)
     return result
@@ -38,7 +37,7 @@ async def create_conversation(
 async def list_messages(
     conversation_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-) -> List[Message]:
+) -> list[Message]:
     """List the messages for a conversation"""
     result = await conversation_service.list_messages(conversation_id=conversation_id)
     return result
@@ -47,7 +46,7 @@ async def list_messages(
 @router.delete("/conversation/delete")
 async def delete_conversation(
     conversation_id: uuid.UUID, current_user: User = Depends(get_current_user)
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Delete a conversation and all its related data including messages, events, tasks, etc."""
     await conversation_service.delete_conversation(conversation_id, current_user.id)
     return {"message": "Conversation deleted successfully"}

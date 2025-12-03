@@ -1,13 +1,12 @@
 # src/services/conversation_service.py
-from typing import List, Optional
 import uuid
 
-from src.domain.schemas.chat import Message, Conversation
+from src.core.exceptions.chat_exceptions import ConversationNotFoundError
 from src.database.models.conversation import MessageStatus
 from src.database.repositories.conversation_repository import ConversationRepository
-from src.core.exceptions.chat_exceptions import ConversationNotFoundError
-from src.utils.decorators import singleton
+from src.domain.schemas.chat import Conversation, Message
 from src.domain.schemas.conversation import ConversationUpdate
+from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
 
@@ -35,13 +34,13 @@ class ConversationService:
 
     async def list_messages(
         self, conversation_id: uuid.UUID, last_summarized_order: int | None = None
-    ) -> Optional[List[Message]]:
+    ) -> list[Message] | None:
         messages = await self.conv_repository.get_messages(
             conversation_id, last_summarized_order
         )
         return messages if messages is not None else []
 
-    async def list_conversation(self, user_id: str) -> List[Conversation]:
+    async def list_conversation(self, user_id: str) -> list[Conversation]:
         return await self.conv_repository.list_conversations(user_id)
 
     async def delete_conversation(
@@ -56,8 +55,8 @@ class ConversationService:
         return result
 
     async def add_messages(
-        self, messages: List[Message], conversation_id: uuid.UUID
-    ) -> List[str]:
+        self, messages: list[Message], conversation_id: uuid.UUID
+    ) -> list[str]:
         """Add multiple messages to the conversation"""
         return await self.conv_repository.add_messages(messages, conversation_id)
 

@@ -1,170 +1,127 @@
 # src/agents/graph/state.py
-from typing import Any, Dict, List, Literal, Optional, Set, TypedDict
+from typing import Any, TypedDict
 
 from langchain_core.documents import Document
 from langchain_core.messages import BaseMessage
 
-
-class SearchQuery(TypedDict):
-    """Search query from search operations"""
-
-    query: str
-    priority: int
-    search_type: Literal["rag", "web"]
+from src.domain.entities.graph import ResponseMode
 
 
-class VerificationResult(TypedDict):
-    """Verification result from verification operations"""
-
-    sufficient: bool
-    confidence: float
-    missing_aspects: List[str]
-
-
-class SearchResult(TypedDict):
-    """Search result from search operations"""
-
-    query: str
-    documents: List[Document]
-    search_type: Literal["rag", "web"]
-
-
-class RetrievalContext(TypedDict):
-    """Context from retrieval operations"""
-
-    original_query: str
-    contextualized_query: str
-    total_retrieved: int
-    total_cited: int
-    cited_chunks: List[Document]
-    search_method: Literal["rag", "web"]
-
-
-class ExecutionRecord(TypedDict):
-    """Record of a subgraph execution attempt"""
-
-    subgraph: str
-    error: Optional[str]
-    timestamp: str
-    result_summary: Optional[str]
-
-
-class ReflectionResult(TypedDict):
-    """Result from reflection agent"""
-
-    is_sufficient: bool
-    missing_aspects: List[str]
-    reasoning: str
-    suggested_next_action: str  # "search_more" | "switch_strategy" | "respond"
-    refined_query: Optional[str]
-    subgraphs_to_retry: List[str]
-
-
-class SearchIteration(TypedDict):
-    """Record of a single search iteration"""
-
-    iteration: int
-    subgraph: str
-    query: str
-    result_summary: str
-    documents_count: int
-    timestamp: str
-    success: bool  # Whether this subgraph returned useful results
-    error: Optional[str]  # Error message if subgraph failed
-
-
-class OrchestratorState(TypedDict):
+class MainGraphState(TypedDict):
     """Enhanced state for agentic orchestrator"""
 
-    conversation: List[BaseMessage]
-    contextualized_query: Optional[str]
+    conversation: list[BaseMessage]
+    main_context: str | None
+    cited_documents: list[Document] | None
 
-    route_decisions: Optional[List[str]]
-    response_mode: Optional[str]
-    execution_history: List[ExecutionRecord]
+    final_answer: str | None
+    response_metadata: dict[str, Any] | None
 
-    subgraph_result: Optional[str]
-    subgraph_error: Optional[str]
-
-    main_context: Optional[str]
-    cited_documents: Optional[List[Document]]
-
-    subgraph_policy: Dict[str, Any]
-    active_subgraphs: List[str]
-
-    final_answer: Optional[str]
-    response_metadata: Optional[Dict[str, Any]]
-
-    search_iterations: List[SearchIteration]
-    current_iteration: int
     accumulated_context: str
-
-    subgraph_results: Dict[str, Dict[str, Any]]
-    failed_subgraphs: Set[str]
-    empty_result_subgraphs: Set[str]
-
-    seen_urls: Set[str]
-    seen_doc_ids: Set[str]
-    duplicate_skip_ratio: float
+    route_mode: str
 
 
 class SimpleSearchState(TypedDict):
     """State for simple search operations"""
 
-    conversation: List[BaseMessage]
-    contextualized_query: str
-    cited_documents: List[Document]
-    response_metadata: Dict[str, Any]
+    conversation: list[BaseMessage]
+    direction: str
+    cited_documents: list[Document]
+    response_metadata: dict[str, Any]
 
-    seen_urls: Set[str]
-    seen_doc_ids: Set[str]
+    seen_urls: set[str]
+    seen_doc_ids: set[str]
     duplicate_skip_ratio: float
     early_terminate: bool
+    web_search_active: bool
 
 
-class ResearchState(TypedDict, total=False):
-    """State for research operations (simplified for efficiency)"""
+class ThinkingState(TypedDict, total=False):
+    """
+    State for iterative research with reflection.
+    Organized by purpose for clarity.
 
-    contextualized_query: str
-    context_metadata: Dict[str, Any]
+    ChatGPT-style two-phase approach:
+    1. Phase Agent: Decides phase_title and next_action
+    2. Action Execution: Either generates reasoning OR selects tool+query
+    """
 
-    breadth: int
-    current_depth_level: int
-    current_direction: str
-    thinking_notes: str
-    accumulated_knowledge: str
-    learnings: List[str]
-    search_count: int
-    search_history: List[Dict[str, Any]]
+    conversation: list[BaseMessage]
+    final_answer: str
+    response_metadata: dict[str, Any]
+
+    iteration_count: int
+
+    phase_title: str
+    next_action: str
+
+    direction: str
+    selected_subgraph: str
+    reasoning: str
+
+    accumulated_context: str
+    learnings: list[str]
 
     citation_counter: int
-    cited_documents: List[Document]
-    citation_map: List[Dict[str, Any]]
+    cited_documents: list[Document]
+    citation_map: list[dict[str, Any]]
 
-    used_rag_ids: List[str]
-    used_web_urls: List[str]
+    seen_content_hashes: list[str]
 
-    rag_available: bool
-    web_available: bool
+    response_mode: str
+    has_tool_results: bool
+    execution_history: list[dict[str, Any]]
+    consecutive_failures: int
 
-    _temp_documents: List[Document]
+    _temp_documents: list[Document]
+    _sql_result: str
+    _is_sql_iteration: bool
     _should_continue: bool
-    _evaluation_result: Dict[str, Any]
+    _missing_aspects: str
+    _internal_reasoning: str
+    _execution_failed: bool
+    _failure_reason: str
 
 
 class SqlState(TypedDict):
     """State for SQL query operations"""
 
-    contextualized_query: str
+    conversation: list[BaseMessage]
+    direction: str
+    is_relevant: bool | None
+    irrelevance_reason: str | None
+    suggested_rephrase: str | None
 
-    is_relevant: Optional[bool]
-    irrelevance_reason: Optional[str]
-    suggested_rephrase: Optional[str]
+    analysis: dict | None
 
-    analysis: Optional[Dict]
+    generated_queries: list[dict] | None
+    query_results: list[dict] | None
+    chart_spec: dict | None
 
-    generated_queries: Optional[List[Dict]]
-    query_results: Optional[List[Dict]]
-    chart_spec: Optional[Dict]
+    response_metadata: dict
 
-    response_metadata: Dict
+    retry_count: int
+    execution_errors: list[dict] | None
+
+
+class NormalGraphState(TypedDict, total=False):
+    """
+    State for normal graph operations.
+    """
+
+    final_answer: str
+    response_metadata: dict
+    conversation: list[BaseMessage]
+
+    phase_title: str
+    next_action: str
+
+    selected_subgraph: str
+    direction: str
+    reasoning: str
+
+    cited_documents: list[Document]
+    response_mode: ResponseMode
+    accumulated_context: str
+
+    subgraph_policy: dict[str, Any]

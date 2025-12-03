@@ -1,5 +1,4 @@
 # src/agents/shared/manager.py
-from typing import Dict, Optional
 
 from src.domain.entities.graph import Execution
 from src.utils.decorators import singleton
@@ -10,7 +9,7 @@ class ExecutionManager:
     """Manage running graphs"""
 
     def __init__(self):
-        self.executions: Dict[str, Execution] = {}
+        self.executions: dict[str, Execution] = {}
 
     def start_execution(self, thread_id: str) -> Execution:
         """Start tracking an execution"""
@@ -18,7 +17,7 @@ class ExecutionManager:
         self.executions[thread_id] = execution
         return execution
 
-    def get_execution(self, thread_id: str) -> Optional[Execution]:
+    def get_execution(self, thread_id: str) -> Execution | None:
         """Get running execution"""
         return self.executions.get(thread_id)
 
@@ -34,7 +33,7 @@ class ExecutionManager:
         """Cleanup after finished"""
         self.executions.pop(thread_id, None)
 
-    def get_all_running(self) -> Dict[str, Execution]:
+    def get_all_running(self) -> dict[str, Execution]:
         """Debug: view all graphs running"""
         return self.executions.copy()
 

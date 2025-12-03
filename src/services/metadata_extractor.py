@@ -1,18 +1,19 @@
 # src/utils/metadata_extractor.py
-from collections import defaultdict
 import re
 import textwrap
-from typing import Any, Dict, List, Optional
+from collections import defaultdict
+from typing import Any
 
-from langchain_core.documents import Document
 import langextract as lx
+from langchain_core.documents import Document
 from langextract.factory import ModelConfig
 from qdrant_client import models
 from rapidfuzz import fuzz, process
 
 from src.core.config.settings import settings
 
-METADATA_PROMPT = textwrap.dedent("""\
+METADATA_PROMPT = textwrap.dedent(
+    """\
     Extract key metadata from the document chunk or text. Focus on identifying:
 
     - document_type: Infer the type/category of document based on content and structure
@@ -30,7 +31,8 @@ METADATA_PROMPT = textwrap.dedent("""\
 
     Extract exact text where possible. If information is not clearly present, omit that field.
     Focus on content useful for document discovery and relationship mapping.
-    """)
+    """
+)
 
 METADATA_EXAMPLES = [
     lx.data.ExampleData(
@@ -118,14 +120,14 @@ METADATA_EXAMPLES = [
 ]
 
 
-def extract_mentioned_files(text: str) -> List[str]:
+def extract_mentioned_files(text: str) -> list[str]:
     """Extracts filenames using regex."""
     pattern = r"[^\s\"'<>|*?:]+\.(docx|pdf|xlsx|xls|sql|pptx|drawio|png|jpg|jpeg|txt|md|py|js|ts|html|css|json|xml|yaml|yml)\b"
     files = list(set(re.findall(pattern, text, re.IGNORECASE)))
     return [f for f in files if len(f) > 3]
 
 
-def extract_project_ids_regex(text: str) -> List[str]:
+def extract_project_ids_regex(text: str) -> list[str]:
     """Extract project IDs using regex patterns."""
     patterns = [
         r"\b(PROJ-\d+)\b",
@@ -143,11 +145,11 @@ def extract_project_ids_regex(text: str) -> List[str]:
 
 
 def _select_representative_chunks(
-    docs: List[Document],
+    docs: list[Document],
     num_middle_chunks: int = 10,
     num_start_chunks: int = 3,
     num_end_chunks: int = 3,
-) -> List[Document]:
+) -> list[Document]:
     """
     Selects a representative subset of chunks from a list of documents.
     """
@@ -196,7 +198,7 @@ def _select_representative_chunks(
 
 
 def extract_metadata_from_text_or_document(
-    texts_or_docs: str | List[str] | Document | list[Document],
+    texts_or_docs: str | list[str] | Document | list[Document],
 ) -> dict:
     """
     Extracts structured metadata from a given text or Langchain Document using LLM and regex.
@@ -259,7 +261,7 @@ def extract_metadata_from_text_or_document(
     return metadata
 
 
-def _aggregate_document_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+def _aggregate_document_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """Clean and limit metadata fields dynamically based on what was extracted"""
     processed_metadata = {}
     for field_name, field_data in metadata.items():
@@ -286,8 +288,8 @@ def _aggregate_document_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _fuzzy_deduplicate_and_limit(
-    items: List[str], similarity_threshold: int = 80
-) -> List[str]:
+    items: list[str], similarity_threshold: int = 80
+) -> list[str]:
     """
     Deduplicates a list of strings using fuzzy matching, prioritizes more frequent items,
     and limits the result.
@@ -319,7 +321,7 @@ def _fuzzy_deduplicate_and_limit(
     return final_results
 
 
-def build_metadata_filters(source_metadata: Dict[str, Any]) -> models.Filter:
+def build_metadata_filters(source_metadata: dict[str, Any]) -> models.Filter:
     """Build Qdrant filters based on source document metadata"""
     should_conditions = []
     ignored_fields = [
@@ -355,7 +357,7 @@ def build_metadata_filters(source_metadata: Dict[str, Any]) -> models.Filter:
     return models.Filter(should=should_conditions) if should_conditions else None
 
 
-def build_search_query_from_metadata(source_metadata: Dict[str, Any]) -> str:
+def build_search_query_from_metadata(source_metadata: dict[str, Any]) -> str:
     """
     Build a rich semantic search query from document metadata
     """
@@ -396,11 +398,11 @@ def build_search_query_from_metadata(source_metadata: Dict[str, Any]) -> str:
 
 
 def aggregate_related_documents_with_reasons(
-    related_chunks: List[Document],
-    source_metadata: Dict[str, Any],
+    related_chunks: list[Document],
+    source_metadata: dict[str, Any],
     source_doc_id: str,
     score_threshold: float,
-) -> List[Dict]:
+) -> list[dict]:
     """Aggregate chunks by document and determine relatedness reasons"""
 
     document_data = defaultdict(
@@ -439,8 +441,8 @@ def aggregate_related_documents_with_reasons(
 
 
 def _find_fuzzy_common_items(
-    list1: List[str], list2: List[str], threshold: int = 80
-) -> List[str]:
+    list1: list[str], list2: list[str], threshold: int = 80
+) -> list[str]:
     """Finds common items between two lists using fuzzy matching."""
     common = []
     temp_list2 = list(list2)
@@ -462,10 +464,10 @@ def _find_fuzzy_common_items(
 
 
 def _determine_fuzzy_relatedness_reasons(
-    target_metadata: Dict[str, Any],
-    source_metadata: Dict[str, Any],
+    target_metadata: dict[str, Any],
+    source_metadata: dict[str, Any],
     similarity_threshold: int = 80,
-) -> List[str]:
+) -> list[str]:
     """Determine why two documents are related using fuzzy matching."""
     reasons = set()
     ignored_fields = [
@@ -516,8 +518,8 @@ def _determine_fuzzy_relatedness_reasons(
 
 
 def combine_filters(
-    existing_filters: Optional[models.Filter], metadata_filters: Optional[models.Filter]
-) -> Optional[models.Filter]:
+    existing_filters: models.Filter | None, metadata_filters: models.Filter | None
+) -> models.Filter | None:
     """Combine existing filters with metadata-based filters"""
 
     if not existing_filters and not metadata_filters:

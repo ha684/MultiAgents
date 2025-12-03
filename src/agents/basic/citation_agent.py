@@ -1,19 +1,20 @@
 # src/agents/basic/citation_agent.py
-from typing import List
 
 from langchain_core.documents import Document
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
 from src.agents.basic.base import BaseAgent
 from src.agents.tools.server.mcp_retrieve_tools import think
+from src.core.config.llm_config import LLMModelConfigs
+from src.core.config.settings import settings
 from src.domain.schemas.chat import CitationIndexes
-from src.utils import parse_response
+from src.utils import format_context_for_response, parse_response
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
 CITATION_PROMPT_TEMPLATE = """
 <role>
-You are a document filter. Identify documents that might help answer the user's query. 
+You are a document filter. Identify documents that might help answer the user's query.
 Be permissive - when in doubt, include the document. A second filter will refine later.
 </role>
 
@@ -40,16 +41,16 @@ You are the FIRST of two filters:
 
 1. **Direct Questions** ("What is X?", "How does Y work?")
    - Include: Documents discussing the topic or related concepts
-   
+
 2. **Negative/Absence Queries** ("Which ones DON'T...", "NOT", "haven't")
    - Be VERY permissive - include ALL documents about relevant entities
-   
+
 3. **Comparisons** ("Compare A vs B", "difference between")
    - Include: Documents about ANY comparison subjects
-   
+
 4. **Lists** ("List all...", "What are the...", "Show me...")
    - Be BROAD - include all documents that might contain items
-   
+
 5. **Conversational Only** ("Hello", "Thank you", "I see")
    - Return: {"indexes": []}
 
@@ -91,11 +92,6 @@ Docs: [Server-A Logs, Server-B Incident, Server-C Metrics, Database Guide, Offic
 Think: "Absence query - need all server docs to determine which lack downtime. Docs 1-4 are server-related. Doc 5 irrelevant."
 Output: {"indexes": [1, 2, 3, 4]}
 
----
-
-Query: "Thank you!"
-Think: "Pure conversational, no info request."
-Output: {"indexes": []}
 </examples>
 
 <critical_rules>
@@ -114,38 +110,32 @@ class CitationAgent(BaseAgent):
     """Agent responsible for extracting citations from retrieved documents."""
 
     def __init__(self):
-        super().__init__()
+        super().__init__(
+            provider="nxchat",
+            config=LLMModelConfigs(
+                model="nxchat-internal",
+                base_url=settings.ntqai_base_url,
+                api_key=settings.ntqai_api_key,
+                temperature=0.0,
+            ),
+        )
         logger.info("Citation Agent initialized successfully.")
 
-    def _format_context_for_response(self, documents: List[Document]) -> str:
-        """Formats documents for the response prompt."""
-        xml_output = "<documents>\n"
-        for i, doc in enumerate(documents):
-            xml_output += f'<document index="{i + 1}">\n'
-            content = doc.page_content
-            xml_output += "<document_content>\n"
-            xml_output += f"{content}\n"
-            xml_output += "</document_content>\n"
-            xml_output += "</document>\n"
-        xml_output += "</documents>"
-        return xml_output
-
-    async def ainvoke(
-        self, history: List[BaseMessage], reference: List[Document]
-    ) -> CitationIndexes:
+    async def ainvoke(self, query: str, reference: list[Document]) -> CitationIndexes:
         """Extracts citations from the provided context based on the user query."""
         if not reference:
             return CitationIndexes(indexes=[])
 
         try:
-            formatted_context = self._format_context_for_response(reference)
-            system_prompt = SystemMessage(content=CITATION_PROMPT_TEMPLATE)
-            user_content = HumanMessage(
-                content=f"""Here are documents:\n{formatted_context}\n---\nExtract correct citations for the following query: {history[-1].content}"""
-            )
-            messages: List[BaseMessage] = (
-                [system_prompt] + history[:-1] + [user_content]
-            )
+            formatted_context = format_context_for_response(reference)
+
+            messages: list[BaseMessage] = [
+                SystemMessage(content=CITATION_PROMPT_TEMPLATE),
+                AIMessage(content=f"Retrieved documents:\n\n{formatted_context}"),
+                HumanMessage(
+                    content=f"Extract correct citations for the following query: {query}"
+                ),
+            ]
 
             response = await self.iterative_llm_call_structured(
                 messages=messages,
@@ -155,6 +145,7 @@ class CitationAgent(BaseAgent):
                 parse_fn=parse_citation_response,
                 retry_prompt='Please provide your final answer as a JSON object with the exact format: {"indexes": [1, 2, 3]}',
             )
+            logger.info(f"Citation response: {response}")
             return CitationIndexes(indexes=response["indexes"])
 
         except Exception as e:
