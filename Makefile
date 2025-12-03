@@ -137,6 +137,12 @@ clean:
 	-@if exist coverage.xml del /q coverage.xml 2>nul
 	-@if exist bandit-report.json del /q bandit-report.json 2>nul
 	@echo Cleanup completed!
+
+clean-all: clean
+	@echo Performing deep clean...
+	-@uv cache clean 2>nul
+	-@if exist .venv rmdir /s /q .venv 2>nul
+	@echo Deep clean completed!
 else
 clean:
 	@echo Cleaning up...
@@ -151,21 +157,28 @@ clean:
 	rm -f .coverage coverage.xml 2>/dev/null || true
 	rm -f bandit-report.json 2>/dev/null || true
 	@echo Cleanup completed!
-endif
 
-# Deep clean (including uv cache and venv)
 clean-all: clean
 	@echo Performing deep clean...
 	uv cache clean 2>/dev/null || true
 	rm -rf .venv 2>/dev/null || true
 	@echo Deep clean completed!
+endif
 
 # Database operations for testing
+ifeq ($(OS),Windows_NT)
 test-db-create:
 	set PGPASSWORD=postgres && psql -h localhost -p 5433 -U postgres -c "CREATE DATABASE test_kms_db;" || echo Database already exists
 
 test-db-drop:
 	set PGPASSWORD=postgres && psql -h localhost -p 5433 -U postgres -c "DROP DATABASE IF EXISTS test_kms_db;"
+else
+test-db-create:
+	PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -c "CREATE DATABASE test_kms_db;" || echo Database already exists
+
+test-db-drop:
+	PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -c "DROP DATABASE IF EXISTS test_kms_db;"
+endif
 
 test-db-reset: test-db-drop test-db-create
 	@echo Test database reset completed!
@@ -204,9 +217,15 @@ pre-commit-run:
 	uv run pre-commit run --all-files
 
 # Environment setup
+ifeq ($(OS),Windows_NT)
 setup-env:
 	@if not exist .env.test copy .env.example .env.test 2>nul || echo No .env.example file found
 	@echo Remember to configure your .env.test file!
+else
+setup-env:
+	@test -f .env.test || cp .env.example .env.test 2>/dev/null || echo No .env.example file found
+	@echo Remember to configure your .env.test file!
+endif
 
 # Complete setup for new developers
 setup: sync-dev docker-test-up test-db-create
