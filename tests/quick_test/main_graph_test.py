@@ -116,7 +116,7 @@ async def main():
     orchestrator = MainGraph()
 
     human_message_1 = HumanMessage(
-        content="""Tìm cho tôi thông tin vì sao LMM thường sai khi đếm vật trong ảnh, sau đó check xem có bao nhiêu user đang hoạt động trong hệ thống?""",
+        content="""Tìm trên web các mô hình kinh doanh AI đang thịnh hành nhất (AI-as-a-service, agentic workflow, AI automation…). Sau đó, từ bảng documents, hãy cho biết có bao nhiêu tài liệu được upload trong 7 ngày gần nhất và ai là người upload chúng (join với bảng users nếu cần).""",
         additional_kwargs=context_metadata,
     )
 

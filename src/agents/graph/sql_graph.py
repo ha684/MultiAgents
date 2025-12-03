@@ -44,7 +44,10 @@ class SqlGraph(GraphAgentBase[SqlState]):
     - Supports multi-query execution for complex requests
     - Auto-generates Vega-Lite charts when appropriate
     - Security: Only SELECT queries allowed
+    - Auto-retry on execution failure with error feedback
     """
+
+    MAX_QUERY_RETRIES = 2  # Maximum retries for failed query execution
 
     def __init__(self, sql_database: AsyncSQLDatabase):
         super().__init__()
@@ -60,7 +63,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
     def default_run_config(self) -> RunConfig:
         return RunConfig(
-            graph_name=self.graph_name, recursion_limit=10, timeout_seconds=180
+            graph_name=self.graph_name, recursion_limit=20, timeout_seconds=180
         )
 
     async def validate_relevance_node(self, state: SqlState) -> SqlState:
@@ -209,6 +212,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
         """
         Generates SQL queries based on the analysis.
         Can generate multiple queries if needed for complex requests.
+        Supports retry with error feedback from previous execution failures.
         """
         max_iterations = 5
         query_plan = state.get("analysis", {}).get("required_queries")
@@ -228,14 +232,34 @@ class SqlGraph(GraphAgentBase[SqlState]):
             }
 
         schema_info = await self.sql_database.get_table_info()
-
         direction = state["direction"]
+
+        execution_errors = state.get("execution_errors")
+        retry_count = state.get("retry_count", 0)
+        is_retry = execution_errors is not None and retry_count > 0
+
+        context_content = f"Database schema:\n{schema_info}\n\nQuery plan:\n{json.dumps(query_plan, indent=2)}"
+
+        if is_retry:
+            logger.info(
+                f"[generate_sql_queries] Retry attempt {retry_count}. "
+                f"Including {len(execution_errors)} error(s) for feedback."
+            )
+            error_feedback = (
+                "\n\n⚠️ PREVIOUS EXECUTION FAILED - Please fix the following errors:\n"
+            )
+            for err in execution_errors:
+                error_feedback += f"\n- Query purpose: {err['purpose']}\n"
+                error_feedback += f"  Failed SQL: {err['query']}\n"
+                error_feedback += f"  Error: {err['error']}\n"
+            error_feedback += (
+                "\nPlease generate corrected SQL queries that avoid these errors."
+            )
+            context_content += error_feedback
 
         messages: list[BaseMessage] = [
             SystemMessage(content=PromptTemplates.SQL_GENERATION_SYSTEM_PROMPT),
-            AIMessage(
-                content=f"Database schema:\n{schema_info}\n\nQuery plan:\n{json.dumps(query_plan, indent=2)}"
-            ),
+            AIMessage(content=context_content),
             HumanMessage(content=f"Direction:\n{direction}"),
         ]
 
@@ -262,14 +286,20 @@ class SqlGraph(GraphAgentBase[SqlState]):
             }
 
         generated_queries = response["queries"]
+        log_prefix = "[generate_sql_queries]"
+        if is_retry:
+            log_prefix += f" (retry {retry_count})"
         logger.info(
-            f"[generate_sql_queries] Successfully generated {len(generated_queries)} SQL queries."
+            f"{log_prefix} Successfully generated {len(generated_queries)} SQL queries."
         )
 
         return {
             "generated_queries": generated_queries,
+            "execution_errors": None,  # Clear errors after regeneration
             "response_metadata": {
                 "query_count": len(generated_queries),
+                "is_retry": is_retry,
+                "retry_count": retry_count,
             },
         }
 
@@ -430,8 +460,25 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         failed_queries = [r for r in all_results if not r["success"]]
         if failed_queries:
+            current_retry = state.get("retry_count", 0)
+            # Build execution errors for retry feedback
+            execution_errors = [
+                {
+                    "purpose": fq["purpose"],
+                    "query": fq["query"],
+                    "error": fq.get("error", "Unknown error"),
+                }
+                for fq in failed_queries
+            ]
+            logger.warning(
+                f"[execute_queries] {len(failed_queries)} queries failed. "
+                f"Retry count: {current_retry}/{self.MAX_QUERY_RETRIES}"
+            )
+
             return {
                 "query_results": all_results,
+                "retry_count": current_retry + 1,
+                "execution_errors": execution_errors,
                 "response_metadata": {
                     "route": "sql_query",
                     "query_successful": False,
@@ -444,15 +491,36 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
         return {
             "query_results": all_results,
+            "execution_errors": None,  # Clear errors on success
             "response_metadata": {
                 **state.get("response_metadata", {}),
+                "query_successful": True,
                 "total_queries": len(all_results),
                 "max_rows_per_query": MAX_ROWS_PER_QUERY,
             },
         }
 
     def route_after_execution(self, state: SqlState) -> str:
-        """Routes after query execution."""
+        """Routes after query execution. Supports retry on failure."""
+        # Check for execution failures and retry if allowed
+        execution_errors = state.get("execution_errors")
+        retry_count = state.get("retry_count", 0)
+
+        if execution_errors and retry_count <= self.MAX_QUERY_RETRIES:
+            logger.info(
+                f"[route_after_execution] Execution failed. "
+                f"Retrying query generation ({retry_count}/{self.MAX_QUERY_RETRIES})."
+            )
+            return "generate_sql_queries"
+
+        if execution_errors and retry_count > self.MAX_QUERY_RETRIES:
+            logger.error(
+                f"[route_after_execution] Max retries ({self.MAX_QUERY_RETRIES}) exceeded. "
+                "Ending graph with error."
+            )
+            return END
+
+        # Success path - check if chart is needed
         analysis = state.get("analysis", {})
         if analysis.get("needs_chart") and analysis.get("chart_type"):
             logger.info(
@@ -589,6 +657,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
             self.route_after_execution,
             {
                 "generate_chart": "generate_chart",
+                "generate_sql_queries": "generate_sql_queries",  # Retry on failure
                 END: END,
             },
         )

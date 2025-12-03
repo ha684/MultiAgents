@@ -38,48 +38,56 @@ class ActionExecutionAgent(BaseAgent):
 
         If action="use_tool":
             Returns: {"subgraph": str, "query": str, "reasoning": None}
+
+        IMPORTANT: For use_tool mode, we intentionally DO NOT include accumulated_context,
+        learnings, or missing_aspects to prevent hallucination from polluted context.
+        The phase_title is the ONLY source of truth for what to do.
         """
         action = state.get("next_action", "use_tool")
         phase_title = state.get("phase_title", "")
-        learnings = state.get("learnings", [])
-        knowledge = state.get("accumulated_context", "")
         execution_history = state.get("execution_history", [])
-        missing_aspects = state.get("_missing_aspects", "")
 
         history_section = ""
         if execution_history:
-            recent_history = execution_history[-5:]
+            recent_history = execution_history[-3:]
             history_text = "\n".join(
                 [
-                    f"  [{ex.get('iteration')}] {ex.get('subgraph')} - {ex.get('status')}: {ex.get('query', '')[:60]}..."
+                    f"  [{ex.get('iteration')}] {ex.get('subgraph')} - {ex.get('status')}: {ex.get('query', '')[:50]}"
                     + (
-                        f" (Error: {ex.get('error')})"
+                        f" (Error: {ex.get('error')[:30]})"
                         if ex.get("status") == "failed"
                         else ""
                     )
                     for ex in recent_history
                 ]
             )
-            history_section = f"Execution History:\n{history_text}"
-
-        missing_section = (
-            f"Missing Aspects:\n{missing_aspects}" if missing_aspects else ""
-        )
-
-        knowledge_section = ""
-        if knowledge:
-            truncated = len(knowledge) > 3000
-            prefix = "(Showing most recent ~3000 chars)\n" if truncated else ""
-            knowledge_section = f"Accumulated Knowledge:\n{prefix}{knowledge[-3000:]}"
-
-        learnings_text = (
-            "\n".join(f"- {learning}" for learning in learnings[-3:])
-            if learnings
-            else "None yet"
-        )
-        learnings_section = f"Previous Learnings:\n{learnings_text}"
+            history_section = (
+                f"Previous Attempts (avoid repeating failed ones):\n{history_text}"
+            )
 
         if action == "reason_only":
+            knowledge = state.get("accumulated_context", "")
+            learnings = state.get("learnings", [])
+            missing_aspects = state.get("_missing_aspects", "")
+
+            knowledge_section = ""
+            if knowledge:
+                truncated = len(knowledge) > 8000
+                prefix = "(Showing most recent ~8000 chars)\n" if truncated else ""
+                knowledge_section = (
+                    f"Accumulated Knowledge:\n{prefix}{knowledge[-8000:]}"
+                )
+
+            learnings_text = (
+                "\n".join(f"- {learning}" for learning in learnings[-3:])
+                if learnings
+                else "None yet"
+            )
+            learnings_section = f"Previous Learnings:\n{learnings_text}"
+            missing_section = (
+                f"Missing Aspects:\n{missing_aspects}" if missing_aspects else ""
+            )
+
             system_prompt = PromptTemplates.REASONING_EXECUTION_PROMPT
             context_parts = [
                 knowledge_section,
@@ -97,10 +105,7 @@ class ActionExecutionAgent(BaseAgent):
             subgraph_definitions = SubgraphRegistry.generate_routing_prompt(active_map)
             context_parts = [
                 subgraph_definitions,
-                knowledge_section,
-                learnings_section,
                 history_section,
-                missing_section,
             ]
 
         context_content = "\n\n".join(filter(None, context_parts))

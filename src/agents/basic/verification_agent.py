@@ -11,6 +11,7 @@ from langchain_core.messages import (
 
 from src.agents.basic.base import BaseAgent
 from src.agents.prompts.agent_prompts import PromptTemplates
+from src.agents.shared.registry import SubgraphRegistry
 from src.agents.tools.server.mcp_retrieve_tools import think
 from src.core.config.llm_config import LLMModelConfigs
 from src.core.config.settings import settings
@@ -58,6 +59,14 @@ class VerificationAgent(BaseAgent):
 
         pattern_analysis = self._analyze_execution_pattern(execution_history)
 
+        # Get capability summary so verification agent knows what tools are available
+        active_map = SubgraphRegistry.resolve_active(
+            allow=state.get("subgraph_policy", {}).get("allow"),
+            block=state.get("subgraph_policy", {}).get("block"),
+            extras=state.get("subgraph_policy", {}).get("extras"),
+        )
+        capability_summary = SubgraphRegistry.generate_capability_summary(active_map)
+
         knowledge_summary = self._build_knowledge_summary(
             internal_reasoning=internal_reasoning,
             accumulated_context=accumulated_context,
@@ -65,6 +74,7 @@ class VerificationAgent(BaseAgent):
             iteration_count=iteration_count,
             pattern_analysis=pattern_analysis,
             consecutive_failures=consecutive_failures,
+            capability_summary=capability_summary,
         )
 
         messages: list[BaseMessage] = [
@@ -164,12 +174,21 @@ class VerificationAgent(BaseAgent):
         iteration_count: int,
         pattern_analysis: dict,
         consecutive_failures: int,
+        capability_summary: str = "",
     ) -> str:
         """
         Build summary with clear distinction between reasoning and external data.
         Shows LATEST content (last 400 chars) to reflect most recent progress.
+        Includes capability summary so agent knows what tools are available.
         """
         summary_parts = []
+
+        # Add capability summary at the top so agent knows what's possible
+        if capability_summary:
+            summary_parts.append("## System Capabilities")
+            summary_parts.append("")
+            summary_parts.append(capability_summary)
+            summary_parts.append("")
 
         summary_parts.append(f"## Research Status: Iteration {iteration_count}")
         summary_parts.append("")

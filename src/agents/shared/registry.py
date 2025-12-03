@@ -89,15 +89,16 @@ class SubgraphRegistry:
         """Generate detailed routing instructions."""
         sections = []
 
-        sections.append("AVAILABLE SUBGRAPHS (Tools for Information Retrieval)")
+        sections.append("AVAILABLE TOOLS")
         sections.append(
-            "\nYou must select ONE subgraph from this list. "
+            "\nYou must select exactly ONE tool from this list based on user intent. "
             "Use the exact name shown in [ROUTE NAME].\n"
         )
-
-        sorted_profiles = sorted(
-            profiles.values(), key=lambda p: p.primary_behavior.priority, reverse=True
+        sections.append(
+            "Each tool serves a DIFFERENT purpose - choose based on WHAT the user needs:\n"
         )
+
+        sorted_profiles = sorted(profiles.values(), key=lambda p: p.name)
 
         for i, profile in enumerate(sorted_profiles, 1):
             sections.append(f"[{i}] {profile.display_name}")
@@ -170,6 +171,48 @@ class SubgraphRegistry:
             lines.append("")
 
         lines.append("\nYou MUST select one tool name from the list above.")
+        return "\n".join(lines)
+
+    @classmethod
+    def generate_capability_summary(
+        cls,
+        active_profiles: dict[str, SubgraphProfile] | None = None,
+    ) -> str:
+        """
+        Generate a brief capability summary for verification agent.
+
+        This is NOT for tool selection (that's routing prompt).
+        This is for the verification agent to know what the system CAN do,
+        so it can accurately assess if information gaps are fillable.
+
+        Args:
+            active_profiles: If provided, use these. Otherwise use all registered profiles.
+
+        Returns:
+            A concise summary of system capabilities (not routing instructions).
+        """
+        profiles = active_profiles or cls._profiles
+
+        if not profiles:
+            return "No tools currently available."
+
+        lines = ["This system has access to the following capabilities:"]
+        lines.append("")
+
+        for name, profile in sorted(profiles.items(), key=lambda x: x[0]):
+            behavior = profile.primary_behavior
+            # Just the capability, no routing instructions
+            lines.append(f"• **{profile.display_name}** ({name}):")
+            lines.append(f"  {behavior.action.capability}")
+            lines.append("")
+
+        lines.append(
+            "When evaluating if information is obtainable, consider these actual capabilities."
+        )
+        lines.append(
+            "Do NOT assume limitations that don't exist - check if a capability above could address the need."
+        )
+
         return "\n".join(lines)
 
     @classmethod
@@ -264,203 +307,181 @@ def create_journey_subgraph(
 
 RAG_SEARCH_PROFILE = SubgraphProfile(
     name="rag_search",
-    display_name="Knowledge Base Search",
+    display_name="Vector Database Search (Internal Knowledge)",
     primary_behavior=SubgraphBehavior(
         condition=RoutingCondition(
             trigger=(
-                "User asks questions that could be answered from stored knowledge - "
-                "documents, articles, guides, references, or any ingested content"
+                "User asks questions about INTERNAL knowledge, documents, or content "
+                "that has been previously ingested and stored in the vector database"
             ),
             signals=[
-                "how to",
-                "how do I",
-                "what is",
-                "explain",
-                "guide",
-                "documentation",
-                "steps",
-                "process",
-                "procedure",
-                "about",
-                "describe",
-                "definition",
-                "overview",
-                "tutorial",
-                "example",
-                "best practice",
+                "internal docs",
+                "our documentation",
+                "company policy",
+                "our guide",
+                "stored knowledge",
+                "knowledge base",
+                "indexed documents",
+                "uploaded files",
+                "ingested content",
+                "our articles",
+                "reference material",
             ],
             exclude_when=[
-                "explicitly asks for 'latest' or 'recent' or 'current' information",
-                "asks for quantitative data or database queries",
-                "asks to verify breaking news or very recent events (within days)",
+                "User explicitly asks to search the internet/web",
+                "User asks for live/real-time data from external sources",
+                "User asks for numeric data, counts, or statistics from database tables",
+                "User wants to query structured records (users, orders, transactions)",
             ],
         ),
         action=RoutingAction(
             capability=(
-                "Searches knowledge base containing ingested documents and content. "
-                "This could be anything previously stored: articles, guides, research papers, "
-                "product docs, policies, procedures, tutorials, references, or domain knowledge."
+                "Performs semantic search in VECTOR DATABASE to find relevant documents "
+                "and content that has been previously ingested. Returns matching text chunks "
+                "with similarity scores from embedded documents."
             ),
             router_instruction=(
-                "Route here as PRIMARY choice when:\n"
-                "• User asks informational questions that could be answered from documents\n"
-                "• Query is about concepts, processes, or explanations\n"
-                "• Looking for guides, tutorials, or how-to information\n"
-                "• Needs domain knowledge or reference material\n"
-                "• Asks about things that might be documented\n"
-                "\n"
+                "Use this tool when:\n"
+                "• User needs information from INTERNAL documents stored in vector DB\n"
+                "• Looking for semantic matches in ingested content (PDFs, articles, guides)\n"
+                "• Searching through previously uploaded/indexed knowledge\n"
+                "• Needs to find relevant passages from document corpus\n"
             ),
-            expected_outcome="Relevant information from stored knowledge with source references",
+            expected_outcome="Semantically relevant document chunks from vector database with sources",
         ),
-        priority=80,  # Higher than web_search for general informational queries
     ),
     canonical_examples=[
         {
-            "query": "How does OAuth 2.0 work?",
-            "rationale": "Technical concept likely documented in knowledge base",
+            "query": "What does our company policy say about remote work?",
+            "rationale": "Internal policy document stored in vector DB",
         },
         {
-            "query": "What are best practices for API design?",
-            "rationale": "Domain knowledge and guidelines",
+            "query": "Find information about API authentication in our docs",
+            "rationale": "Internal documentation search",
         },
         {
-            "query": "Explain the refund policy",
-            "rationale": "Policy documentation",
+            "query": "Search for onboarding procedures",
+            "rationale": "Internal process documents",
         },
         {
-            "query": "How do I reset my password?",
-            "rationale": "Procedural guide likely in docs",
-        },
-        {
-            "query": "What is machine learning?",
-            "rationale": "Conceptual explanation, may be in knowledge base",
-        },
-        {
-            "query": "Show me examples of good code reviews",
-            "rationale": "Reference material and best practices",
+            "query": "What did the uploaded research paper say about X?",
+            "rationale": "Searching ingested document content",
         },
     ],
     executor="rag_search",
     entry_state_type=SimpleSearchState,
-    tags=["knowledge", "documents", "reference"],
+    tags=["vector", "semantic", "documents", "internal"],
 )
 
 RAG_SEARCH_PROFILE.secondary_behaviors.append(
     SubgraphBehavior(
         condition=RoutingCondition(
-            trigger="User asks follow-up questions after getting knowledge base results",
-            signals=["tell me more", "elaborate", "give me details", "explain further"],
+            trigger="User asks follow-up questions about previously retrieved documents",
+            signals=["tell me more", "elaborate", "from that document", "in that file"],
         ),
         action=RoutingAction(
-            capability="Deep dive into specific topics from knowledge base",
-            router_instruction="Continue using knowledge base for follow-up deep dives",
-            expected_outcome="More detailed information on specific aspects",
+            capability="Deep dive into specific topics from vector database",
+            router_instruction="Continue searching vector DB for related content",
+            expected_outcome="More detailed information from stored documents",
         ),
-        priority=85,
     )
 )
 
 WEB_SEARCH_PROFILE = SubgraphProfile(
     name="web_search",
-    display_name="Public Web Search",
+    display_name="Internet Web Search (External Information)",
     primary_behavior=SubgraphBehavior(
         condition=RoutingCondition(
             trigger=(
-                "User explicitly needs current/latest/recent information, "
-                "breaking news, real-time data, or verification of very recent events"
+                "User wants to search the INTERNET for external information, "
+                "public knowledge, news, or anything available on the world wide web"
             ),
             signals=[
-                "latest",
-                "recent",
-                "current",
-                "today",
-                "this week",
-                "this month",
-                "breaking",
-                "just announced",
-                "newest",
-                "up-to-date",
-                "right now",
-                "as of",
-                "updated",
+                "search online",
+                "google",
+                "look up online",
+                "find on the web",
+                "internet search",
+                "search the web",
+                "latest news",
+                "current events",
+                "what's happening",
+                "recent updates",
+                "public information",
+                "external sources",
             ],
             exclude_when=[
-                "asks for quantitative database metrics",
-                "general informational query without recency requirement",
+                "User explicitly asks to search internal documents or knowledge base",
+                "User asks for data from database tables (counts, records, statistics)",
+                "User wants to query structured data (users, orders, products)",
             ],
         ),
         action=RoutingAction(
             capability=(
-                "Searches public web for real-time information, recent updates, "
-                "breaking news, and current status verification"
+                "Searches the PUBLIC INTERNET using web search engines. "
+                "Returns results from websites, news articles, blogs, and other "
+                "publicly available online content."
             ),
             router_instruction=(
-                "Route here when user EXPLICITLY needs:\n"
-                "• Latest/current/recent information (temporal keywords present)\n"
-                "• Breaking news or events from past few days/weeks\n"
-                '• Verification of current status ("is X still CEO?", "did Y happen?")\n'
-                "• Real-time data (stock prices, weather, live scores)\n"
-                "• Updates or announcements specifically mentioned as recent\n"
-                "\n"
+                "Use this tool when:\n"
+                "• User wants to find information from the INTERNET\n"
+                "• Looking for public/external information not stored internally\n"
+                "• Needs news, current events, or real-time web content\n"
+                "• Searching for general knowledge available online\n"
+                "• Wants to look up external companies, products, or public figures\n"
             ),
-            expected_outcome="Current information with timestamps and source credibility",
+            expected_outcome="Web search results with URLs and snippets from internet sources",
         ),
-        priority=70,  # Lower than rag_search for general queries, high for recency
     ),
     canonical_examples=[
         {
-            "query": "Latest AI developments in 2025",
-            "rationale": "Explicit 'latest' keyword - needs current information",
+            "query": "Search online for Python best practices",
+            "rationale": "Explicit request to search the internet",
         },
         {
-            "query": "What did OpenAI announce this week?",
-            "rationale": "Recent announcement with temporal context",
+            "query": "What are the latest news about AI?",
+            "rationale": "News from external web sources",
         },
         {
-            "query": "Current GDPR requirements",
-            "rationale": "'Current' indicates need for up-to-date regulatory info",
+            "query": "Look up information about Tesla company",
+            "rationale": "External company information from the web",
         },
         {
-            "query": "Is Elon Musk still CEO of Tesla?",
-            "rationale": "Verification of current status",
+            "query": "Find tutorials about React on the internet",
+            "rationale": "Public web content search",
         },
         {
-            "query": "News about recent tech layoffs",
-            "rationale": "Breaking news query",
-        },
-        {
-            "query": "What's the weather today?",
-            "rationale": "Real-time data need",
+            "query": "What is the current weather in Hanoi?",
+            "rationale": "Real-time information from web",
         },
     ],
     executor="web_search",
     entry_state_type=SimpleSearchState,
-    tags=["web", "current", "external", "real-time"],
+    tags=["internet", "web", "external", "public"],
 )
 
 WEB_SEARCH_PROFILE.secondary_behaviors.append(
     SubgraphBehavior(
         condition=RoutingCondition(
-            trigger="User asks about external entities when knowledge base returns insufficient results",
-            signals=["competitor", "company", "organization", "market", "industry"],
+            trigger="User asks follow-up questions about web search results",
+            signals=["more about that", "from that website", "similar articles"],
         ),
         action=RoutingAction(
-            capability="Fallback for external entity information not in knowledge base",
-            router_instruction="Use as fallback when RAG doesn't have external entity info",
-            expected_outcome="Public information about external entities",
+            capability="Continue searching the web for related information",
+            router_instruction="Perform additional web searches for follow-up",
+            expected_outcome="Additional web results related to previous search",
         ),
-        priority=60,
     )
 )
 
 SQL_QUERY_PROFILE = SubgraphProfile(
     name="sql_query",
-    display_name="Database Query Executor",
+    display_name="PostgreSQL Database Query (Structured Data)",
     primary_behavior=SubgraphBehavior(
         condition=RoutingCondition(
             trigger=(
-                "User needs quantitative data, metrics, counts, or aggregations "
-                "from structured databases"
+                "User wants to query STRUCTURED DATA from PostgreSQL database tables - "
+                "records, counts, statistics, aggregations, or any tabular data"
             ),
             signals=[
                 "how many",
@@ -468,53 +489,48 @@ SQL_QUERY_PROFILE = SubgraphProfile(
                 "total",
                 "average",
                 "sum",
-                "show me",
-                "list",
-                "top",
-                "bottom",
-                "rank",
-                "table",
-                "database",
-                "column",
-                "where",
+                "list all",
+                "show records",
+                "get data",
+                "users table",
+                "orders table",
+                "database records",
+                "filter by",
                 "group by",
-                "order by",
-                "filter",
-                "query",
+                "statistics",
+                "top 10",
+                "recent orders",
+                "active users",
             ],
             requires_context={
                 "needs_data_access": True,
             },
             exclude_when=[
-                "asks conceptual questions about databases",
-                "asks for document content or search",
-                "needs external web information",
+                "User wants to search for documents or text content",
+                "User wants to search the internet for external information",
+                "User asks conceptual questions (not requesting actual data)",
             ],
         ),
         action=RoutingAction(
             capability=(
-                "Executes SQL queries against structured databases. "
-                "Provides quantitative answers, data retrieval, aggregations, and analytics."
+                "Executes SQL queries against POSTGRESQL database tables. "
+                "Retrieves structured records, performs counts, aggregations, "
+                "filtering, and analytics on tabular data (users, orders, products, etc.)."
             ),
             router_instruction=(
-                "Route here for questions that require querying databases:\n"
-                "• Counting/summing/averaging (how many users, total revenue)\n"
-                "• Data retrieval with filters (show orders where status='pending')\n"
-                "• Rankings and aggregations (top customers, average by region)\n"
-                "• Schema exploration (what tables exist, show columns)\n"
-                "\n"
-                "Important:\n"
-                "- Ensure user query is specific about what data they need\n"
-                "- For vague queries, may need to ask clarifying questions first\n"
-                "- Extract clear data requirements before delegating\n"
+                "Use this tool when:\n"
+                "• User needs data from DATABASE TABLES (users, orders, products, etc.)\n"
+                "• Asking for counts, totals, averages, or statistics\n"
+                "• Wants to list/filter/sort structured records\n"
+                "• Needs to query specific columns or apply conditions\n"
+                "• Asks about database schema (tables, columns)\n"
             ),
-            expected_outcome="Structured data results with insights and context",
+            expected_outcome="Query results from PostgreSQL tables with data rows and aggregations",
             query_transformation=(
-                "Transform natural language query into clear data requirement: "
-                "What to retrieve, from where, with what conditions, how to aggregate"
+                "Transform natural language into SQL query requirements: "
+                "tables, columns, conditions, aggregations, sorting"
             ),
         ),
-        priority=70,
     ),
     journeys=[
         SubgraphJourney(
@@ -575,29 +591,29 @@ SQL_QUERY_PROFILE = SubgraphProfile(
     ],
     canonical_examples=[
         {
-            "query": "How many users signed up last month?",
-            "rationale": "Simple count with time filter → Simple Retrieval",
+            "query": "How many users registered last month?",
+            "rationale": "Count query on users table with date filter",
         },
         {
-            "query": "Show top 10 customers by purchase amount",
-            "rationale": "Ranked aggregation → Simple Retrieval",
+            "query": "Show me all orders with status pending",
+            "rationale": "Select records from orders table with condition",
         },
         {
-            "query": "What tables exist in the database?",
-            "rationale": "Schema exploration → Simple Retrieval",
+            "query": "What is the total revenue this quarter?",
+            "rationale": "Aggregation (SUM) on transaction data",
         },
         {
-            "query": "Analyze sales trends by region over last year",
-            "rationale": "Pattern analysis over time → Exploratory Analysis",
+            "query": "List top 10 customers by purchase amount",
+            "rationale": "Ranked query with aggregation and limit",
         },
         {
-            "query": "Give me a monthly revenue report with breakdowns",
-            "rationale": "Multiple metrics, formatted output → Report Generation",
+            "query": "What tables are in the database?",
+            "rationale": "Schema exploration query",
         },
     ],
     entry_state_type=SqlState,
     executor=None,
-    tags=["data", "analytics", "quantitative"],
+    tags=["postgresql", "sql", "database", "structured"],
 )
 
 SQL_QUERY_PROFILE.glossary = {
@@ -614,8 +630,8 @@ def seed_base_subgraphs():
     Populate registry with all base subgraph profiles.
     Call this on application startup.
     """
-    SubgraphRegistry.register(RAG_SEARCH_PROFILE)
-    # SubgraphRegistry.register(WEB_SEARCH_PROFILE)
+    # SubgraphRegistry.register(RAG_SEARCH_PROFILE)
+    SubgraphRegistry.register(WEB_SEARCH_PROFILE)
 
 
 def enable_sql(db_url: str, allow_tables: list[str]):

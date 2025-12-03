@@ -137,7 +137,6 @@ class SubgraphBehavior:
 
     condition: RoutingCondition
     action: RoutingAction
-    priority: int = 0
 
     def __str__(self):
         return f"WHEN {self.condition.trigger} THEN {self.action.capability}"

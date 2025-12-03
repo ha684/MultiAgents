@@ -100,6 +100,9 @@ class SqlState(TypedDict):
 
     response_metadata: dict
 
+    retry_count: int
+    execution_errors: list[dict] | None
+
 
 class NormalGraphState(TypedDict, total=False):
     """

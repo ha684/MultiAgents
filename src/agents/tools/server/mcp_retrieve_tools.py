@@ -42,7 +42,7 @@ async def web_search(query: str) -> list[Document]:
     retrieved_docs = await web_search_service.search(
         query=query,
         provider=settings.websearch_provider,
-        max_results=10,
+        max_results=15,
     )
     return retrieved_docs
 

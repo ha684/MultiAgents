@@ -4,6 +4,7 @@ Main Orchestrator Graph - Entry Point with Delegation
 Routes to NormalGraph (fast path) or ThinkingGraph (iterative research)
 """
 
+import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
 
@@ -26,7 +27,7 @@ from src.agents.tools.server.mcp_retrieve_tools import (
 from src.domain.entities.graph import RunConfig
 from src.domain.entities.state import MainGraphState, NormalGraphState, ThinkingState
 from src.domain.schemas.chat import Message, RetrievalContext, TextPart
-from src.llm.language_detector import detect_language
+from src.llm.language_detector import detect_language_async
 from src.services.conversation_service import ConversationService
 from src.utils import get_current_time
 from src.utils.logger_conf import logger
@@ -82,9 +83,12 @@ class MainGraph(GraphAgentBase[MainGraphState]):
                 latest_user_query = msg.content
                 break
 
-        detected_language = detect_language(latest_user_query)
-        language_instruction = f"""**CRITICAL LANGUAGE REQUIREMENT** - Response language: {detected_language} ONLY - NO mixed tokens from other languages"""
+        detected_language = asyncio.create_task(
+            detect_language_async(latest_user_query)
+        )
         current_time = f"The current time is {get_current_time()}"
+        language_instruction = f"""**CRITICAL LANGUAGE REQUIREMENT** - Response language: {await detected_language} ONLY - NO mixed tokens from other languages"""
+
         system_prompt = SystemMessage(
             content=PromptTemplates.DIRECT_RESPONSE_PROMPT
             + language_instruction
@@ -153,7 +157,6 @@ class MainGraph(GraphAgentBase[MainGraphState]):
         """Route after entry point based on mode decision."""
         route_mode = state.get("route_mode", "direct")
 
-        # Log routing explanation if available
         routing_explanation = state.get("routing_explanation")
         if routing_explanation:
             logger.info(f"[Orchestrator] Routing explanation: {routing_explanation}")
