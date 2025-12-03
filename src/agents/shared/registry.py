@@ -1,7 +1,8 @@
 # src/agents/shared/registry.py
 from typing import Literal
 
-from src.database.sql_database import AsyncSQLDatabase
+from langchain_community.utilities.sql_database import SQLDatabase
+
 from src.domain.entities.graph import (
     RoutingAction,
     RoutingCondition,
@@ -630,7 +631,7 @@ def seed_base_subgraphs():
     Populate registry with all base subgraph profiles.
     Call this on application startup.
     """
-    # SubgraphRegistry.register(RAG_SEARCH_PROFILE)
+    SubgraphRegistry.register(RAG_SEARCH_PROFILE)
     SubgraphRegistry.register(WEB_SEARCH_PROFILE)
 
 
@@ -641,7 +642,7 @@ def enable_sql(db_url: str, allow_tables: list[str]):
     """
     from src.agents.executors.sql_query import SqlQueryExecutor
 
-    sql_db = AsyncSQLDatabase.from_uri(
+    sql_db = SQLDatabase.from_uri(
         database_uri=db_url,
         sample_rows_in_table_info=3,
         include_tables=allow_tables,

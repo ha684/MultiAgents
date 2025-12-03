@@ -11,7 +11,6 @@ from src.database.models.document import Document as DBDocument
 from src.rag.processors.strategy.base import BaseStrategy
 from src.rag.processors.strategy.image import ImageStrategy
 from src.rag.processors.strategy.naive import NaiveStrategy
-from src.rag.processors.strategy.spreadsheet import SpreadsheetStrategy
 
 
 def get_strategy(document: DBDocument, config: dict[str, Any]) -> BaseStrategy:
@@ -26,6 +25,4 @@ def get_strategy(document: DBDocument, config: dict[str, Any]) -> BaseStrategy:
     file_extension = Path(document.file_path).suffix.lower()
     if file_extension in [".jpg", ".jpeg", ".png"]:
         return ImageStrategy(config)
-    if file_extension in [".xlsx", ".xls"]:
-        return SpreadsheetStrategy(config=config)
     return NaiveStrategy(config)

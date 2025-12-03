@@ -1,7 +1,8 @@
 from typing import Any
 
+from langchain_community.utilities.sql_database import SQLDatabase
+
 from src.agents.graph.sql_graph import SqlGraph
-from src.database.sql_database import AsyncSQLDatabase
 from src.domain.entities.graph import SubgraphOutput
 from src.domain.entities.state import SqlState
 
@@ -37,7 +38,7 @@ def _format_table_preview(rows: list[dict[str, Any]]) -> str:
     return "".join(lines)
 
 
-async def _run_sql_query(state: dict, sql_db: AsyncSQLDatabase) -> SubgraphOutput:
+async def _run_sql_query(state: dict, sql_db: SQLDatabase) -> SubgraphOutput:
     """Execute SQL query subgraph and format comprehensive context without overloading the LLM."""
     sql_state = SqlState(direction=state["direction"])
     sql_graph = SqlGraph(sql_db)
@@ -148,7 +149,7 @@ async def _run_sql_query(state: dict, sql_db: AsyncSQLDatabase) -> SubgraphOutpu
 
 
 class SqlQueryExecutor:
-    def __init__(self, sql_db: AsyncSQLDatabase):
+    def __init__(self, sql_db: SQLDatabase):
         self.sql_db = sql_db
 
     async def __call__(self, state: dict) -> SubgraphOutput:

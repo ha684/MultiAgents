@@ -56,11 +56,11 @@ class VectorRetrieval:
 
             scored_documents.sort(key=lambda x: x[1], reverse=True)
 
-            # threshold = 0.6
-            # # Filter out documents with scores below the threshold
-            # scored_documents = [
-            #     (doc, score) for doc, score in scored_documents if score >= threshold
-            # ]
+            threshold = 0.6
+            # Filter out documents with scores below the threshold
+            scored_documents = [
+                (doc, score) for doc, score in scored_documents if score >= threshold
+            ]
 
             # Return top_n documents
             if with_scores:

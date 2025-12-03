@@ -91,6 +91,8 @@ class NaiveStrategy(BaseStrategy):
             return CSVLoader(file_path=file_path, autodetect_encoding=True)
         if file_extension in [".txt", ".md"]:
             return UnstructuredMarkdownLoader(file_path, max_characters=1000000)
+        if file_extension in [".xlsx", ".xls"]:
+            return CSVLoader(file_path=file_path, autodetect_encoding=True)
         if os.path.isdir(file_path):
             return DirectoryLoader(file_path)
         return UnstructuredFileLoader(

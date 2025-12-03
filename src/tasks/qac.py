@@ -7,9 +7,7 @@ from src.database.models.document import DocumentQA
 from src.utils.logger_conf import logger
 
 
-async def generate_qa_pairs_async(
-    document_id: UUID, kb_id: UUID, full_text: str
-) -> None:
+def generate_qa_pairs(document_id: UUID, kb_id: UUID, full_text: str) -> None:
     """
     Generate QA pairs asynchronously.
     """
@@ -17,17 +15,17 @@ async def generate_qa_pairs_async(
         logger.warning("No contexts provided for QA generation.")
         return
 
-    kb = await knowledge_base_repository.get(kb_id)
+    kb = knowledge_base_repository.get(kb_id)
     if not kb:
         raise ValueError(f"Knowledge Base with ID {kb_id} not found")
 
-    document = await document_repository.get(document_id)
+    document = document_repository.get(document_id)
     if not document:
         raise ValueError(f"Document with ID {document_id} not found")
 
-    await qa_repository.delete_qa_by_doc_id(document_id)
+    qa_repository.delete_qa_by_doc_id(document_id)
 
-    qa_pairs = await qac_agent.ainvoke(full_text)
+    qa_pairs = qac_agent.ainvoke(full_text)
     if not qa_pairs:
         raise ValueError(f"No QA pairs generated for document {document_id}")
 
@@ -41,4 +39,4 @@ async def generate_qa_pairs_async(
         for qa_pair in qa_pairs
     ]
 
-    await qa_repository.create_qa_list(qa_list)
+    qa_repository.create_qa_list(qa_list)

@@ -2,12 +2,11 @@
 
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
-from langchain_qdrant import FastEmbedSparse, RetrievalMode
+from langchain_qdrant import FastEmbedSparse, QdrantVectorStore, RetrievalMode
 from qdrant_client import AsyncQdrantClient, models
 
 from src.core.config.settings import settings
 from src.rag.embeddings import embedding
-from src.rag.vectorstores.custom_qdrantvectorstore import CustomQdrantVectorStore
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
@@ -31,7 +30,7 @@ class VectorStorage:
             url=settings.vector_storage_url,
         )
 
-        self.storage = CustomQdrantVectorStore(
+        self.storage = QdrantVectorStore(
             client=client,
             collection_name=settings.vector_collection_name,
             embedding=embeddings,

@@ -1,6 +1,7 @@
 # src/utils/__init__.py
 import json
 import re
+import uuid
 from datetime import datetime
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -174,3 +175,8 @@ def normalize_url(meta: dict[str, Any]) -> str:
         )
     except Exception:
         return url
+
+
+def generate_chunk_id(document_id: uuid.UUID) -> str:
+    """Generate a unique chunk ID for a document."""
+    return f"{document_id}-{uuid.uuid4()}"

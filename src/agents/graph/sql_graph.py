@@ -9,6 +9,7 @@ import json
 from typing import Any
 
 import pandas as pd
+from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_core.messages import (
     AIMessage,
     BaseMessage,
@@ -22,7 +23,6 @@ from src.agents.graph.base import GraphAgentBase
 from src.agents.prompts.agent_prompts import PromptTemplates
 from src.agents.shared.sql_validator import SqlValidator
 from src.agents.tools.server.mcp_retrieve_tools import think
-from src.database.sql_database import AsyncSQLDatabase
 from src.domain.entities.graph import RunConfig
 from src.domain.entities.state import SqlState
 from src.domain.schemas.graph import (
@@ -49,7 +49,7 @@ class SqlGraph(GraphAgentBase[SqlState]):
 
     MAX_QUERY_RETRIES = 2  # Maximum retries for failed query execution
 
-    def __init__(self, sql_database: AsyncSQLDatabase):
+    def __init__(self, sql_database: SQLDatabase):
         super().__init__()
         self.validator = SqlValidator()
         self.sql_database = sql_database

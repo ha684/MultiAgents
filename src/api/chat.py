@@ -4,7 +4,6 @@ from fastapi.responses import StreamingResponse
 
 from src.dependencies.auth import get_current_user
 from src.domain.schemas.chat import ChatRequest, Message
-from src.middlewares.endpoint_manager import endpoint_protection
 from src.services.chat_service import ChatService
 
 router = APIRouter(
@@ -14,13 +13,6 @@ chat_service = ChatService()
 
 
 @router.post("/ask")
-@endpoint_protection(
-    endpoint_name="/ask",
-    max_concurrent=80,
-    max_queue_size=300,
-    queue_timeout=300,
-    processing_timeout=600,
-)
 async def ask(
     request: ChatRequest,
 ) -> Message:
@@ -38,13 +30,6 @@ async def ask(
 
 
 @router.post("/ask/sse")
-@endpoint_protection(
-    endpoint_name="/ask/sse",
-    max_concurrent=80,
-    max_queue_size=300,
-    queue_timeout=300,
-    processing_timeout=600,
-)
 async def ask_sse(
     request: ChatRequest,
 ) -> StreamingResponse:

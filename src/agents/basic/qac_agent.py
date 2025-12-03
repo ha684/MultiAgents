@@ -43,58 +43,13 @@ Skip generation entirely if the content is:
    - Answer should contain enough information that a judge can verify correctness
    - Include background context that makes the answer meaningful
    - Don't assume the judge has seen the original content
-
-**COMPARISON:**
-
-❌ SHORT, INADEQUATE ANSWER:
-Q: "What accuracy did ResNet-50 achieve on ImageNet?"
-A: "76.5% accuracy."
-→ Judge cannot verify if this is complete or contextualized correctly
-
-✅ FULL, COMPREHENSIVE ANSWER:
-Q: "What accuracy did ResNet-50 achieve on ImageNet in 2015?"
-A: "ResNet-50 achieved 76.5% top-5 accuracy on the ImageNet classification dataset when it was introduced in 2015. This performance significantly outperformed previous state-of-the-art architectures at the time, marking a breakthrough in deep learning by demonstrating that residual connections could enable training of much deeper networks."
-→ Judge has full context to evaluate
-
-**EXAMPLES:**
-
-Content: "Transformer architecture introduced in 'Attention Is All You Need' (2017) uses self-attention mechanisms instead of recurrence. The base model has 65M parameters with 6 encoder and 6 decoder layers. It achieved 28.4 BLEU on WMT English-to-German translation, training in 3.5 days on 8 P100 GPUs."
-
-✅ EXCELLENT PAIR:
-{
-  "question": "What BLEU score did the base Transformer model achieve on WMT English-to-German translation, and how long did training take?",
-  "answer": "The base Transformer model achieved 28.4 BLEU score on the WMT English-to-German translation task. The model was trained for 3.5 days using 8 P100 GPUs. This was introduced in the 'Attention Is All You Need' paper (2017), where the Transformer architecture demonstrated that self-attention mechanisms alone, without recurrence, could achieve state-of-the-art translation performance. The base model contained 65 million parameters with 6 encoder layers and 6 decoder layers."
-}
-
-❌ INADEQUATE PAIR (TOO SHORT):
-{
-  "question": "What is the BLEU score?",
-  "answer": "28.4 BLEU"
-}
-
-❌ MEANINGLESS CONTENT - RETURN EMPTY:
-Content: "This image appears blank with no visible content. Content type: Mixed."
-→ Return: []
-
-**OUTPUT FORMAT:**
-Return ONLY valid JSON array (no markdown, no code blocks, no explanations):
-- If content is meaningful: [{"question": "...", "answer": "..."}, ...]
-- If content lacks substance: []
-
-Generate 1-3 pairs maximum. Focus on the most important, testable information."""
+"""
 
 QAC_USER_PROMPT_TEMPLATE = """Analyze this content and decide if it contains substantial, meaningful information worth testing:
 
 <CONTENT>
 {content}
 </CONTENT>
-
-**INSTRUCTIONS:**
-1. First, assess if this content has meaningful information (not blank, not just metadata, not trivial)
-2. If NO meaningful content → return empty array: []
-3. If YES → generate 1-3 high-quality Q/A pairs with comprehensive answers
-
-Generate questions that are self-contained and specific. Write answers that are detailed (2-5 sentences) with full context so a judge can accurately evaluate responses.
 
 Return ONLY valid JSON (no markdown, no explanations):
 [

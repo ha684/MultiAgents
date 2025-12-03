@@ -68,31 +68,13 @@ class ActionExecutionAgent(BaseAgent):
         if action == "reason_only":
             knowledge = state.get("accumulated_context", "")
             learnings = state.get("learnings", [])
-            missing_aspects = state.get("_missing_aspects", "")
-
-            knowledge_section = ""
-            if knowledge:
-                truncated = len(knowledge) > 8000
-                prefix = "(Showing most recent ~8000 chars)\n" if truncated else ""
-                knowledge_section = (
-                    f"Accumulated Knowledge:\n{prefix}{knowledge[-8000:]}"
-                )
-
-            learnings_text = (
-                "\n".join(f"- {learning}" for learning in learnings[-3:])
-                if learnings
-                else "None yet"
-            )
-            learnings_section = f"Previous Learnings:\n{learnings_text}"
-            missing_section = (
-                f"Missing Aspects:\n{missing_aspects}" if missing_aspects else ""
-            )
+            missing_aspects = state.get("missing_aspects", "")
 
             system_prompt = PromptTemplates.REASONING_EXECUTION_PROMPT
             context_parts = [
-                knowledge_section,
-                learnings_section,
-                missing_section,
+                knowledge,
+                learnings,
+                missing_aspects,
             ]
         else:  # use_tool
             system_prompt = PromptTemplates.TOOL_EXECUTION_PROMPT

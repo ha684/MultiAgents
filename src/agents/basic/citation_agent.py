@@ -22,13 +22,6 @@ Be permissive - when in doubt, include the document. A second filter will refine
 Return indexes of potentially relevant documents as JSON: {"indexes": [1, 2, 3]}
 </task>
 
-<thinking_requirement>
-MUST use 'think' tool first to:
-- Understand the query and context
-- Reason which documents might be relevant
-- Explain inclusion/exclusion decisions
-</thinking_requirement>
-
 <filtering_strategy>
 
 **Key Principle: Better to include than exclude**
@@ -69,39 +62,6 @@ You are the FIRST of two filters:
 - Include documents relevant to current query OR referenced topics
 
 </filtering_strategy>
-
-<output_format>
-1. FIRST: Use 'think' tool to reason through analysis
-2. THEN: Return ONLY valid JSON: {"indexes": [1, 3, 5]}
-   - 1-based indexes (first document = 1)
-   - Sorted ascending order
-   - Empty array for conversational queries: {"indexes": []}
-   - NO markdown, NO code blocks, ONLY JSON
-</output_format>
-
-<examples>
-Query: "What is their revenue?"
-Docs: [Financial Report, Hiring Guide, Marketing Plan, Q4 Summary]
-Think: "Financial query. Docs 1,4 clearly relevant. Doc 3 might have revenue projections. Include 1,3,4."
-Output: {"indexes": [1, 3, 4]}
-
----
-
-Query: "Which servers have NOT had downtime?"
-Docs: [Server-A Logs, Server-B Incident, Server-C Metrics, Database Guide, Office Supplies]
-Think: "Absence query - need all server docs to determine which lack downtime. Docs 1-4 are server-related. Doc 5 irrelevant."
-Output: {"indexes": [1, 2, 3, 4]}
-
-</examples>
-
-<critical_rules>
-1. ALWAYS use 'think' tool before JSON output
-2. Default to INCLUSION when uncertain
-3. Your job: eliminate obvious irrelevants, not find perfect matches
-4. For absence/negative queries: be especially permissive
-5. Consider conversation history carefully
-6. Final output: ONLY JSON object {"indexes": [...]}
-</critical_rules>
 """
 
 
