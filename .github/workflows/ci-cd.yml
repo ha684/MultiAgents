@@ -48,11 +48,6 @@ jobs:
         image: qdrant/qdrant:latest
         ports:
           - 6333:6333
-        options: >-
-          --health-cmd "curl -f http://localhost:6333/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
 
     steps:
       - name: Checkout code
@@ -71,11 +66,10 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql-client make
 
       - name: Sync dependencies from lock file
-        run: |
-          uv sync --frozen --all-extras
+        run: make sync-dev
 
       - name: Set up test database
         env:
@@ -83,11 +77,22 @@ jobs:
         run: |
           psql -h localhost -U postgres -c "CREATE DATABASE test_kms_db;" || true
 
-      - name: Auto-format code
+      - name: Wait for Qdrant to be ready
         run: |
-          uv run black src/ tests/
-          uv run isort src/ tests/
-          uv run ruff check src/ tests/ --fix
+          echo "Waiting for Qdrant to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:6333/health > /dev/null; then
+              echo "Qdrant is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: Qdrant not ready yet, waiting..."
+            sleep 2
+          done
+          echo "Qdrant failed to start"
+          exit 1
+
+      - name: Auto-format code
+        run: make format
 
       - name: Run unit tests
         env:
@@ -181,22 +186,17 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install make
+        run: sudo apt-get install -y make
+
       - name: Sync dependencies from lock file
-        run: |
-          uv sync --frozen --all-extras
+        run: make sync-dev
 
       - name: Format code (auto-fix)
-        run: |
-          uv run black src/ tests/
-          uv run isort src/ tests/
-          uv run ruff check src/ tests/ --fix
+        run: make format
 
       - name: Run linting checks
-        run: |
-          uv run ruff check src/ tests/ --output-format=github
-          uv run black --check src/ tests/
-          uv run isort --check-only src/ tests/
-          uv run mypy src/ --ignore-missing-imports --no-strict-optional
+        run: make lint
 
   security-scan:
     name: Security Scanning
@@ -216,9 +216,11 @@ jobs:
         with:
           enable-cache: true
 
+      - name: Install make
+        run: sudo apt-get install -y make
+
       - name: Sync dependencies from lock file
-        run: |
-          uv sync --frozen --all-extras
+        run: make sync-dev
 
       - name: Run security scans
         continue-on-error: true
@@ -270,9 +272,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-docker]
     if: github.ref == 'refs/heads/main'
-    environment:
-      name: Production
-      url: https://your-production-url.com
+    # environment:
+    #   name: production
+    #   url: https://your-production-url.com
     
     steps:
       - name: Checkout code
