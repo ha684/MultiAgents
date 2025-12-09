@@ -271,7 +271,7 @@ jobs:
     needs: [build-docker]
     if: github.ref == 'refs/heads/main'
     environment:
-      name: production
+      name: Production
       url: https://your-production-url.com
     
     steps:

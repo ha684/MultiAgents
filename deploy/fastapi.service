@@ -1,0 +1,18 @@
+[Unit]
+Description=FastAPI Application
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=ec2-user
+WorkingDirectory=/home/ec2-user/BEFinalProject
+Environment="PATH=/home/ec2-user/BEFinalProject/venv/bin:/usr/local/bin:/usr/bin"
+EnvironmentFile=/home/ec2-user/BEFinalProject/.env
+ExecStart=/home/ec2-user/BEFinalProject/venv/bin/python -m src.main
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+
