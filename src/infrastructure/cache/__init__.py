@@ -2,4 +2,4 @@
 from src.core.config.settings import settings
 from src.infrastructure.cache.redis_client import Redis
 
-redis_client = Redis(uri=settings.redis_uri)
+redis_client = Redis(uri=settings.redis_url)

@@ -11,12 +11,12 @@ from src.domain.schemas.chat import SearchProvider
 
 class Settings(BaseSettings):
     # MinIO configuration
-    minio_endpoint: str
+    minio_endpoint: Optional[str] = None
     minio_access_key: str
     minio_secret_key: str
     minio_bucket: str
     minio_secure: bool = True
-
+    aws_region: Optional[str] = None
     # Database configuration
     database_url: str
     # SSH Tunnel settings (for RDS connection)

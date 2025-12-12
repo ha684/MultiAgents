@@ -9,10 +9,12 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 from src.core.config.settings import settings
 from src.infrastructure.database.connection import Base
+from src.infrastructure.ssh.tunnel import (
+    SSHTunnelManager,
+    rewrite_database_url,
+)
 
 config = context.config
-
-config.set_main_option("sqlalchemy.url", settings.database_url)
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -56,21 +58,54 @@ def do_run_migrations(connection):
 
 
 async def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
+    connectable = None
+    tunnel = None
+    try:
+        db_url = settings.database_url
 
-    In this scenario we need to create an Engine
-    and associate a connection with the context.
+        if getattr(settings, "use_ssh_tunnel", False):
+            tunnel = SSHTunnelManager.from_settings(
+                remote_host=settings.rds_host,
+                remote_port=settings.rds_port,
+            )
+            local_port = await tunnel.start()
 
-    """
-    connectable = create_async_engine(
-        config.get_main_option("sqlalchemy.url"),
-        poolclass=pool.NullPool,
-    )
+            db_url = rewrite_database_url(db_url, local_port)
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+        if db_url.startswith("postgresql://"):
+            db_url = db_url.replace("postgresql://", "postgresql+asyncpg://", 1)
 
-    await connectable.dispose()
+        connectable = create_async_engine(
+            db_url,
+            poolclass=pool.NullPool,
+            connect_args={
+                "timeout": 10,
+                "command_timeout": 30,
+                "ssl": "require",
+            },
+            echo=True,
+        )
+
+        async with connectable.connect() as connection:
+            print("Database connected successfully! Running migrations...")
+            await connection.run_sync(do_run_migrations)
+
+    except Exception as e:
+        import traceback
+
+        traceback.print_exc()
+        print("=" * 30 + "\n")
+        raise e
+
+    finally:
+        if connectable:
+            await connectable.dispose()
+
+        if tunnel:
+            print("Stopping SSH tunnel...")
+            await tunnel.stop()
+            print("SSH tunnel stopped.")
+            tunnel = None
 
 
 if context.is_offline_mode():

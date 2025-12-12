@@ -2,8 +2,8 @@
 from src.core.config.settings import settings
 
 # Redis connection settings
-broker_url = settings.redis_uri
-result_backend = settings.redis_uri
+broker_url = settings.redis_url
+result_backend = settings.redis_url
 
 broker_transport_options = {"master_name": "mymaster", "visibility_timeout": 3300}
 

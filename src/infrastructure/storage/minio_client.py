@@ -6,6 +6,7 @@ from datetime import timedelta
 from minio.error import S3Error
 from miniopy_async import Minio  # type: ignore[import]
 
+from src.core.config.settings import settings
 from src.utils.decorators import singleton
 from src.utils.logger_conf import logger
 
@@ -16,23 +17,16 @@ class MinioClient:
     A client for interacting with the MinIO object storage service.
     """
 
-    def __init__(
-        self, endpoint: str, access_key: str, secret_key: str, secure: bool = True
-    ):
+    def __init__(self):
         """
         Initialize MinioClient with connection parameters.
-
-        Args:
-            endpoint: MinIO service endpoint
-            access_key: MinIO access key
-            secret_key: MinIO secret key
-            secure: Whether to use HTTPS (default: True)
         """
         self.client = Minio(
-            endpoint=endpoint,
-            access_key=access_key,
-            secret_key=secret_key,
-            secure=secure,
+            endpoint=settings.minio_endpoint,
+            access_key=settings.minio_access_key,
+            secret_key=settings.minio_secret_key,
+            secure=settings.minio_secure,
+            region=settings.aws_region,
         )
 
     async def file_exists(self, bucket_name: str, object_name: str) -> bool:

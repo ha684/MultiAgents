@@ -85,6 +85,9 @@ dependencies = [
     "aiosqlite>=0.21.0",
     "ragas>=0.3.9",
     "datasets>=4.4.1",
+    "sshtunnel>=0.4.0",
+    "asyncssh>=2.21.1",
+    "langchain-text-splitters>=0.3.11",
 ]
 
 [project.optional-dependencies]

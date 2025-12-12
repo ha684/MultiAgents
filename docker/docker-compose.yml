@@ -1,38 +1,38 @@
 services:
-  postgres:
-    image: postgres:15
-    container_name: postgres
-    environment:
-      POSTGRES_USER: kms_user
-      POSTGRES_PASSWORD: kms_password
-      POSTGRES_DB: kms_db
-      TZ: UTC
-      PGTZ: UTC
-    ports:
-      - "${DATABASE_PORT:-5433}:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./etc/postgres-init:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kms_user -d kms_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+  # postgres:
+  #   image: postgres:15
+  #   container_name: postgres
+  #   environment:
+  #     POSTGRES_USER: kms_user
+  #     POSTGRES_PASSWORD: kms_password
+  #     POSTGRES_DB: kms_db
+  #     TZ: UTC
+  #     PGTZ: UTC
+  #   ports:
+  #     - "${DATABASE_PORT:-5433}:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #     - ./etc/postgres-init:/docker-entrypoint-initdb.d:ro
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U kms_user -d kms_db"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
 
-  redis:
-      image: redis/redis-stack-server:latest
-      container_name: redis
-      ports:
-        - "${REDIS_PORT:-6379}:6379"
-      volumes:
-        - redis_data:/data  
-      environment:
-        - REDIS_ARGS=--requirepass ${REDIS_AUTH:-myredissecret}
-      healthcheck:
-        test: ["CMD", "redis-cli", "-a", "${REDIS_AUTH:-myredissecret}", "ping"]
-        interval: 10s
-        timeout: 5s
-        retries: 5
+  # redis:
+  #     image: redis/redis-stack-server:latest
+  #     container_name: redis
+  #     ports:
+  #       - "${REDIS_PORT:-6379}:6379"
+  #     volumes:
+  #       - redis_data:/data  
+  #     environment:
+  #       - REDIS_ARGS=--requirepass ${REDIS_AUTH:-myredissecret}
+  #     healthcheck:
+  #       test: ["CMD", "redis-cli", "-a", "${REDIS_AUTH:-myredissecret}", "ping"]
+  #       interval: 10s
+  #       timeout: 5s
+  #       retries: 5
 
   # qdrant:
   #   image: qdrant/qdrant:latest
@@ -45,67 +45,67 @@ services:
   #   environment:
   #     - QDRANT_ALLOW_RECOVERY_MODE=true
 
-  minio:
-    image: minio/minio:latest
-    container_name: minio
-    ports:
-      - "${MINIO_API_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
-    volumes:
-      - minio_data:/data
-    environment:
-      - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
-      - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
-    command: server /data --console-address ":9001"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 20s
-      retries: 3
+  # minio:
+  #   image: minio/minio:latest
+  #   container_name: minio
+  #   ports:
+  #     - "${MINIO_API_PORT:-9000}:9000"
+  #     - "${MINIO_CONSOLE_PORT:-9001}:9001"
+  #   volumes:
+  #     - minio_data:/data
+  #   environment:
+  #     - MINIO_ROOT_USER=${MINIO_ACCESS_KEY}
+  #     - MINIO_ROOT_PASSWORD=${MINIO_SECRET_KEY}
+  #   command: server /data --console-address ":9001"
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+  #     interval: 30s
+  #     timeout: 20s
+  #     retries: 3
 
-  minio-init:
-    image: minio/mc:latest
-    container_name: minio-init
-    depends_on:
-      minio:
-        condition: service_healthy
-    environment:
-      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
-      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
-      - MINIO_BUCKET=${MINIO_BUCKET:-langfuse}
-    entrypoint: >
-      /bin/sh -c "
-      echo 'Waiting for MinIO...';
-      /usr/bin/mc alias set myminio http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY};
-      /usr/bin/mc mb myminio/$${MINIO_BUCKET} --ignore-existing;
-      /usr/bin/mc anonymous set download myminio/$${MINIO_BUCKET};
-      echo 'MinIO initialization done';
-      exit 0;
-      "
+  # minio-init:
+  #   image: minio/mc:latest
+  #   container_name: minio-init
+  #   depends_on:
+  #     minio:
+  #       condition: service_healthy
+  #   environment:
+  #     - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
+  #     - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
+  #     - MINIO_BUCKET=${MINIO_BUCKET:-langfuse}
+  #   entrypoint: >
+  #     /bin/sh -c "
+  #     echo 'Waiting for MinIO...';
+  #     /usr/bin/mc alias set myminio http://minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY};
+  #     /usr/bin/mc mb myminio/$${MINIO_BUCKET} --ignore-existing;
+  #     /usr/bin/mc anonymous set download myminio/$${MINIO_BUCKET};
+  #     echo 'MinIO initialization done';
+  #     exit 0;
+  #     "
 
   worker:
     image: hapt
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+    # depends_on:
+    #   postgres:
+    #     condition: service_healthy
+    #   redis:
+    #     condition: service_healthy
       # qdrant:
       #   condition: service_started
-      minio:
-        condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
+      # minio:
+      #   condition: service_healthy
+      # minio-init:
+      #   condition: service_completed_successfully
     volumes:
       - ../:/app:cached
     environment:
-      - REDIS_URI=redis://:${REDIS_AUTH:-myredissecret}@redis:6379/0
-      - DATABASE_URL=postgresql+asyncpg://kms_user:kms_password@postgres:5432/kms_db
+      - REDIS_URL=${REDIS_URL}
+      - DATABASE_URL=${DATABASE_URL}
       - VECTOR_STORAGE_URL=${VECTOR_STORAGE_URL}
       - VECTOR_STORAGE_API_KEY=${VECTOR_STORAGE_API_KEY}
       - VECTOR_COLLECTION_NAME=${VECTOR_COLLECTION_NAME}
-      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY}
       - MINIO_BUCKET=${MINIO_BUCKET:-langfuse}

@@ -3,7 +3,7 @@ import hashlib
 import json
 import time
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 import redis.asyncio as aioredis
@@ -12,11 +12,14 @@ from langchain_core.load.dump import dumps
 from langchain_core.load.load import loads
 from redis.commands.json.path import Path as JSONPath
 
+from src.core.config.settings import settings
+from src.infrastructure.ssh.tunnel import SSHTunnelManager, rewrite_redis_url
 from src.utils.logger_conf import logger
 
 
 class Redis(BaseCache):
-    _client: aioredis.Redis | None = None
+    _client: Optional[aioredis.Redis] = None
+    _ssh_tunnel: Optional[SSHTunnelManager] = None
 
     def __init__(
         self,
@@ -24,30 +27,86 @@ class Redis(BaseCache):
         ttl: int | None = 3600,
     ):
         self.ttl = ttl
-        self._client = aioredis.from_url(uri, decode_responses=True)
+        self.original_uri = uri
+        self._initialized = False
+
+        # SSH tunnel configuration
+        self.use_ssh_tunnel = getattr(settings, "use_ssh_tunnel", False)
+
+        # ElastiCache configuration
+        self.redis_host = getattr(settings, "redis_host", None)
+        self.redis_port = getattr(settings, "redis_port", 6379)
+        self.redis_ssl = getattr(
+            settings, "redis_ssl", True
+        )  # ElastiCache requires SSL
+
+        logger.info(f"Redis client created. SSH Tunnel: {self.use_ssh_tunnel}")
+
+    async def _initialize(self):
+        """Initialize Redis client with SSH tunnel if needed (async)"""
+        if self._initialized:
+            return
+
+        if self.use_ssh_tunnel and not self._ssh_tunnel:
+            self._ssh_tunnel = SSHTunnelManager.from_settings(
+                remote_host=self.redis_host,
+                remote_port=self.redis_port,
+            )
+            local_port = await self._ssh_tunnel.start()
+
+            # Rewrite URI to use tunnel (rediss:// scheme handles SSL automatically)
+            tunneled_uri = rewrite_redis_url(
+                self.original_uri, local_port, use_ssl=self.redis_ssl
+            )
+
+            # Note: Don't pass ssl=True when using rediss:// - it's handled by the URL scheme
+            self._client = aioredis.from_url(
+                tunneled_uri,
+                decode_responses=True,
+            )
+        else:
+            # For non-tunnel: rediss:// handles SSL automatically via URL scheme
+            self._client = aioredis.from_url(
+                self.original_uri,
+                decode_responses=True,
+            )
+
+        self._initialized = True
+        logger.info(f"Redis client initialized. SSH Tunnel: {self.use_ssh_tunnel}")
 
     def get(self) -> aioredis.Redis:
-        """Get the Redis client."""
-        if self._client is None:
-            raise RuntimeError("Redis not initialized")
-
+        """Get the Redis client instance"""
         return self._client
+
+    async def get_client(self) -> aioredis.Redis:
+        """Get Redis client (ensures initialization)"""
+        await self._initialize()
+        return self._client
+
+    async def close(self):
+        """Close Redis connection and SSH tunnel"""
+        if self._client:
+            await self._client.aclose()
+            self._client = None
+            logger.info("Redis client closed")
+
+        if self._ssh_tunnel:
+            await self._ssh_tunnel.stop()
+            self._ssh_tunnel = None
+            logger.info("SSH tunnel for Redis stopped")
+
+        self._initialized = False
 
     async def connect(self):
         """
         Establishes a connection to the Redis server.
         """
+        await self._initialize()
         try:
             await self._client.ping()
             logger.info("Redis: Successfully connected to Redis.")
         except Exception as e:
             raise ConnectionError(f"Failed to connect to Redis: {e}")
-
-    async def close(self):
-        """Close the Redis client."""
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
 
     def _key(self, prefix: str, *parts: str) -> str:
         hashed = [hashlib.md5(p.encode()).hexdigest() for p in parts]
