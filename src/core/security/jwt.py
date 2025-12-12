@@ -18,8 +18,9 @@ class JWTManager:
         self.algorithm = settings.jwt_algorithm
         self.issuer = settings.jwt_issuer
 
+    @classmethod
     def create_access_token(
-        self,
+        cls,
         user_id: str,
         email: str,
         role: UserRole,
@@ -41,17 +42,18 @@ class JWTManager:
             "session_id": session_id,
             "exp": int(expire.timestamp()),
             "iat": int(now.timestamp()),
-            "iss": self.issuer,
+            "iss": cls.issuer,
             "jti": str(uuid.uuid4()),
         }
 
-        return jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
+        return jwt.encode(to_encode, cls.secret_key, algorithm=cls.algorithm)
 
-    def verify_token(self, token: str) -> TokenData | None:
+    @classmethod
+    def verify_token(cls, token: str) -> TokenData | None:
         """Verify and decode a JWT token"""
         try:
             payload = jwt.decode(
-                token, self.secret_key, algorithms=[self.algorithm], issuer=self.issuer
+                token, cls.secret_key, algorithms=[cls.algorithm], issuer=cls.issuer
             )
 
             required_fields = [
@@ -79,7 +81,8 @@ class JWTManager:
         except Exception:
             return None
 
-    def get_token_expiry(self, token: str) -> datetime | None:
+    @classmethod
+    def get_token_expiry(cls, token: str) -> datetime | None:
         """Get the expiry time of a token without full validation"""
         try:
             payload = jwt.decode(

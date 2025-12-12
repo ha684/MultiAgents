@@ -114,7 +114,10 @@ async def admin_user(db_session: AsyncSession) -> User:
 def test_user_token(test_user: User) -> str:
     """Generate JWT token for test user."""
     return JWTManager.create_access_token(
-        user_id=str(test_user.id), email=test_user.email, role=test_user.role.value
+        user_id=str(test_user.id),
+        email=test_user.email,
+        role=test_user.role.value,
+        session_id="1234567890",
     )
 
 
@@ -122,7 +125,10 @@ def test_user_token(test_user: User) -> str:
 def admin_user_token(admin_user: User) -> str:
     """Generate JWT token for admin user."""
     return JWTManager.create_access_token(
-        user_id=str(admin_user.id), email=admin_user.email, role=admin_user.role.value
+        user_id=str(admin_user.id),
+        email=admin_user.email,
+        role=admin_user.role.value,
+        session_id="1234567890",
     )
 
 

@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # Vector storage (Qdrant) configuration
     vector_storage_url: str = "localhost:6333"
+    vector_storage_api_key: str = ""
     vector_collection_name: str = "kms_vector_store"
 
     # Neo4j configuration

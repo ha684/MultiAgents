@@ -71,6 +71,9 @@ jobs:
       - name: Sync dependencies from lock file
         run: make sync-dev
 
+      - name: Set up environment variables
+        run: cp config.env.ci .env
+
       - name: Set up test database
         env:
           PGPASSWORD: postgres
@@ -95,14 +98,6 @@ jobs:
         run: make format
 
       - name: Run unit tests
-        env:
-          TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test_kms_db
-          ENVIRONMENT: test
-          JWT_SECRET_KEY: test_secret_key_for_ci
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
-          QDRANT_HOST: localhost
-          QDRANT_PORT: 6333
         run: |
           uv run pytest tests/unit_test/ \
             -v \
@@ -114,14 +109,6 @@ jobs:
             --tb=short
 
       - name: Run integration tests
-        env:
-          TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test_kms_db
-          ENVIRONMENT: test
-          JWT_SECRET_KEY: test_secret_key_for_ci
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
-          QDRANT_HOST: localhost
-          QDRANT_PORT: 6333
         run: |
           uv run pytest tests/integration_test/ \
             -v \
@@ -133,14 +120,6 @@ jobs:
             --tb=short
 
       - name: Run E2E tests
-        env:
-          TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/test_kms_db
-          ENVIRONMENT: test
-          JWT_SECRET_KEY: test_secret_key_for_ci
-          REDIS_HOST: localhost
-          REDIS_PORT: 6379
-          QDRANT_HOST: localhost
-          QDRANT_PORT: 6333
         run: |
           uv run pytest tests/e2e/ \
             -v \

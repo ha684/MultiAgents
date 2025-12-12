@@ -29,6 +29,7 @@ class VectorStorage:
 
         client = AsyncQdrantClient(
             url=settings.vector_storage_url,
+            api_key=settings.vector_storage_api_key,
         )
 
         self.storage = CustomQdrantVectorStore(

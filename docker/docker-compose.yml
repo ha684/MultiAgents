@@ -34,16 +34,16 @@ services:
         timeout: 5s
         retries: 5
 
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: qdrant
-    ports:
-      - "${QDRANT_HTTP_PORT:-6333}:6333"
-      - "${QDRANT_GRPC_PORT:-6334}:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
-    environment:
-      - QDRANT_ALLOW_RECOVERY_MODE=true
+  # qdrant:
+  #   image: qdrant/qdrant:latest
+  #   container_name: qdrant
+  #   ports:
+  #     - "${QDRANT_HTTP_PORT:-6333}:6333"
+  #     - "${QDRANT_GRPC_PORT:-6334}:6334"
+  #   volumes:
+  #     - qdrant_data:/qdrant/storage
+  #   environment:
+  #     - QDRANT_ALLOW_RECOVERY_MODE=true
 
   minio:
     image: minio/minio:latest
@@ -91,8 +91,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      qdrant:
-        condition: service_started
+      # qdrant:
+      #   condition: service_started
       minio:
         condition: service_healthy
       minio-init:
@@ -102,7 +102,8 @@ services:
     environment:
       - REDIS_URI=redis://:${REDIS_AUTH:-myredissecret}@redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://kms_user:kms_password@postgres:5432/kms_db
-      - VECTOR_STORAGE_URL=http://qdrant:6333
+      - VECTOR_STORAGE_URL=${VECTOR_STORAGE_URL}
+      - VECTOR_STORAGE_API_KEY=${VECTOR_STORAGE_API_KEY}
       - VECTOR_COLLECTION_NAME=${VECTOR_COLLECTION_NAME}
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY}
@@ -127,39 +128,39 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
     command: python -m src.worker
 
-  prometheus:
-    image: prom/prometheus:v2.47.1
-    container_name: prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ../etc/prometheus.yml:/etc/prometheus/prometheus.yml
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
+  # prometheus:
+  #   image: prom/prometheus:v2.47.1
+  #   container_name: prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ../etc/prometheus.yml:/etc/prometheus/prometheus.yml
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
 
-  jaeger:
-    image: jaegertracing/all-in-one:1.50
-    container_name: jaeger
-    ports:
-      - "16686:16686"
-      - "4317:4317"
-      - "4318:4318"
-    environment:
-      - COLLECTOR_OTLP_ENABLED=true
+  # jaeger:
+  #   image: jaegertracing/all-in-one:1.50
+  #   container_name: jaeger
+  #   ports:
+  #     - "16686:16686"
+  #     - "4317:4317"
+  #     - "4318:4318"
+  #   environment:
+  #     - COLLECTOR_OTLP_ENABLED=true
 
-  grafana:
-    image: grafana/grafana-oss:10.1.5
-    container_name: grafana
-    ports:
-      - "3001:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - prometheus
-      - jaeger
+  # grafana:
+  #   image: grafana/grafana-oss:10.1.5
+  #   container_name: grafana
+  #   ports:
+  #     - "3001:3000"
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #   depends_on:
+  #     - prometheus
+  #     - jaeger
 
   # clickhouse:
   #   image: docker.io/clickhouse/clickhouse-server
