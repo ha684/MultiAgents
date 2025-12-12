@@ -1,6 +1,7 @@
 # src/core/config/settings.py
 import os
 from datetime import timedelta
+from typing import Optional
 
 from pydantic import ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,11 +17,28 @@ class Settings(BaseSettings):
     minio_bucket: str
     minio_secure: bool = True
 
-    # Redis configuration
-    redis_uri: str
-
     # Database configuration
     database_url: str
+    # SSH Tunnel settings (for RDS connection)
+    use_ssh_tunnel: bool = False
+    ssh_host: Optional[str] = None  # EC2 Public IP: e.g., 54.253.146.63
+    ssh_port: int = 22
+    ssh_username: str = "ubuntu"
+    ssh_pkey_path: Optional[str] = None  # Path to phanha.pem
+
+    # RDS settings (actual database host)
+    rds_host: Optional[str] = None  # e.g., database-1.xxx.rds.amazonaws.com
+    rds_port: int = 5432
+
+    # Redis/ElastiCache settings
+    redis_url: Optional[str] = None
+    redis_host: Optional[str] = (
+        None  # e.g., master.phanha-redis.xxx.cache.amazonaws.com
+    )
+    redis_port: int = 6379
+    redis_ssl: bool = (
+        True  # ElastiCache requires SSL when "Encryption in transit" is enabled
+    )
 
     # Vector storage (Qdrant) configuration
     vector_storage_url: str = "localhost:6333"
