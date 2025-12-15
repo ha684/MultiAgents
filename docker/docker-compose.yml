@@ -34,6 +34,96 @@ services:
         timeout: 5s
         retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD:-guest}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: kafka
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+      - "${KAFKA_CONTROLLER_PORT:-9093}:9093"
+    environment:
+      # KRaft mode configuration
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      # Log retention (24 hours)
+      KAFKA_LOG_RETENTION_HOURS: ${KAFKA_RETENTION_HOURS:-24}
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 300000
+      # Performance tuning
+      KAFKA_NUM_PARTITIONS: ${KAFKA_PARTITIONS:-6}
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Cluster ID
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  kafka-init:
+    image: apache/kafka:3.7.0
+    container_name: kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: |
+      "
+      echo 'Waiting for Kafka to be ready...'
+      sleep 5
+      
+      # Create LLM responses topic
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 \
+        --create --if-not-exists \
+        --topic llm.responses \
+        --partitions ${KAFKA_PARTITIONS:-6} \
+        --replication-factor 1 \
+        --config retention.ms=${KAFKA_RETENTION_MS:-86400000}
+      
+      echo 'Kafka topics created successfully'
+      /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
+      "
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "${KAFKA_UI_PORT:-8090}:8080"
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
   # qdrant:
   #   image: qdrant/qdrant:latest
   #   container_name: qdrant
@@ -91,8 +181,12 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      # qdrant:
-      #   condition: service_started
+      rabbitmq:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
       minio:
         condition: service_healthy
       minio-init:
@@ -124,9 +218,70 @@ services:
       - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS}
       - NTQAI_MODEL=${NTQAI_MODEL}
       - TEMPERATURE=${TEMPERATURE}
+      # RabbitMQ for Celery
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+      # Kafka for streaming
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_LLM_RESPONSES=llm.responses
+      - KAFKA_SECURITY_PROTOCOL=PLAINTEXT
+      # vLLM config
+      - VLLM_BASE_URL=${VLLM_BASE_URL:-}
+      - VLLM_API_KEY=${VLLM_API_KEY:-}
+      - VLLM_MODEL=${VLLM_MODEL:-}
       - PYTHONPATH=/app
       - PYTHONDONTWRITEBYTECODE=1
     command: python -m src.worker
+
+  streaming-worker:
+    image: hapt
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    volumes:
+      - ../:/app:cached
+    environment:
+      - REDIS_URI=redis://:${REDIS_AUTH:-myredissecret}@redis:6379/0
+      - DATABASE_URL=postgresql+asyncpg://kms_user:kms_password@postgres:5432/kms_db
+      - VECTOR_STORAGE_URL=${VECTOR_STORAGE_URL}
+      - VECTOR_STORAGE_API_KEY=${VECTOR_STORAGE_API_KEY}
+      - VECTOR_COLLECTION_NAME=${VECTOR_COLLECTION_NAME}
+      - RERANK_URL=${RERANK_URL}
+      - RERANK_API_KEY=${RERANK_API_KEY}
+      - TEXT_EMBEDDING_URL=${TEXT_EMBEDDING_URL}
+      - TEXT_EMBEDDING_API_KEY=${TEXT_EMBEDDING_API_KEY}
+      - TEXT_EMBEDDING_MODEL=${TEXT_EMBEDDING_MODEL}
+      - NTQAI_BASE_URL=${NTQAI_BASE_URL}
+      - NTQAI_API_KEY=${NTQAI_API_KEY}
+      - EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS}
+      - NTQAI_MODEL=${NTQAI_MODEL}
+      # RabbitMQ for Celery
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_PORT=5672
+      - RABBITMQ_USER=${RABBITMQ_USER:-guest}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD:-guest}
+      # Kafka for streaming
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092
+      - KAFKA_TOPIC_LLM_RESPONSES=llm.responses
+      - KAFKA_SECURITY_PROTOCOL=PLAINTEXT
+      # vLLM config
+      - VLLM_BASE_URL=${VLLM_BASE_URL:-}
+      - VLLM_API_KEY=${VLLM_API_KEY:-}
+      - VLLM_MODEL=${VLLM_MODEL:-}
+      - PYTHONPATH=/app
+      - PYTHONDONTWRITEBYTECODE=1
+    command: python -m src.streaming_worker
 
   # prometheus:
   #   image: prom/prometheus:v2.47.1
@@ -311,3 +466,5 @@ volumes:
   grafana_data:
   clickhouse_data:
   clickhouse_logs:
+  rabbitmq_data:
+  kafka_data:
