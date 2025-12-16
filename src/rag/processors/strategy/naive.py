@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-from langchain.text_splitter import MarkdownTextSplitter
 from langchain_community.document_loaders import (
     DirectoryLoader,
     UnstructuredFileLoader,
@@ -17,6 +16,7 @@ from langchain_community.document_loaders.base import BaseLoader
 from langchain_community.document_loaders.csv_loader import CSVLoader
 from langchain_core.documents import Document as LangchainDocument
 from langchain_pymupdf4llm import PyMuPDF4LLMLoader
+from langchain_text_splitters import MarkdownTextSplitter
 
 from src.database.models.document import Document as DBDocument
 from src.rag.processors.strategy.base import BaseStrategy
