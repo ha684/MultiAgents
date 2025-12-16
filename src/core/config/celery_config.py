@@ -2,8 +2,8 @@
 from src.core.config.settings import settings
 
 # Redis connection settings
-broker_url = settings.redis_uri
-result_backend = settings.redis_uri
+broker_url = settings.redis_url
+result_backend = settings.redis_url
 
 broker_transport_options = {"master_name": "mymaster", "visibility_timeout": 3300}
 
@@ -40,6 +40,8 @@ worker_max_memory_per_child = 200000  # 200MB per child (adjust based on file si
 # Task routing with priority queues
 task_routes = {
     "tasks.process_document": {"queue": "document_processing"},
+    "tasks.chat_inference": {"queue": "chat_inference"},
+    "tasks.generate_qa_pairs": {"queue": "qa_generation"},
 }
 
 # Queue configuration with different priorities
@@ -48,6 +50,13 @@ task_default_queue = "document_processing"
 task_default_exchange = "tasks"
 task_default_exchange_type = "direct"
 task_default_routing_key = "task"
+
+# Define all queues
+task_queues = {
+    "document_processing": {"exchange": "tasks", "routing_key": "document"},
+    "chat_inference": {"exchange": "tasks", "routing_key": "chat"},
+    "qa_generation": {"exchange": "tasks", "routing_key": "qa"},
+}
 
 # Result handling
 task_ignore_result = False
@@ -67,6 +76,11 @@ task_annotations = {
         "time_limit": 1800,  # 30 minutes timeout
         "soft_time_limit": 1500,  # 25 minutes soft timeout
     },
+    "tasks.chat_inference": {
+        "rate_limit": "200/m",  # 200 tasks per minute
+        "time_limit": 720,  # 12 minutes timeout
+        "soft_time_limit": 600,  # 10 minutes soft timeout
+    },
 }
 
 worker_send_task_events = True
@@ -75,7 +89,7 @@ worker_log_format = "[%(asctime)s: %(levelname)s/%(processName)s] %(message)s"
 worker_task_log_format = "[%(asctime)s: %(levelname)s/%(processName)s][%(task_name)s(%(task_id)s)] %(message)s"
 
 # Imports
-imports = ["src.tasks.file"]
+imports = ["src.tasks.file", "src.tasks.chat"]
 
 # Beat schedule for cleanup tasks (if using celery beat)
 beat_schedule = {

@@ -2,9 +2,9 @@
 from collections.abc import Callable, Iterable
 from typing import Any
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders.base import BaseLoader
 from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from src.database.models.document import Document as DBDocument
 from src.rag.processors.loader.excel_loader import ExcelLoader

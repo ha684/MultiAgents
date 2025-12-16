@@ -34,16 +34,16 @@ services:
         timeout: 5s
         retries: 5
 
-  # qdrant:
-  #   image: qdrant/qdrant:latest
-  #   container_name: qdrant
-  #   ports:
-  #     - "${QDRANT_HTTP_PORT:-6333}:6333"
-  #     - "${QDRANT_GRPC_PORT:-6334}:6334"
-  #   volumes:
-  #     - qdrant_data:/qdrant/storage
-  #   environment:
-  #     - QDRANT_ALLOW_RECOVERY_MODE=true
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT_ALLOW_RECOVERY_MODE=true
 
   minio:
     image: minio/minio:latest
@@ -100,9 +100,9 @@ services:
     volumes:
       - ../:/app:cached
     environment:
-      - REDIS_URI=redis://:${REDIS_AUTH:-myredissecret}@redis:6379/0
+      - REDIS_URL=redis://:${REDIS_AUTH}@redis:6379/0
       - DATABASE_URL=postgresql+asyncpg://kms_user:kms_password@postgres:5432/kms_db
-      - VECTOR_STORAGE_URL=${VECTOR_STORAGE_URL}
+      - VECTOR_STORAGE_URL=http://qdrant:6333
       - VECTOR_STORAGE_API_KEY=${VECTOR_STORAGE_API_KEY}
       - VECTOR_COLLECTION_NAME=${VECTOR_COLLECTION_NAME}
       - MINIO_ENDPOINT=minio:9000

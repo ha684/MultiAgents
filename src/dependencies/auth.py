@@ -4,8 +4,10 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from dotenv import load_dotenv
-from fastapi import Depends, Request
+from fastapi import Depends, Request, WebSocket
+from fastapi.exceptions import WebSocketException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from starlette import status
 
 from src.core.config.settings import ROLE_PERMISSIONS
 from src.core.exceptions.auth_exceptions import (
@@ -20,6 +22,7 @@ from src.core.security import AccessControlManager, JWTManager
 from src.database.models.user import User, UserStatus
 from src.database.repositories.user_repository import UserRepository
 from src.domain.schemas.auth import AccessControlContext, TokenData, UserRole
+from src.utils.logger_conf import logger
 
 load_dotenv()
 
@@ -31,6 +34,84 @@ security = HTTPBearer(
 user_repo = UserRepository()
 APP_ENV = os.getenv("APP_ENV", "production")
 API_KEY = os.getenv("API_KEY", "1234567890")
+
+
+async def get_websocket_user(websocket: WebSocket) -> User:
+    """
+    WebSocket authentication - reuses existing auth logic
+    Extract token from WebSocket headers and validate using existing functions
+    """
+    try:
+        # Extract Authorization header
+        auth_header = websocket.headers.get("authorization") or websocket.headers.get(
+            "Authorization"
+        )
+
+        if not auth_header:
+            # Check for dev mode bypass
+            if APP_ENV == "development":
+                print("--- ⚠️ DEV MODE: WebSocket auth bypassed ---")
+                return User(
+                    id="hafizh",
+                    email="hafizh@gmail.com",
+                    role=UserRole.ADMIN,
+                    status=UserStatus.ACTIVE,
+                )
+            raise WebSocketException(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="Missing Authorization header",
+            )
+
+        # Parse Bearer token
+        parts = auth_header.split()
+        if len(parts) != 2 or parts[0].lower() != "bearer":
+            raise WebSocketException(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="Invalid Authorization header format. Use: Bearer <token>",
+            )
+
+        token = parts[1]
+
+        # Dev mode or API key bypass
+        if APP_ENV == "development" or token == API_KEY:
+            print("--- ⚠️ DEV MODE: WebSocket token auth bypassed ---")
+            return User(
+                id="hafizh",
+                email="hafizh@gmail.com",
+                role=UserRole.ADMIN,
+                status=UserStatus.ACTIVE,
+            )
+
+        # Validate token using existing JWT logic
+        token_data = JWTManager.verify_token(token)
+        if not token_data:
+            raise WebSocketException(
+                code=status.WS_1008_POLICY_VIOLATION, reason="Invalid or expired token"
+            )
+
+        # Get user from database using existing logic
+        user = await user_repo.get_user_by_id(token_data.user_id)
+
+        if not user:
+            raise WebSocketException(
+                code=status.WS_1008_POLICY_VIOLATION, reason="User not found"
+            )
+
+        if user.status != UserStatus.ACTIVE:
+            raise WebSocketException(
+                code=status.WS_1008_POLICY_VIOLATION,
+                reason="User account is not active",
+            )
+
+        return user
+
+    except WebSocketException:
+        raise
+    except Exception as e:
+        logger.error(f"WebSocket auth error: {e}")
+        raise WebSocketException(
+            code=status.WS_1011_INTERNAL_ERROR, reason="Authentication failed"
+        )
 
 
 async def get_current_user_token(

@@ -3,16 +3,17 @@ import asyncio
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 
-from src.dependencies.auth import get_current_user
+from src.dependencies.auth import get_websocket_user
 from src.infrastructure.events import get_event_publisher
+from src.services.chat_stream_service import chat_stream_service
 from src.services.document_service import DocumentService
 from src.utils.constants import DOCUMENT_STATUS_CHANNEL
 from src.utils.logger_conf import logger
 
 router = APIRouter(
-    prefix="/websocket", tags=["WebSocket"], dependencies=[Depends(get_current_user)]
+    prefix="/websocket", tags=["WebSocket"], dependencies=[Depends(get_websocket_user)]
 )
 
 
@@ -242,3 +243,68 @@ async def document_status_info(document_id: uuid.UUID):
             },
         },
     }
+
+
+@router.websocket("/stream/{task_id}")
+async def chat_stream_websocket(
+    websocket: WebSocket,
+    task_id: str,
+    last_event_id: str | None = Query(None, description="Resume from this event ID"),
+):
+    """
+    WebSocket endpoint for streaming chat responses.
+
+    ## Connection:
+    ```
+    ws://host/chat/stream/{task_id}?last_event_id=xxx
+    ```
+
+    ## Query Parameters:
+    - `last_event_id`: Optional. If provided, will resume streaming from after this event.
+                       If not provided, streams from the beginning.
+
+    ## Server Events:
+    ```json
+    // Connected
+    {"type": "connected", "data": {"task_id": "...", "status": "streaming"}}
+
+    // Content delta (new token)
+    {"type": "content_block_delta", "event_id": "...", "data": {"delta": {"type": "text_delta", "text": "Hello"}}}
+
+    // Thinking delta (agent mode)
+    {"type": "content_block_delta", "event_id": "...", "data": {"delta": {"type": "thinking_delta", "text": "Let me think..."}}}
+
+    // Status update
+    {"type": "status", "event_id": "...", "data": {"phase": "retrieval", "message": "Searching..."}}
+
+    // Stream complete
+    {"type": "message_stop", "event_id": "...", "data": {"references": [...], "metadata": {...}}}
+
+    // Error
+    {"type": "error", "data": {"type": "inference_error", "message": "..."}}
+    ```
+
+    ## Client Commands:
+    ```json
+    // Stop generation
+    {"action": "stop"}
+
+    // Ping (keep-alive)
+    {"action": "ping"}
+
+    // Resume from event
+    {"action": "resume", "last_event_id": "..."}
+    ```
+
+    ## Reconnection:
+    If connection is lost, reconnect with the last received `event_id`:
+    ```
+    ws://host/chat/stream/{task_id}?last_event_id=1702891234567-0
+    ```
+    This will replay all events after that ID.
+    """
+    await chat_stream_service.handle_websocket(
+        websocket=websocket,
+        task_id=task_id,
+        last_event_id=last_event_id,
+    )
