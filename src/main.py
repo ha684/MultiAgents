@@ -32,27 +32,12 @@ from src.utils.logger_conf import logger
 async def lifespan(app: FastAPI):
     """Lifespan event handler for FastAPI application"""
     logger.info("Starting up application...")
-    kafka_consumer = None
-
     try:
         await redis_client.connect()
         setup_tracing(app)
         await database_connector.initialize()
         await vector_storage_migration.run_migrations()
         set_llm_cache(redis_client)
-
-        # Start Kafka consumer for LLM streaming
-        try:
-            from src.infrastructure.kafka.consumer import get_kafka_consumer
-
-            kafka_consumer = await get_kafka_consumer()
-            await kafka_consumer.start_background_consumer()
-            logger.info("Kafka consumer started for LLM streaming")
-        except Exception as e:
-            logger.warning(
-                f"Failed to start Kafka consumer (streaming will not work): {e}"
-            )
-
     except Exception as e:
         raise ConnectionError(f"Failed to initialize: {e}")
 
@@ -61,11 +46,6 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down application...")
 
     try:
-        # Stop Kafka consumer
-        if kafka_consumer:
-            await kafka_consumer.stop_background_consumer()
-            logger.info("Kafka consumer stopped")
-
         await database_connector.close()
         await redis_client.clear("llm_cache")
         await redis_client.clear("rate_limit")

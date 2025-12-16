@@ -39,36 +39,6 @@ class Settings(BaseSettings):
     redis_ssl: bool = (
         True  # ElastiCache requires SSL when "Encryption in transit" is enabled
     )
-    redis_uri: Optional[str] = None  # Full Redis URI for Celery and cache
-
-    # RabbitMQ configuration (for Celery broker)
-    rabbitmq_host: str = "localhost"
-    rabbitmq_port: int = 5672
-    rabbitmq_user: str = "guest"
-    rabbitmq_password: str = "guest"
-    rabbitmq_vhost: str = "/"
-
-    # Kafka configuration (for LLM streaming)
-    kafka_bootstrap_servers: str = "localhost:9092"
-    kafka_topic_llm_responses: str = "llm.responses"
-    kafka_topic_partitions: int = 6
-    kafka_security_protocol: str = "PLAINTEXT"
-    kafka_retention_hours: int = 24
-
-    # vLLM configuration
-    vllm_base_url: str = ""
-    vllm_api_key: str = ""
-    vllm_model: str = ""
-
-    @property
-    def celery_broker_url(self) -> str:
-        """Get Celery broker URL (RabbitMQ)"""
-        return f"amqp://{self.rabbitmq_user}:{self.rabbitmq_password}@{self.rabbitmq_host}:{self.rabbitmq_port}/{self.rabbitmq_vhost}"
-
-    @property
-    def celery_result_backend(self) -> str:
-        """Get Celery result backend (Redis)"""
-        return self.redis_uri or self.redis_url or "redis://localhost:6379/0"
 
     # Vector storage (Qdrant) configuration
     vector_storage_url: str = "localhost:6333"
