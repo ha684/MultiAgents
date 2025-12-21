@@ -108,9 +108,11 @@ async def main():
     """Test orchestrator with streaming"""
 
     context_metadata = {
-        "kb_id": "06926eb4-af94-7355-8000-765cda3cfeec",
-        "db_url": settings.database_url,
-        "allow_tables": ["conversations", "documents", "knowledge_bases", "users"],
+        "message_metadata": {
+            "kb_id": "06926eb4-af94-7355-8000-765cda3cfeec",
+            "db_url": settings.database_url,
+            "allow_tables": ["conversations", "documents", "knowledge_bases", "users"],
+        }
     }
     logger.info("Initializing OrchestratorGraph...")
     orchestrator = MainGraph()

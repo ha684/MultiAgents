@@ -307,70 +307,115 @@ def create_journey_subgraph(
 
 RAG_SEARCH_PROFILE = SubgraphProfile(
     name="rag_search",
-    display_name="Vector Database Search (Internal Knowledge)",
+    display_name="Internal Knowledge Base Search",
     primary_behavior=SubgraphBehavior(
         condition=RoutingCondition(
             trigger=(
-                "User asks questions about INTERNAL knowledge, documents, or content "
-                "that has been previously ingested and stored in the vector database"
+                "User asks for information, documents, reports, or data that could be "
+                "in internal systems. This is the DEFAULT for information retrieval "
+                "unless there are clear signals for external search."
             ),
             signals=[
-                "internal docs",
-                "our documentation",
-                "company policy",
-                "our guide",
-                "stored knowledge",
-                "knowledge base",
-                "indexed documents",
-                "uploaded files",
-                "ingested content",
-                "our articles",
-                "reference material",
+                # Document/Report references
+                "báo cáo",
+                "report",
+                "tài liệu",
+                "document",
+                "biểu đồ",
+                "chart",
+                "phân tích",
+                "analysis",
+                # Internal entities (people, projects, internal terms)
+                "của [person name]",
+                "về [internal term/project]",
+                "sự cố",
+                "incident",
+                "dự án",
+                "project",
+                # Work/business related
+                "tiến độ",
+                "progress",
+                "công việc",
+                "work",
+                "meeting",
+                "họp",
+                "presentation",
+                # Quality/testing (likely internal)
+                "test",
+                "chất lượng",
+                "quality",
+                "đánh giá",
+                "evaluation",
+                # Generic search (default to internal first)
+                "tìm",
+                "search",
+                "thông tin",
+                "information",
+                "cho tôi",
+                "give me",
+                "show me",
+                # File/content references
+                "file",
+                "slide",
+                "pdf",
+                "doc",
             ],
             exclude_when=[
-                "User explicitly asks to search the internet/web",
-                "User asks for live/real-time data from external sources",
-                "User asks for numeric data, counts, or statistics from database tables",
-                "User wants to query structured records (users, orders, transactions)",
+                # ONLY exclude if explicitly asking for external/web
+                "User explicitly mentions searching internet/web/google",
+                "User asks for breaking news or current events",
+                "User asks for real-time data (weather, stock prices, live scores)",
+                "User asks about external companies/products not related to organization",
+                "User asks for public figures, celebrities, or general world knowledge",
             ],
         ),
         action=RoutingAction(
             capability=(
-                "Performs semantic search in VECTOR DATABASE to find relevant documents "
-                "and content that has been previously ingested. Returns matching text chunks "
-                "with similarity scores from embedded documents."
+                "Searches INTERNAL knowledge base (vector database) for documents, "
+                "reports, presentations, policies, and any previously stored content. "
+                "This is the DEFAULT search tool for information retrieval."
             ),
             router_instruction=(
-                "Use this tool when:\n"
-                "• User needs information from INTERNAL documents stored in vector DB\n"
-                "• Looking for semantic matches in ingested content (PDFs, articles, guides)\n"
-                "• Searching through previously uploaded/indexed knowledge\n"
-                "• Needs to find relevant passages from document corpus\n"
+                "Use this tool as DEFAULT when:\n"
+                "• User asks for information without specifying source (assume internal first)\n"
+                "• Query mentions internal entities (people names, internal projects, specific IDs)\n"
+                "• Looking for reports, documents, analyses, or work-related content\n"
+                "• Query contains domain-specific terms or internal jargon\n"
+                "• Searching for past communications, presentations, or files\n"
+                "\n"
+                "DO NOT use if:\n"
+                "• User explicitly says 'search web', 'google', 'internet', 'online'\n"
+                "• User asks for breaking news, weather, stock prices, or real-time data\n"
+                "• User asks about public figures or general world knowledge clearly outside your org\n"
             ),
-            expected_outcome="Semantically relevant document chunks from vector database with sources",
+            expected_outcome="Relevant internal documents and passages from knowledge base",
         ),
     ),
     canonical_examples=[
         {
+            "query": "tìm cho tôi thông tin về test chất lượng chatbot của nxkms",
+            "rationale": "Internal quality testing info - default to RAG",
+        },
+        {
+            "query": "báo cáo tiến độ công việc tuần trước của vân",
+            "rationale": "Internal work report for specific person",
+        },
+        {
+            "query": "Biểu đồ phân tích nguyên nhân sự cố（003） nói về sự cố gì",
+            "rationale": "Internal incident analysis with specific ID",
+        },
+        {
             "query": "What does our company policy say about remote work?",
-            "rationale": "Internal policy document stored in vector DB",
+            "rationale": "Explicit internal policy reference",
         },
         {
-            "query": "Find information about API authentication in our docs",
-            "rationale": "Internal documentation search",
-        },
-        {
-            "query": "Search for onboarding procedures",
-            "rationale": "Internal process documents",
-        },
-        {
-            "query": "What did the uploaded research paper say about X?",
-            "rationale": "Searching ingested document content",
+            "query": "tìm thông tin về dự án X",
+            "rationale": "Internal project search - default to RAG",
         },
     ],
     executor="rag_search",
     entry_state_type=SimpleSearchState,
-    tags=["vector", "semantic", "documents", "internal"],
+    tags=["vector", "semantic", "documents", "internal", "default"],
 )
 
 RAG_SEARCH_PROFILE.secondary_behaviors.append(
@@ -393,27 +438,31 @@ WEB_SEARCH_PROFILE = SubgraphProfile(
     primary_behavior=SubgraphBehavior(
         condition=RoutingCondition(
             trigger=(
-                "User wants to search the INTERNET for external information, "
-                "public knowledge, news, or anything available on the world wide web"
+                "User EXPLICITLY asks to search the INTERNET, or asks about "
+                "General World Knowledge, Public Companies (Google, Microsoft), "
+                "Real-time events (News, Weather), or Programming Syntax."
             ),
             signals=[
-                "search online",
                 "google",
-                "look up online",
-                "find on the web",
-                "internet search",
-                "search the web",
-                "latest news",
-                "current events",
-                "what's happening",
-                "recent updates",
-                "public information",
-                "external sources",
+                "internet",
+                "online",
+                "web",
+                "news",
+                "thời sự",
+                "tin tức",
+                "weather",
+                "thời tiết",
+                "competitor",
+                "đối thủ",
+                "public info",
+                "syntax",
+                "how to use library",
             ],
             exclude_when=[
-                "User explicitly asks to search internal documents or knowledge base",
-                "User asks for data from database tables (counts, records, statistics)",
-                "User wants to query structured data (users, orders, products)",
+                "Query contains specific internal acronyms (e.g., 'nxkms', 'cms', 'erp')",
+                "Query mentions specific people names without famous context",
+                "Query asks for specific reports, logs, or internal tickets",
+                "HISTORY INDICATOR: If 'web_search' was just used and failed/returned nothing.",
             ],
         ),
         action=RoutingAction(
@@ -630,7 +679,7 @@ def seed_base_subgraphs():
     Populate registry with all base subgraph profiles.
     Call this on application startup.
     """
-    # SubgraphRegistry.register(RAG_SEARCH_PROFILE)
+    SubgraphRegistry.register(RAG_SEARCH_PROFILE)
     SubgraphRegistry.register(WEB_SEARCH_PROFILE)
 
 

@@ -380,7 +380,7 @@ class PromptTemplates:
 
         <task>
         Return JSON with two fields:
-        1. **phase_title**: What you'll do (4-8 words)
+        1. **phase_title**: What you'll do (4-10 words, preserving key entities/terms)
         2. **next_action**: "reason_only" or "use_tool"
         </task>
 
@@ -409,6 +409,7 @@ class PromptTemplates:
         - Data queries: "How many users?", "List all products", "Revenue last quarter"
         - Unfamiliar topics: "What is [obscure technical term]?" (if you truly don't know)
         - Verification needed: Claims requiring authoritative sources
+        - Company/product-specific info: Anything about specific organizations, products, internal data
         
         **Key test**: Do I need to fetch external information to answer accurately?
         → YES = use_tool
@@ -430,11 +431,14 @@ class PromptTemplates:
         - "How many" or "List all" → Need to query
         - "Show me [code/document]" → Need to retrieve
         - "What does [specific report] say?" → Need to fetch
+        - Questions about specific organizations/entities → Need to search
         - Don't confidently know the answer → Need to search
         </decision_heuristics>
 
         <phase_title_guidelines>
-        Match title to action:
+        **CRITICAL: Preserve important keywords from the query**
+        
+        Match title to action AND keep key entities:
         
         **reason_only titles**: Use thinking/analysis verbs
         - "Explaining [concept]"
@@ -443,17 +447,48 @@ class PromptTemplates:
         - "Outlining [approach]"
         - "Discussing [issue]"
         
-        **use_tool titles**: Use data/retrieval verbs
-        - "Searching [information]"
-        - "Retrieving [data]"
-        - "Looking up [details]"
-        - "Querying [database/system]"
-        - "Finding [content]"
+        **use_tool titles**: Use data/retrieval verbs + PRESERVE KEY TERMS
+        - "Searching [specific topic with entities]"
+        - "Retrieving [specific data with context]"
+        - "Looking up [entity + what about it]"
+        - "Querying [system/database + specific info]"
+        - "Finding [entity + specific aspect]"
         
-        Keep titles: concise (4-8 words), specific, action-oriented
+        **KEYWORD PRESERVATION RULES:**
+        1. **Always keep proper nouns**: company names, product names, people names
+        - ✓ "Searching nxkms chatbot quality testing"
+        - ✗ "Searching chatbot quality testing information"
+        
+        2. **Keep technical/domain terms**: specific technologies, methodologies
+        - ✓ "Retrieving AWS Lambda pricing details"
+        - ✗ "Retrieving cloud service information"
+        
+        3. **Keep specific qualifiers**: numbers, dates, versions, models
+        - ✓ "Looking up Q3 2024 revenue report"
+        - ✗ "Looking up revenue report"
+        
+        4. **Remove only generic filler**:
+        - Remove: "information", "data", "details" (when redundant)
+        - Remove: "about", "regarding", "concerning"
+        - Keep: all meaningful nouns and technical terms
+        
+        **Length**: 4-10 words (flexible to preserve important keywords)
+        **Style**: Concise but specific, action-oriented with preserved entities
         </phase_title_guidelines>
 
         <examples>
+        
+        Query: "tìm cho tôi thông tin về test chất lượng chatbot của nxkms"
+        
+        Analysis: Asks about specific company (nxkms) and their chatbot testing. Need to search for this specific info.
+        
+        Decision:
+        {
+            "phase_title": "Searching nxkms chatbot quality testing",
+            "next_action": "use_tool"
+        }
+        
+        ---
         
         Query: "What is the difference between REST and GraphQL?"
         
@@ -465,120 +500,12 @@ class PromptTemplates:
             "next_action": "reason_only"
         }
         
-        ---
-        
-        Query: "What are the latest AI trends in 2024?"
-        
-        Analysis: Asks for "latest" and specific year. Need current information, can't rely on training data.
-        
-        Decision:
-        {
-            "phase_title": "Searching 2024 AI trends",
-            "next_action": "use_tool"
-        }
-        
-        ---
-        
-        Query: "How many users signed up last month?"
-        
-        Analysis: Specific data query about their system. Must query database/logs.
-        
-        Decision:
-        {
-            "phase_title": "Querying user signup data",
-            "next_action": "use_tool"
-        }
-        
-        ---
-        
-        Query: "Explain how machine learning models learn from data"
-        
-        Analysis: Fundamental ML concept. I can explain the learning process clearly from knowledge.
-        
-        Decision:
-        {
-            "phase_title": "Explaining ML learning process",
-            "next_action": "reason_only"
-        }
-        
-        ---
-        
-        Query: "Show me the authentication code in our backend"
-        
-        Analysis: Need to retrieve specific code from their codebase. Requires tool access.
-        
-        Decision:
-        {
-            "phase_title": "Retrieving authentication code",
-            "next_action": "use_tool"
-        }
-        
-        ---
-        
-        Query: "What's a good architecture for microservices?"
-        
-        Analysis: General software architecture question. I know microservices patterns and can provide good guidance.
-        
-        Decision:
-        {
-            "phase_title": "Outlining microservices architecture",
-            "next_action": "reason_only"
-        }
-        
-        ---
-        
-        Query: "What does the Q3 earnings report say about revenue?"
-        
-        Analysis: Asks for specific report content. Need to find and read the earnings report.
-        
-        Decision:
-        {
-            "phase_title": "Looking up Q3 earnings report",
-            "next_action": "use_tool"
-        }
-        
-        ---
-        
-        Query: "Explain the pros and cons of serverless vs containers"
-        
-        Analysis: Architectural comparison of familiar technologies. I understand both paradigms well.
-        
-        Decision:
-        {
-            "phase_title": "Comparing serverless and containers",
-            "next_action": "reason_only"
-        }
-        
-        ---
-        
-        Query: "What is the current Bitcoin price?"
-        
-        Analysis: Real-time data query. Need to fetch current market price.
-        
-        Decision:
-        {
-            "phase_title": "Retrieving current Bitcoin price",
-            "next_action": "use_tool"
-        }
-        
-        ---
-        
-        Query: "How should I structure a React component?"
-        
-        Analysis: Standard React development question. I know React patterns and best practices.
-        
-        Decision:
-        {
-            "phase_title": "Explaining React component structure",
-            "next_action": "reason_only"
-        }
-        
         </examples>
 
         <output_format>
         Return only valid JSON:
         {
-            "phase_title": "Brief action-oriented title",
+            "phase_title": "Action-oriented title with key entities preserved",
             "next_action": "reason_only" | "use_tool"
         }
         </output_format>
@@ -589,6 +516,8 @@ class PromptTemplates:
         - Use use_tool when you need external/current/specific data
         - Be honest: if unsure about knowledge, choose use_tool
         - Phase title should match the action (explain/analyze vs search/retrieve)
+        - **ALWAYS preserve proper nouns, company names, technical terms in phase_title**
+        - Remove only generic filler words, keep all meaningful keywords
         </key_reminders>
         """
     )
@@ -714,12 +643,12 @@ class PromptTemplates:
         
         Step 2: Call 'think' again if needed for refinement
         - Confirm your tool choice is from AVAILABLE SUBGRAPHS
-        - Verify query uses only phase_title words
+        - Verify query captures core concepts
         
         Step 3: Output FINAL JSON (DO NOT call think tool here)
             {
                 "subgraph": "actual_tool_name",  ← MUST be from AVAILABLE SUBGRAPHS
-                "query": "keywords from phase title"
+                "query": "core keywords and concepts"
             }
         
         **WRONG EXAMPLES:**
@@ -732,7 +661,7 @@ class PromptTemplates:
         Based on the current phase and available context, you must determine:
         1. **subgraph**: The exact name of a REAL tool from "AVAILABLE SUBGRAPHS" 
                         (NOT "think", NOT "none", NOT "" - must be an actual tool name)
-        2. **query**: A focused, keyword-rich query for that tool (10-30 words)
+        2. **query**: A focused, keyword-rich query for that tool (5-20 words)
         </task>
 
         <available_tools_reminder>
@@ -744,23 +673,65 @@ class PromptTemplates:
         </available_tools_reminder>
 
         <query_crafting_rules>
-        **TARGET: 10-30 words, keyword-rich, no filler**
+        **CRITICAL: Extract and preserve the MOST IMPORTANT keywords from the phase_title**
         
-        ✓ GOOD (concise + comprehensive):
-        - "renewable energy adoption policy frameworks technology trends market barriers"
-        - "cloud provider comparison pricing scalability security features"
-        - "async programming performance optimization error handling patterns"
+        **QUERY CONSTRUCTION PRINCIPLES:**
         
-        ✗ BAD (too long or vague):
-        - "Evaluate the comprehensive landscape of renewable energy adoption..."
-        - "I need information about company policy"
-        - "Can you search for pricing info?"
+        1. **Identify core entities and concepts**:
+        - Proper nouns (company names, product names, people): ALWAYS keep
+        - Technical terms (chatbot, API, database): ALWAYS keep
+        - Action verbs that define task (test, analyze, compare): keep when essential
+        - Domain-specific terms: ALWAYS keep
         
-        Formula:
-        - Start with core topic
-        - Add key dimensions separated by spaces or colons
-        - Include temporal constraints if relevant ("2024", "recent", "latest")
-        - Remove all filler: "please", "can you", "I need", "evaluate", "assess"
+        2. **Language handling**:
+        - If phase_title is in Vietnamese → translate core keywords to English
+        - If phase_title is in English → keep keywords in English
+        - Preserve technical terms and proper nouns in original form
+        
+        3. **Remove filler words**:
+        - Remove: "tìm cho tôi", "please find", "I need", "can you", "thông tin về"
+        - Remove: "the", "a", "an", "of" (unless part of proper noun)
+        - Remove: generic words like "information", "data" (unless core to intent)
+        
+        4. **Target length: 5-20 words**
+        - Keep it concise but comprehensive
+        - Include all essential keywords
+        - Each word should carry meaning
+        
+        **TRANSFORMATION EXAMPLES:**
+        
+        ✓ Vietnamese → English:
+        - Input: "tìm cho tôi thông tin về test chất lượng chatbot của nxkms"
+        - Core keywords: nxkms (proper noun) + chatbot (tech term) + quality testing (concept)
+        - Output: "nxkms chatbot quality testing"
+        
+        - Input: "phân tích doanh thu quý 3 của công ty vingroup"
+        - Core keywords: vingroup + revenue + Q3 + analysis
+        - Output: "vingroup Q3 revenue analysis"
+        
+        - Input: "so sánh giá cả và tính năng của aws và azure"
+        - Core keywords: aws + azure + pricing + features + comparison
+        - Output: "aws azure pricing features comparison"
+        
+        ✓ English (preserve):
+        - Input: "analyze market trends for renewable energy adoption"
+        - Core keywords: market trends + renewable energy + adoption
+        - Output: "market trends renewable energy adoption"
+        
+        - Input: "retrieve employee handbook benefits section"
+        - Core keywords: employee handbook + benefits section
+        - Output: "employee handbook benefits section"
+        
+        ✗ BAD (too generic or missing key terms):
+        - "chatbot information" ← Missing: nxkms, quality, testing
+        - "company revenue" ← Missing: vingroup, Q3, analysis
+        - "cloud comparison" ← Missing: aws, azure, specific dimensions
+        
+        **FORMULA:**
+    ```
+        Core entities + Technical terms + Key concepts = Effective query
+        (proper nouns) + (domain terms) + (action/dimension)
+    ```
         </query_crafting_rules>
 
         <output_format>
@@ -768,59 +739,78 @@ class PromptTemplates:
         
         {
             "subgraph": "exact_tool_name_from_AVAILABLE_SUBGRAPHS",
-            "query": "focused query 10-30 words"
+            "query": "core keywords 5-20 words"
         }
         
         ⚠️ CRITICAL: subgraph field must be a tool from AVAILABLE SUBGRAPHS
         ⚠️ NEVER: subgraph="think" or subgraph="none"
         ⚠️ MANDATORY: Always select one tool from the list
+        ⚠️ QUERY: Must preserve essential keywords from phase_title
         </output_format>
         
         <examples>
         Example 1:
-        Phase: "Analyzing market trends for renewable technology"
+        Phase: "tìm cho tôi thông tin về test chất lượng chatbot của nxkms"
 
         [You think about]: 
-        - What is the phase asking for? Market analysis
-        - Which tool handles this? Check AVAILABLE SUBGRAPHS
-        - What query captures the phase intent? Use only words from phase
+        - Core entities: nxkms (company name - keep)
+        - Technical terms: chatbot (keep)
+        - Key concepts: quality testing (keep)
+        - Remove filler: "tìm cho tôi", "thông tin về"
+        - Translate to English for search
 
         [You output JSON]:
         {
-            "subgraph": "market_analyzer",
-            "query": "market trends renewable technology"
+            "subgraph": "knowledge_base",
+            "query": "nxkms chatbot quality testing"
         }
 
         ---
 
         Example 2:
-        Phase: "Retrieving employee handbook section on benefits"
+        Phase: "Phân tích xu hướng thị trường năng lượng tái tạo 2024"
 
         [You think about]:
-        - Core need: Retrieve document content
-        - Match with available tools
-        - Craft query from phase words only
+        - Key concepts: market trends, renewable energy, 2024
+        - Action: analysis (optional, can omit)
+        - Translate core terms
 
         [You output JSON]:
         {
-            "subgraph": "knowledge_base",
-            "query": "employee handbook benefits section"
+            "subgraph": "market_analyzer",
+            "query": "renewable energy market trends 2024"
         }
 
         ---
 
         Example 3:
-        Phase: "Checking system health metrics"
+        Phase: "Compare AWS Lambda vs Azure Functions performance and pricing"
 
         [You think about]:
-        - Task type: Monitoring/metrics
-        - Best tool for this
-        - Concise query
+        - Services: AWS Lambda, Azure Functions (keep both)
+        - Dimensions: performance, pricing (keep both)
+        - Action: compare (optional, context is clear)
+
+        [You output JSON]:
+        {
+            "subgraph": "tech_comparison",
+            "query": "aws lambda azure functions performance pricing"
+        }
+
+        ---
+
+        Example 4:
+        Phase: "Kiểm tra metrics hệ thống production server"
+
+        [You think about]:
+        - Core terms: system metrics, production server
+        - Action: check/monitor
+        - Translate
 
         [You output JSON]:
         {
             "subgraph": "metrics_collector",
-            "query": "system health metrics"
+            "query": "production server system metrics"
         }
         </examples>
         """
@@ -1092,263 +1082,6 @@ class PromptTemplates:
 
         </examples>
         """
-    )
-
-    FINAL_SYNTHESIZER_PROMPT = textwrap.dedent(
-        """\
-        Your task is to synthesize the accumulated context into a comprehensive, well-formatted response that directly addresses the user's query.
-
-        ═══════════════════════════════════════════════════════════════════════════
-        📋 LANGUAGE DETECTION
-        ═══════════════════════════════════════════════════════════════════════════
-
-        CRITICAL: Detect the language of the user's message and respond in THAT EXACT LANGUAGE.
-        - Vietnamese query → Vietnamese response
-        - English query → English response  
-        - Chinese query → Chinese response
-        - Apply to ALL content: text, headers, lists, everything
-
-        ═══════════════════════════════════════════════════════════════════════════
-        ✅ MANDATORY FORMATTING REQUIREMENTS
-        ═══════════════════════════════════════════════════════════════════════════
-
-        **YOU MUST USE RICH MARKDOWN FORMATTING - NEVER PLAIN TEXT ONLY**
-
-        **Required elements** (use ALL of these appropriately):
-
-        1. **Headers** - Structure your response with clear sections:
-           - `## Main Section Title` for primary topics
-           - `### Subsection Title` for subtopics
-           - Use descriptive, content-focused titles
-
-        2. **Emphasis** - Highlight important information:
-           - **Bold** for key facts, numbers, conclusions, important terms
-           - *Italic* for emphasis or technical terms (optional)
-           
-        3. **Lists** - Organize information clearly:
-           - Bullet points (`-` or `*`) for unordered items
-           - Numbered lists (`1.`, `2.`, `3.`) for sequential steps or rankings
-           - Nested lists for hierarchical information
-
-        4. **Visual indicators** (use when appropriate):
-           - ✅ Checkmarks for completed items, benefits, or positive points
-           - ❌ X marks for issues, challenges, or negative points
-           - 📊 Chart/data icon for statistics or metrics
-           - 🔍 Magnifying glass for detailed analysis
-           - 💡 Lightbulb for key insights or recommendations
-           - ⚠️ Warning for important caveats or limitations
-           - 🎯 Target for goals or objectives
-           - 📈 Trending up for growth/increases
-           - 📉 Trending down for declines/decreases
-           - 🌍 Globe for global/international aspects
-           - ⚡ Lightning for quick facts or highlights
-           - 🔑 Key for critical factors
-           
-        5. **Tables** - Use for comparative data or structured information:
-           ```
-           | Category | Metric | Value |
-           |----------|--------|-------|
-           | Item 1   | Data   | 100   |
-           ```
-
-        6. **Code blocks** - For technical content, commands, or structured data:
-           - Use `` `inline code` `` for short technical terms
-           - Use triple backticks for code blocks
-
-        7. **Quotes** - For highlighting important statements:
-           - Use `>` for blockquotes when emphasizing key findings
-
-        **Formatting intensity guidelines:**
-        - **Simple questions (1-2 paragraphs)**: Minimum bold for key points + bullet lists
-        - **Medium answers (3-5 paragraphs)**: Headers (##) + bold + lists + 1-2 icons
-        - **Comprehensive reports**: Multiple headers (##, ###) + bold + lists + tables + icons throughout
-
-        ═══════════════════════════════════════════════════════════════════════════
-        📎 CITATION FORMAT
-        ═══════════════════════════════════════════════════════════════════════════
-
-        CITATION RULES:
-        1. **Format**: Use `([source_name][N])` where:
-           - `source_name` is a SHORT identifier (filename, website, doc title)
-           - `N` is the document/source index number
-           - Keep source names under 15 characters
-
-        2. **Examples**:
-           - `([report.pdf][1])`
-           - `([company-site][2])`
-           - `([Q3-analysis][3])`
-           - Alternative simple: `([1])` if source name unclear
-
-        3. **Placement**:
-           - Place immediately after each factual claim
-           - Example: "Revenue grew to **$5.2M** ([financial][1])"
-           - Multiple sources: "Sales increased ([report][1]), ([summary][3])"
-
-        4. **Requirements**:
-           - Every factual claim MUST have citation
-           - Use EXACT numbers from accumulated context
-           - Do NOT modify or skip citation numbers
-           - Do NOT invent citations not in context
-           - Preserve source names when provided in context
-
-        ═══════════════════════════════════════════════════════════════════════════
-        💬 RESPONSE STYLE & PRESENTATION
-        ═══════════════════════════════════════════════════════════════════════════
-
-        RESPOND NATURALLY:
-        - Answer directly as if someone asked you a question
-        - Do NOT use rigid structures like "Introduction", "Body", "Conclusion"
-        - Do NOT announce sections ("First, I will...", "This report will cover...")
-        - Do NOT say "Based on the research..." or meta-commentary
-        - Just start answering naturally and conversationally
-
-        ORGANIZE BY CONTENT:
-        - Let the information guide your structure naturally
-        - **ALWAYS use headers (##, ###)** for any answer longer than 2 paragraphs
-        - Flow logically from one point to another
-        - Think: "How would I explain this clearly to someone?"
-        - Break complex topics into digestible sections
-
-        FOR REPORTS/COMPREHENSIVE ANSWERS:
-        - **MUST use multiple ## headers** to organize major sections
-        - Use ### subsections for deeper organization
-        - Group related information together with clear visual structure
-        - Use icons (📊, 🔍, 💡, etc.) to mark different types of content
-        - Provide context before diving into details
-        - End naturally without forced conclusions
-
-        ═══════════════════════════════════════════════════════════════════════════
-        📚 EVIDENCE GROUNDING
-        ═══════════════════════════════════════════════════════════════════════════
-
-        - Use provided context for references
-        - Every factual claim must have a citation in `([source][N])` format
-        - **Bold important numbers and key facts** along with citations
-        - Present conflicting information objectively with all citations
-
-        HANDLING INCOMPLETE INFORMATION:
-        - **Focus on what you KNOW** - present available information fully
-        - **Minimize meta-commentary** - don't over-emphasize gaps
-        - Only mention missing information if:
-          * User specifically asked about it
-          * It's critical to understanding the answer
-
-        CONFLICTING INFORMATION:
-        - Present all perspectives with their citations
-        - Be objective and neutral
-        - Example: "According to the sales report ([sales][1]), revenue increased **15%**, while the quarterly summary ([summary][3]) reports **12%** growth."
-
-        ═══════════════════════════════════════════════════════════════════════════
-        ✍️ WRITING QUALITY
-        ═══════════════════════════════════════════════════════════════════════════
-
-        BE COMPREHENSIVE:
-        - Provide thorough answers with appropriate depth
-        - Include relevant details, context, and examples (all cited)
-        - Explain technical terms naturally when first mentioned
-        - Be specific with numbers, dates, and facts (always cited and bolded)
-        - For report-style queries, aim for completeness
-
-        BE CLEAR & PRECISE:
-        - Use precise language that reflects the evidence
-        - Maintain consistent terminology throughout
-        - Show relationships and connections between ideas
-        - Use qualifiers appropriately (may, likely, appears to, suggests)
-        - Define acronyms on first use
-
-        BE NATURAL & READABLE:
-        - Write as if explaining to an intelligent colleague
-        - Vary sentence structure and length for readability
-        - Use transitions that flow naturally ("Additionally", "However", "As a result")
-        - Let the information speak through clear explanation
-        - Avoid repetition unless emphasizing key points
-
-        BE VISUALLY ENGAGING:
-        - Use formatting to guide the reader's eye
-        - Break up long paragraphs with lists or headers
-        - Use icons strategically to mark different types of content
-        - Make key information stand out with bold and structure
-
-        STRUCTURE FOR COMPLEX QUERIES:
-        - Start with most important/relevant information
-        - Progress logically through subtopics
-        - **Use ## headers to guide readers through major sections**
-        - **Use icons and formatting to enhance scannability**
-        - Provide synthesis/connections between sections
-        - End on a complete thought (no forced conclusions)
-
-        ═══════════════════════════════════════════════════════════════════════════
-        ⚡ FORMATTING EXAMPLES
-        ═══════════════════════════════════════════════════════════════════════════
-
-        **Example 1: Simple Answer (2-3 paragraphs)**
-        ```
-        The renewable energy market has grown significantly, reaching **$1.5 trillion** globally in 2024 ([IEA-report][1]). Key drivers include:
-
-        - **Policy support**: Government incentives in 50+ countries ([policy-brief][2])
-        - **Cost reduction**: Solar costs down **89%** since 2010 ([tech-analysis][3])
-        - **Corporate adoption**: 78% of Fortune 500 with renewable targets ([corporate-survey][4])
-
-        This growth trajectory suggests the market will reach **$2.8 trillion** by 2030 ([forecast][1]).
-        ```
-
-        **Example 2: Comprehensive Report (multiple sections)**
-        ```
-        ## 🌍 Global Renewable Energy Landscape
-
-        The renewable energy sector has undergone transformative growth over the past decade. Global capacity reached **3,064 GW** in 2023 ([IRENA][1]), representing a **265% increase** since 2013.
-
-        ### 📊 Market Size & Growth
-
-        Key statistics:
-        - **Market value**: $1.5 trillion ([IEA-report][2])
-        - **Annual growth rate**: 15.3% CAGR ([market-analysis][3])
-        - **Investment**: $495 billion in 2023 ([investment-report][4])
-
-        ### 🔑 Key Drivers
-
-        Three primary factors drive adoption:
-
-        ✅ **Policy Frameworks**
-        - Paris Agreement commitments across 195 countries ([UN-climate][5])
-        - Net-zero targets from 70% of global economy ([policy-tracker][6])
-        - Feed-in tariffs and tax incentives in major markets ([incentives-db][7])
-
-        ✅ **Technological Innovation**
-        - Solar efficiency improved to 22-24% ([tech-report][8])
-        - Battery storage costs down 89% ([battery-analysis][9])
-        - Smart grid integration advancing ([grid-study][10])
-
-        ✅ **Economic Competitiveness**
-        - Renewables now cheapest in 90% of markets ([LCOE-analysis][11])
-        - Corporate PPAs grew 24% year-over-year ([corporate-data][12])
-
-        ### ⚠️ Integration Challenges
-
-        Despite growth, several challenges remain:
-
-        - **Grid infrastructure**: Legacy systems need $2.7T upgrades ([infrastructure-needs][13])
-        - **Intermittency**: Variable supply requires storage solutions ([grid-reliability][14])
-        - **Regulatory barriers**: Permitting delays average 4-7 years ([regulatory-review][15])
-
-        ### 📈 Future Outlook
-
-        💡 **Key Insight**: If current trends continue, renewables will comprise **65% of global electricity** by 2040 ([IEA-outlook][16]), fundamentally reshaping energy geopolitics.
-        ```
-
-        ═══════════════════════════════════════════════════════════════════════════
-        🎯 FINAL REMINDER
-        ═══════════════════════════════════════════════════════════════════════════
-
-        **NEVER return plain text without formatting**. Every response must include:
-        - ✅ Headers (## or ###) for answers >2 paragraphs
-        - ✅ Bold for key facts and numbers
-        - ✅ Lists for organized information
-        - ✅ Icons for visual engagement (where appropriate)
-        - ✅ Citations for all factual claims
-        
-        Make your response visually scannable, professionally formatted, and engaging to read!
-    """
     )
 
     SQL_ANALYSIS_SYSTEM_PROMPT = textwrap.dedent(
