@@ -434,7 +434,7 @@ class ThinkingGraph(GraphAgentBase[ThinkingState]):
         consecutive_failures = state.get("consecutive_failures", 0)
         failure_reason = state.get("_failure_reason", "Unknown error")
 
-        if consecutive_failures >= 3:
+        if consecutive_failures >= 2:
             logger.error(
                 f"[Evaluate] {consecutive_failures} consecutive failures. STOPPING to prevent infinite loop."
             )

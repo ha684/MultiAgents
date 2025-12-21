@@ -116,7 +116,7 @@ async def main():
     orchestrator = MainGraph()
 
     human_message_1 = HumanMessage(
-        content="""Tìm trên web các mô hình kinh doanh AI đang thịnh hành nhất (AI-as-a-service, agentic workflow, AI automation…). Sau đó, từ bảng documents, hãy cho biết có bao nhiêu tài liệu được upload trong 7 ngày gần nhất và ai là người upload chúng (join với bảng users nếu cần).""",
+        content="""tìm cho tôi thông tin về test chất lượng chatbot của nxkms""",
         additional_kwargs=context_metadata,
     )
 
