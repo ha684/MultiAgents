@@ -2190,6 +2190,15 @@ wheels = [
 ]
 
 [[package]]
+name = "json-repair"
+version = "0.54.3"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b5/86/48b12ac02032f121ac7e5f11a32143edca6c1e3d19ffc54d6fb9ca0aafd0/json_repair-0.54.3.tar.gz", hash = "sha256:e50feec9725e52ac91f12184609754684ac1656119dfbd31de09bdaf9a1d8bf6", size = 38626, upload-time = "2025-12-15T09:41:58.594Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/08/abe317237add63c3e62f18a981bccf92112b431835b43d844aedaf61f4a0/json_repair-0.54.3-py3-none-any.whl", hash = "sha256:4cdc132ee27d4780576f71bf27a113877046224a808bfc17392e079cb344fb81", size = 29357, upload-time = "2025-12-15T09:41:57.436Z" },
+]
+
+[[package]]
 name = "jsonfinder"
 version = "0.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2361,6 +2370,7 @@ dependencies = [
     { name = "langchain-community" },
     { name = "langchain-experimental" },
     { name = "langchain-huggingface" },
+    { name = "langchain-neo4j" },
     { name = "langchain-pymupdf4llm" },
     { name = "langchain-qdrant" },
     { name = "langchain-redis" },
@@ -2371,6 +2381,7 @@ dependencies = [
     { name = "langsmith" },
     { name = "lingua-language-detector" },
     { name = "litellm" },
+    { name = "llmgraphtransformer" },
     { name = "minio" },
     { name = "miniopy-async" },
     { name = "openpyxl" },
@@ -2472,6 +2483,7 @@ requires-dist = [
     { name = "langchain-community", specifier = ">=0.3.25" },
     { name = "langchain-experimental", specifier = ">=0.3.4" },
     { name = "langchain-huggingface", specifier = ">=0.3.0" },
+    { name = "langchain-neo4j", specifier = ">=0.3.0" },
     { name = "langchain-pymupdf4llm", specifier = ">=0.4.1" },
     { name = "langchain-qdrant", specifier = ">=0.2.0" },
     { name = "langchain-redis", specifier = ">=0.2.4" },
@@ -2482,6 +2494,7 @@ requires-dist = [
     { name = "langsmith", specifier = ">=0.4.28" },
     { name = "lingua-language-detector", specifier = ">=2.1.1" },
     { name = "litellm", specifier = ">=1.75.5.post1" },
+    { name = "llmgraphtransformer", specifier = ">=0.0.2" },
     { name = "minio", specifier = ">=7.2.15" },
     { name = "miniopy-async", specifier = ">=1.23.2" },
     { name = "openpyxl", specifier = ">=3.1.5" },
@@ -2673,6 +2686,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/3f/15/f832ae485707bf52f9a8f055db389850de06c46bc6e3e4420a0ef105fbbf/langchain_huggingface-0.3.1.tar.gz", hash = "sha256:0a145534ce65b5a723c8562c456100a92513bbbf212e6d8c93fdbae174b41341", size = 25154, upload-time = "2025-07-22T17:22:26.77Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bf/26/7c5d4b4d3e1a7385863acc49fb6f96c55ccf941a750991d18e3f6a69a14a/langchain_huggingface-0.3.1-py3-none-any.whl", hash = "sha256:de10a692dc812885696fbaab607d28ac86b833b0f305bccd5d82d60336b07b7d", size = 27609, upload-time = "2025-07-22T17:22:25.282Z" },
+]
+
+[[package]]
+name = "langchain-neo4j"
+version = "0.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langchain" },
+    { name = "langchain-core" },
+    { name = "neo4j" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/07/f0/c889533b89756ebd5660cbcf2cad1299fd3bbbada956530c0f8fc38e578f/langchain_neo4j-0.3.0.tar.gz", hash = "sha256:747542704f39c800bcd5c6b518b5d2b7fe5538b8b914b7772c29a8062617472e", size = 35092, upload-time = "2025-01-20T10:45:05.009Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/76/f2/ea799235787a1405fa3574b9afc95aa2644c4acc59d86daff5329a112681/langchain_neo4j-0.3.0-py3-none-any.whl", hash = "sha256:6069eb748fe959d7c97add82ca3de8c0b9018dfdaa05f823aa970606f8e5cdb7", size = 38829, upload-time = "2025-01-20T10:45:02.713Z" },
 ]
 
 [[package]]
@@ -2973,6 +3000,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8c/65/71fe4851709fa4a612e41b80001a9ad803fea979d21b90970093fd65eded/litellm-1.77.1.tar.gz", hash = "sha256:76bab5203115efb9588244e5bafbfc07a800a239be75d8dc6b1b9d17394c6418", size = 10275745, upload-time = "2025-09-13T21:05:21.377Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bb/dc/ff4f119cd4d783742c9648a03e0ba5c2b52fc385b2ae9f0d32acf3a78241/litellm-1.77.1-py3-none-any.whl", hash = "sha256:407761dc3c35fbcd41462d3fe65dd3ed70aac705f37cde318006c18940f695a0", size = 9067070, upload-time = "2025-09-13T21:05:18.078Z" },
+]
+
+[[package]]
+name = "llmgraphtransformer"
+version = "0.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "json-repair" },
+    { name = "langchain-core" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/98/03/4e18b9193222c2a619df738a0bc951b9aeded6b102b5cad0c809e845840c/llmgraphtransformer-0.0.2.tar.gz", hash = "sha256:c4bbbccd830b9deb3159dc8bbc744fe7018c4a129572b25e7c51dfa9a0353578", size = 12402, upload-time = "2025-03-05T11:49:40.207Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/94/2847ef972aa31132e6626bdd28da434e64016b1db9fdb9addec9816e91fb/llmgraphtransformer-0.0.2-py3-none-any.whl", hash = "sha256:9542cca840dd394b725c66356d704409d4511f8db6d0a830f7b831dec8d58fe8", size = 12701, upload-time = "2025-03-05T11:49:36.693Z" },
 ]
 
 [[package]]
