@@ -24,6 +24,7 @@ from src.agents.tools.server.mcp_retrieve_tools import (
     use_normal_mode,
     use_thinking_mode,
 )
+from src.core.config.settings import settings
 from src.domain.entities.graph import RunConfig
 from src.domain.entities.state import MainGraphState, NormalGraphState, ThinkingState
 from src.domain.schemas.chat import Message, RetrievalContext, TextPart
@@ -271,8 +272,8 @@ class MainGraph(GraphAgentBase[MainGraphState]):
         seed_base_subgraphs()
         meta = conversation[-1].additional_kwargs or {}
         conversation_id = meta.get("conversation_id")
-        db_url = meta.get("db_url")
-        allow_tables = meta.get("allow_tables", [])
+        db_url = settings.database_url
+        allow_tables = ["conversations", "documents", "knowledge_bases", "users"]
 
         allow = meta.get("enabled_subgraphs", [])
         block = meta.get("disabled_subgraphs", [])
@@ -311,8 +312,8 @@ class MainGraph(GraphAgentBase[MainGraphState]):
         try:
             seed_base_subgraphs()
             meta = conversation[-1].additional_kwargs or {}
-            db_url = meta.get("db_url")
-            allow_tables = meta.get("allow_tables", [])
+            db_url = settings.database_url
+            allow_tables = ["conversations", "documents", "knowledge_bases", "users"]
 
             allow = meta.get("enabled_subgraphs", [])
             block = meta.get("disabled_subgraphs", [])

@@ -6,7 +6,6 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables.schema import StreamEvent
 
 from src.agents.main_graph import MainGraph
-from src.core.config.settings import settings
 from src.utils.logger_conf import logger
 
 
@@ -108,17 +107,13 @@ async def main():
     """Test orchestrator with streaming"""
 
     context_metadata = {
-        "message_metadata": {
-            "kb_id": "06926eb4-af94-7355-8000-765cda3cfeec",
-            "db_url": settings.database_url,
-            "allow_tables": ["conversations", "documents", "knowledge_bases", "users"],
-        }
+        "message_metadata": {"kb_id": "06926eb4-af94-7355-8000-765cda3cfeec"}
     }
     logger.info("Initializing OrchestratorGraph...")
     orchestrator = MainGraph()
 
     human_message_1 = HumanMessage(
-        content="""tìm cho tôi thông tin về test chất lượng chatbot của nxkms""",
+        content="""Tìm cho tôi thông tin vì sao LMM thường sai khi đếm vật trong ảnh, sau đó check xem có bao nhiêu user đang hoạt động trong hệ thống hiện tại của tôi?""",
         additional_kwargs=context_metadata,
     )
 
