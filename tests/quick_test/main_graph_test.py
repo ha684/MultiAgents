@@ -113,7 +113,7 @@ async def main():
     orchestrator = MainGraph()
 
     human_message_1 = HumanMessage(
-        content="""Phân tích vai trò của attention trong VQA, tại sao attention map giúp mô hình hiểu câu hỏi tốt hơn, hạn chế của attention khi câu hỏi mơ hồ.""",
+        content="""tại sao semantic retrieval giúp giảm factual hallucination,vai trò của embedding đa chiều,và vì sao keyword-based search không đủ cho các truy vấn phức tạp.""",
         additional_kwargs=context_metadata,
     )
 

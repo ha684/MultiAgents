@@ -23,8 +23,12 @@ GRAPH_CONFIGS = {
     "NormalGraph": GraphMetadata(
         name="NormalGraph",
         nodes={
-            "generate_direction": NodeMetadata(
+            "phase_planning": NodeMetadata(
                 display_message="Planning approach...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+            "action_execution": NodeMetadata(
+                display_message="Executing action...",
                 stream_phase=StreamPhase.PROCESSING,
             ),
             "execute_subgraph": NodeMetadata(
@@ -41,8 +45,12 @@ GRAPH_CONFIGS = {
     "ThinkingGraph": GraphMetadata(
         name="ThinkingGraph",
         nodes={
-            "generate_direction": NodeMetadata(
+            "phase_planning": NodeMetadata(
                 display_message="Planning research step...",
+                stream_phase=StreamPhase.PROCESSING,
+            ),
+            "action_execution": NodeMetadata(
+                display_message="Executing action...",
                 stream_phase=StreamPhase.PROCESSING,
             ),
             "execute_subgraph": NodeMetadata(

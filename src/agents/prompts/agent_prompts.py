@@ -693,7 +693,7 @@ class PromptTemplates:
         - Remove: "the", "a", "an", "of" (unless part of proper noun)
         - Remove: generic words like "information", "data" (unless core to intent)
         
-        4. **Target length: 5-20 words**
+        4. **Target length: 10-30 words**
         - Keep it concise but comprehensive
         - Include all essential keywords
         - Each word should carry meaning

@@ -34,8 +34,8 @@ class BaseSearchService(ABC):
         """
         documents = []
         for result in results:
-            context = f"--- # Title: {result.get('title', 'No Title')} ---\n"
-            context += f"Content : {result.get('content', 'No Content')}\n"
+            context = f"# Title: {result.get('title', 'No Title')}\n"
+            context += f"Content: {result.get('content', 'No Content')}\n"
 
             document = Document(
                 page_content=context,

@@ -307,61 +307,76 @@ def create_journey_subgraph(
 
 RAG_SEARCH_PROFILE = SubgraphProfile(
     name="rag_search",
-    display_name="Document Search (Unstructured Data)",
+    display_name="Document & Knowledge Search",
     primary_behavior=SubgraphBehavior(
         condition=RoutingCondition(
             trigger=(
-                "User asks questions about information, concepts, or any unstructured content. "
-                "PRIMARY and DEFAULT choice unless query explicitly needs real-time data or database records."
+                "User asks about information, concepts, documents, or general knowledge questions. "
+                "Use for ANY information request UNLESS it explicitly requires real-time data or database records."
             ),
             signals=[
                 "tìm",
                 "search",
                 "thông tin",
                 "information",
-                "what is",
-                "explain",
-                "how to",
+                "what",
                 "why",
+                "how",
+                "explain",
+                "giải thích",
+                "tại sao",
+                "về",
+                "about",
+                "tell me",
+                "cho tôi biết",
             ],
             exclude_when=[
-                "Query explicitly needs CURRENT/REAL-TIME data: 'hôm nay', 'today', 'hiện tại', 'now'",
-                "Query needs LIVE data: weather, stock prices, exchange rates",
-                "Query needs STRUCTURED DATABASE records: counts, totals, lists from tables",
+                "Query uses real-time indicators: 'hôm nay', 'today', 'hiện tại', 'bây giờ', 'now', 'current'",
+                "Query asks for live/current data: weather right now, stock price now, today's news",
+                "Query asks for database operations: 'how many users', 'count records', 'list all', 'bao nhiêu'",
             ],
         ),
         action=RoutingAction(
             capability=(
-                "Searches through documents and knowledge base using semantic search. "
-                "PRIMARY tool for information retrieval and general questions."
+                "Semantic search across documents and knowledge base. "
+                "Handles information retrieval, concept explanations, document Q&A. "
+                "Best for general questions and unstructured data."
             ),
             router_instruction=(
-                "Use as DEFAULT for:\n"
-                "• General questions and information requests\n"
-                "• Conceptual questions, explanations\n"
-                "• Finding information from documents\n"
+                "Select this tool when:\n"
+                "• User asks for information or knowledge ('tìm thông tin về X', 'what is Y')\n"
+                "• Questions about concepts, explanations, how things work\n"
+                "• Document-based questions\n"
+                "• ANY general information request\n"
                 "\n"
-                "Skip ONLY if:\n"
-                "• Needs real-time/live data (weather, prices, current events)\n"
-                "• Needs structured database queries (counts, records, tables)"
+                "Do NOT select if:\n"
+                "• Query explicitly asks for current/live data (weather now, price now)\n"
+                "• Query needs database records (counts, user lists)\n"
+                "\n"
+                "When in doubt between rag_search and web_search for general info → choose rag_search"
             ),
-            expected_outcome="Relevant information from knowledge base",
+            expected_outcome="Relevant passages from documents and knowledge base",
         ),
     ),
     canonical_examples=[
         {
             "query": "tìm thông tin về LMM counting errors",
-            "rationale": "General information request - use RAG",
+            "rationale": "General information request → rag_search (not web, no real-time indicator)",
         },
         {
-            "query": "Giải thích cách hoạt động của transformer",
-            "rationale": "Conceptual question - use RAG",
+            "query": "what is transformer architecture",
+            "rationale": "Concept explanation → rag_search",
+        },
+        {
+            "query": "giải thích cách hoạt động của chatbot",
+            "rationale": "How-to question → rag_search",
         },
     ],
     executor="rag_search",
     entry_state_type=SimpleSearchState,
-    tags=["vector", "semantic", "documents", "unstructured", "primary", "default"],
+    tags=["vector", "semantic", "documents", "default"],
 )
+
 
 RAG_SEARCH_PROFILE.secondary_behaviors.append(
     SubgraphBehavior(
@@ -379,68 +394,64 @@ RAG_SEARCH_PROFILE.secondary_behaviors.append(
 
 WEB_SEARCH_PROFILE = SubgraphProfile(
     name="web_search",
-    display_name="Internet Web Search",
+    display_name="Real-time Internet Search",
     primary_behavior=SubgraphBehavior(
         condition=RoutingCondition(
             trigger=(
-                "Query needs current/live external data, general world knowledge, "
-                "or information clearly outside the organization's domain."
+                "Query explicitly needs CURRENT, LIVE, or REAL-TIME data from the internet. "
+                "Only use when temporal freshness is critical."
             ),
             signals=[
                 "hôm nay",
                 "today",
                 "hiện tại",
+                "bây giờ",
+                "now",
                 "current",
-                "mới nhất",
                 "latest",
+                "mới nhất",
                 "thời tiết",
                 "weather",
-                "giá",
-                "price",
-                "tỷ giá",
-                "exchange rate",
+                "tin tức",
+                "news",
             ],
             exclude_when=[
-                "Query about internal work, projects, or organizational content",
-                "Query mentions specific internal entities (project names, internal IDs, colleague names)",
-                "Historical/past information that wouldn't change",
+                "Query is about general information without time sensitivity",
+                "Query about concepts or explanations (not time-dependent)",
+                "No explicit real-time indicator present",
             ],
         ),
         action=RoutingAction(
             capability=(
-                "Searches public internet for up-to-date external information. "
-                "Best for current events, general knowledge, and real-time data."
+                "Real-time internet search for current data. "
+                "Use ONLY when freshness matters: weather, stock prices, today's events."
             ),
             router_instruction=(
-                "Use when query needs:\n"
-                "• Real-time data: weather, stock prices, exchange rates, live scores\n"
+                "Select this tool ONLY when:\n"
+                "• Query has explicit time indicators: 'hôm nay', 'today', 'now', 'hiện tại'\n"
+                "• Needs live data: weather, stock prices, exchange rates\n"
                 "• Current events: today's news, recent announcements\n"
-                "• General world knowledge: famous people, countries, public facts\n"
-                "• External companies/products: competitors, public organizations\n"
-                "• Programming syntax, libraries, public documentation\n"
                 "\n"
-                "Skip for internal/organizational content."
+                "Do NOT select if:\n"
+                "• Query is general information without time constraint\n"
+                "• No real-time indicator present\n"
             ),
-            expected_outcome="Web search results from internet sources",
+            expected_outcome="Current information from internet",
         ),
     ),
     canonical_examples=[
         {
             "query": "thời tiết Hà Nội hôm nay",
-            "rationale": "Real-time weather data",
+            "rationale": "Real-time indicator 'hôm nay' → web_search",
         },
         {
-            "query": "What are the latest AI developments?",
-            "rationale": "Current events and trends",
-        },
-        {
-            "query": "How to use React hooks?",
-            "rationale": "Public programming knowledge",
+            "query": "giá Bitcoin hiện tại",
+            "rationale": "Live price with 'hiện tại' → web_search",
         },
     ],
     executor="web_search",
     entry_state_type=SimpleSearchState,
-    tags=["internet", "web", "external", "realtime"],
+    tags=["internet", "realtime", "live"],
 )
 
 WEB_SEARCH_PROFILE.secondary_behaviors.append(
