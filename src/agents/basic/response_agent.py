@@ -13,7 +13,6 @@ from langchain_core.messages import (
 from langchain_core.prompts import ChatPromptTemplate
 
 from src.agents.basic.base import BaseAgent
-from src.agents.prompts.agent_prompts import PromptTemplates
 from src.domain.entities.graph import ResponseMode
 from src.llm.language_detector import detect_language
 from src.utils import format_context_for_response, get_current_time
@@ -582,7 +581,7 @@ class ResponseAgent(BaseAgent):
             return [system_message] + history
 
         if mode == ResponseMode.ADVANCE:
-            system_content = PromptTemplates.FINAL_SYNTHESIZER_PROMPT
+            system_content = ADVANCE_MODE_PROMPT
             context_label = "Retrieved context"
 
         elif mode == ResponseMode.SQL_RESPONSE:

@@ -1952,9 +1952,8 @@ class PromptTemplates:
         **Is the intent clear and actionable?**
         - Can you articulate what the user wants in one sentence?
         - Is there enough information to understand the goal?
-        - Does it reference available context?
         
-        → NO + No context = Ask for clarification
+        → NO = Ask for clarification
         → YES = Proceed to Step 2
 
         ## Step 2: Need for External Information
@@ -1971,86 +1970,96 @@ class PromptTemplates:
         → YES = Answer directly
         → NO = Proceed to Step 3
 
-        ## Step 3: Task Structure Analysis (CRITICAL)
+        ## Step 3: Data Source Analysis (CRITICAL ROUTING DECISION)
 
-        **Analyze the TASK STRUCTURE, not question length:**
+        **This is the KEY question: How many DISTINCT data sources are needed?**
 
-        ### 🔴 THINKING MODE Indicators:
+        ### 🔴 THINKING MODE Required When:
 
-        **A. Multiple Independent Tasks**
-        - Contains AND/THEN connecting distinct operations
-        - Each part needs different data sources or tools
-        - Tasks must be orchestrated sequentially
-        - Example patterns: "Find X, then do Y", "Do A and also B"
+        **A. Heterogeneous Data Sources (MOST IMPORTANT)**
+        - Tasks require accessing DIFFERENT systems/databases
+        - Examples of different sources:
+        * Vector DB + SQL database
+        * Internal docs + External API
+        * Multiple separate databases
+        * Different file systems
+        - **Key signal**: Words like "then", "after that", "also" connecting tasks that need different data locations
+        - **Test**: Remove conjunctions - do the parts need different places to find answers?
         
-        **B. Requires Synthesis**
-        - Combining information from multiple sources
-        - Comparing/contrasting data points
-        - Identifying patterns or trends
-        - Drawing conclusions from various inputs
+        **B. Sequential Task Dependencies**
+        - Task 2 depends on results from Task 1
+        - Cannot be answered in parallel
+        - Example: "Find X, then use X to calculate Y"
         
-        **C. Multi-Step Reasoning**
-        - Causal analysis: "Why did X happen?"
-        - Strategic evaluation: "Should we...?", "What's best...?"
-        - Needs intermediate steps: gather → analyze → conclude
-        - Path unclear, needs exploration
+        **C. Cross-Source Synthesis Required**
+        - Must combine/compare data from multiple separate sources
+        - Analysis spans different systems
+        - Example: "Compare metrics from DB1 with reports from DB2"
 
-        ### 🟢 NORMAL MODE Indicators:
+        ### 🟢 NORMAL MODE Sufficient When:
 
-        **A. Single Atomic Task**
-        - One clear target, even if question has multiple sub-questions
-        - All answers come from ONE source/location
-        - Direct lookup without synthesis
+        **A. Single Homogeneous Source**
+        - All information comes from ONE location/system
+        - Even if multiple questions, they query the same place
+        - **Key test**: Can everything be answered from one search/query?
         
-        **B. Simple Retrieval**
-        - Factual lookup: "What is X?", "Who did Y?"
-        - Status check: "How many X?", "Is Y active?"
-        - Content extraction: "Find document Z"
-        
-        **C. Straightforward Advice**
-        - Opinion/recommendation without deep research
+        **B. Simple Advisory/Conversational**
         - General knowledge application
-        - Simple Q&A even with multiple angles
+        - Opinion/recommendation without data lookup
+        - Casual multi-part questions about one topic
+        
+        **C. Parallel Independent Lookups from Same Source**
+        - Multiple facts from same database/system
+        - No synthesis between them needed
 
         </decision_framework>
 
-        <critical_distinctions>
+        <the_critical_test>
 
-        ## Multiple Questions ≠ Thinking Mode
+        **Before routing, answer these questions:**
 
-        **Multiple related questions about ONE topic:**
-        → Often NORMAL MODE if answers from same source
+        1. **How many DIFFERENT data sources/systems are needed?**
+        - 1 source = NORMAL MODE (usually)
+        - 2+ sources = THINKING MODE
+
+        2. **Are there sequential tasks with dependencies?**
+        - YES = THINKING MODE
+        - NO = Check other criteria
+
+        3. **Does it need synthesis across multiple sources?**
+        - YES = THINKING MODE
+        - NO = NORMAL MODE
+
+        **The Data Source Test is PRIMARY. Most routing errors come from ignoring this.**
+
+        </the_critical_test>
+
+        <common_confusion_patterns>
+
+        ## ❌ FALSE SIGNAL: Multiple questions = Thinking mode
+
+        **WRONG ASSUMPTION:** "Nhiều câu hỏi → cần thinking mode"
+
+        **CORRECT LOGIC:** Ask "Các câu hỏi này lấy data từ mấy nguồn?"
         
-        Example: "Thời tiết Hà Nội thế nào? Tôi có nên đi chạy không? Có cần khẩu trang không?"
-        - Multiple questions but ONE context (weather + health advice)
-        - No need for orchestration
-        - Simple advisory response
-        → **NORMAL MODE**
+        Example that SEEMS complex but is NORMAL:
+        - "Thời tiết thế nào? Tôi có nên đi chạy không? Có cần khẩu trang không?"
+        - Analysis: Tất cả đều về 1 chủ đề (thời tiết + sức khỏe), không cần tra nhiều nguồn
+        - → NORMAL MODE
 
-        **Multiple independent tasks with different data sources:**
-        → THINKING MODE required for orchestration
-        
-        Example: "Tìm thông tin về X trong docs, sau đó check Y trong database"
-        - Two distinct tasks
-        - Different data sources (docs vs database)
-        - Needs sequential execution
-        → **THINKING MODE**
+        ## ✅ TRUE SIGNAL: Different data locations
 
-        ## The Orchestration Test
+        **Key phrases that indicate heterogeneous sources:**
+        - "Find X in [system1], then check Y in [system2]"
+        - "sau đó check", "rồi tìm", "then", "also check in"
+        - **Implicit different systems**: "tìm thông tin về X [cần vector DB], kiểm tra số lượng Y [cần SQL]"
 
-        Ask: "Do I need to coordinate between different systems/sources?"
+        Example that REQUIRES orchestration:
+        - "Tìm thông tin về LMM errors [vector DB], sau đó check active users [SQL]"
+        - Analysis: 2 ý = 2 nguồn dữ liệu khác nhau (vector vs SQL)
+        - → THINKING MODE
 
-        - YES → THINKING MODE
-        - NO → NORMAL MODE (even if multi-part question)
-
-        ## The Synthesis Test
-
-        Ask: "Do I need to combine/analyze information from multiple places?"
-
-        - YES → THINKING MODE
-        - NO → NORMAL MODE
-
-        </critical_distinctions>
+        </common_confusion_patterns>
 
         <function_calling_requirement>
 
@@ -2059,26 +2068,9 @@ class PromptTemplates:
         ❌ Wrong: "I'll use normal mode to look this up"
         ✅ Right: [Actually invoke use_normal_mode()]
 
-        ❌ Wrong: "Let me search for that"
-        ✅ Right: [Execute the function call]
-
         The system expects function execution, not descriptions.
 
         </function_calling_requirement>
-
-        <response_patterns>
-
-        **Direct Answer:**
-        - Natural conversational tone
-        - Concise for simple, thorough for complex
-        - When clarifying: Be specific about what info you need
-
-        **Tool Call:**
-        - Invoke immediately
-        - Optional brief context if helpful
-        - Don't explain tool mechanics unless asked
-
-        </response_patterns>
 
         <decision_flowchart>
 
@@ -2087,18 +2079,17 @@ class PromptTemplates:
         Intent clear? 
             NO → Ask clarification
             YES ↓
-        Can answer directly?
+        Can answer directly with own knowledge?
             YES → Direct response
             NO ↓
-        Multiple independent tasks OR different data sources?
+        Count distinct data sources needed:
+            ↓
+        2+ sources OR sequential dependencies?
             YES → use_thinking_mode()
             NO ↓
-        Needs synthesis from multiple sources?
-            YES → use_thinking_mode()
-            NO ↓
-        Simple lookup/retrieval?
+        Single source lookup/retrieval?
             YES → use_normal_mode()
-            NO → Re-evaluate (likely thinking mode)
+            NO → Re-evaluate
 
         </decision_flowchart>
 
@@ -2106,69 +2097,65 @@ class PromptTemplates:
 
         **THINKING MODE Cases:**
 
-        "Find info about LMM counting errors, then check active users in database"
-        → Why: Two independent tasks, heterogeneous sources (docs + DB)
-        → Key: "then" + different data sources
+        ✓ "Tìm thông tin về LMM counting errors, sau đó check active users"
+        → Why: Vector DB (info về LMM) + SQL (active users) = 2 nguồn
+        → Signal: "sau đó" + implicit different systems
 
-        "Analyze sales trends and recommend strategy"
-        → Why: Multi-step: gather data → identify patterns → synthesize recommendation
-        → Key: Requires synthesis and judgment
+        ✓ "Compare sales from DB1 with forecasts from DB2"
+        → Why: 2 explicit different databases
+        → Signal: Cross-source comparison
 
-        "Compare approach A vs B across all documents"
-        → Why: Multiple sources, synthesis needed
-        → Key: Cross-source comparison
+        ✓ "Find doc about X, then calculate Y based on that"
+        → Why: Sequential dependency
+        → Signal: Task 2 depends on Task 1 result
 
         **NORMAL MODE Cases:**
 
-        "Weather bad in Hanoi, should I run? Need mask?"
-        → Why: Single context (weather + health), simple advice
-        → Key: Multiple questions but ONE topic, no orchestration
+        ✓ "Thời tiết Hà Nội xấu, tôi có nên đi chạy không? Có cần khẩu trang không?"
+        → Why: 1 chủ đề (thời tiết + sức khỏe), simple advisory, không tra data
+        → Key: Multiple questions ≠ multiple sources
 
-        "Find purchase order #A482"
-        → Why: Single lookup, clear target
-        → Key: Atomic task
+        ✓ "Find all orders from customer X and list their details"
+        → Why: Single source (order database), one query
+        → Key: Parallel info from same place
 
-        "Who wrote chapter 5 and what's the main theme?"
-        → Why: Single source (the book), no synthesis across sources
-        → Key: Multiple questions from ONE location
+        ✓ "Who is the author of chapter 5 and what's the summary?"
+        → Why: Same document, different questions
+        → Key: Single source with multiple angles
 
         **DIRECT RESPONSE Cases:**
 
-        "Can you help me?"
+        ✓ "Can you help me?"
         → Conversational
 
-        "What's machine learning?"
-        → Reliable knowledge
+        ✓ "What's the best way to learn Python?"
+        → General advice, no data lookup needed
 
         </calibration_examples>
 
         <anti_patterns>
 
-        Common mistakes to avoid:
-
-        ✗ Routing to thinking mode just because query is long
-        ✗ Routing to thinking mode for multi-part questions about ONE topic
-        ✗ Using normal mode when tasks need different data sources
-        ✗ Using normal mode when synthesis is required
-        ✗ Describing tool usage instead of calling functions
-        ✗ Asking for clarification on grammatically complete questions with context
+        ❌ Routing to thinking mode because question has "and", "or", "sau đó" in casual context
+        ❌ Routing to thinking mode just because query mentions multiple things
+        ❌ Using normal mode when tasks explicitly need different systems
+        ❌ Confusing "multiple questions" with "multiple data sources"
+        ✓ Always count distinct data sources as primary signal
+        ✓ Distinguish casual "and" from task-chaining "then/sau đó"
 
         </anti_patterns>
 
         <final_checklist>
 
-        Before routing, ask yourself:
+        Before routing, verify:
 
-        1. ☑ Does this need external information? (NO → Direct)
-        2. ☑ Are there multiple independent tasks? (YES → Thinking)
-        3. ☑ Do tasks use different data sources? (YES → Thinking)
-        4. ☑ Is synthesis/analysis required? (YES → Thinking)
-        5. ☑ Is this a simple lookup? (YES → Normal)
-        6. ☑ Multiple questions but same source? (Often → Normal)
+        1. ☑ Needs external data? (NO → Direct Response)
+        2. ☑ How many distinct data sources? (1 → Normal, 2+ → Thinking)
+        3. ☑ Sequential dependencies? (YES → Thinking)
+        4. ☑ Cross-source synthesis? (YES → Thinking)
+        5. ☑ Simple single-source lookup? (YES → Normal)
 
-        When in doubt: 
-        - Lean toward NORMAL for single-source retrieval
-        - Lean toward THINKING for multi-source orchestration
+        **PRIMARY DECISION RULE:**
+        Count the data sources. This is the most reliable signal.
 
         </final_checklist>
         """

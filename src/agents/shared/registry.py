@@ -307,115 +307,60 @@ def create_journey_subgraph(
 
 RAG_SEARCH_PROFILE = SubgraphProfile(
     name="rag_search",
-    display_name="Internal Knowledge Base Search",
+    display_name="Document Search (Unstructured Data)",
     primary_behavior=SubgraphBehavior(
         condition=RoutingCondition(
             trigger=(
-                "User asks for information, documents, reports, or data that could be "
-                "in internal systems. This is the DEFAULT for information retrieval "
-                "unless there are clear signals for external search."
+                "User asks questions about information, concepts, or any unstructured content. "
+                "PRIMARY and DEFAULT choice unless query explicitly needs real-time data or database records."
             ),
             signals=[
-                # Document/Report references
-                "báo cáo",
-                "report",
-                "tài liệu",
-                "document",
-                "biểu đồ",
-                "chart",
-                "phân tích",
-                "analysis",
-                # Internal entities (people, projects, internal terms)
-                "của [person name]",
-                "về [internal term/project]",
-                "sự cố",
-                "incident",
-                "dự án",
-                "project",
-                # Work/business related
-                "tiến độ",
-                "progress",
-                "công việc",
-                "work",
-                "meeting",
-                "họp",
-                "presentation",
-                # Quality/testing (likely internal)
-                "test",
-                "chất lượng",
-                "quality",
-                "đánh giá",
-                "evaluation",
-                # Generic search (default to internal first)
                 "tìm",
                 "search",
                 "thông tin",
                 "information",
-                "cho tôi",
-                "give me",
-                "show me",
-                # File/content references
-                "file",
-                "slide",
-                "pdf",
-                "doc",
+                "what is",
+                "explain",
+                "how to",
+                "why",
             ],
             exclude_when=[
-                # ONLY exclude if explicitly asking for external/web
-                "User explicitly mentions searching internet/web/google",
-                "User asks for breaking news or current events",
-                "User asks for real-time data (weather, stock prices, live scores)",
-                "User asks about external companies/products not related to organization",
-                "User asks for public figures, celebrities, or general world knowledge",
+                "Query explicitly needs CURRENT/REAL-TIME data: 'hôm nay', 'today', 'hiện tại', 'now'",
+                "Query needs LIVE data: weather, stock prices, exchange rates",
+                "Query needs STRUCTURED DATABASE records: counts, totals, lists from tables",
             ],
         ),
         action=RoutingAction(
             capability=(
-                "Searches INTERNAL knowledge base (vector database) for documents, "
-                "reports, presentations, policies, and any previously stored content. "
-                "This is the DEFAULT search tool for information retrieval."
+                "Searches through documents and knowledge base using semantic search. "
+                "PRIMARY tool for information retrieval and general questions."
             ),
             router_instruction=(
-                "Use this tool as DEFAULT when:\n"
-                "• User asks for information without specifying source (assume internal first)\n"
-                "• Query mentions internal entities (people names, internal projects, specific IDs)\n"
-                "• Looking for reports, documents, analyses, or work-related content\n"
-                "• Query contains domain-specific terms or internal jargon\n"
-                "• Searching for past communications, presentations, or files\n"
+                "Use as DEFAULT for:\n"
+                "• General questions and information requests\n"
+                "• Conceptual questions, explanations\n"
+                "• Finding information from documents\n"
                 "\n"
-                "DO NOT use if:\n"
-                "• User explicitly says 'search web', 'google', 'internet', 'online'\n"
-                "• User asks for breaking news, weather, stock prices, or real-time data\n"
-                "• User asks about public figures or general world knowledge clearly outside your org\n"
+                "Skip ONLY if:\n"
+                "• Needs real-time/live data (weather, prices, current events)\n"
+                "• Needs structured database queries (counts, records, tables)"
             ),
-            expected_outcome="Relevant internal documents and passages from knowledge base",
+            expected_outcome="Relevant information from knowledge base",
         ),
     ),
     canonical_examples=[
         {
-            "query": "tìm cho tôi thông tin về test chất lượng chatbot của nxkms",
-            "rationale": "Internal quality testing info - default to RAG",
+            "query": "tìm thông tin về LMM counting errors",
+            "rationale": "General information request - use RAG",
         },
         {
-            "query": "báo cáo tiến độ công việc tuần trước của vân",
-            "rationale": "Internal work report for specific person",
-        },
-        {
-            "query": "Biểu đồ phân tích nguyên nhân sự cố（003） nói về sự cố gì",
-            "rationale": "Internal incident analysis with specific ID",
-        },
-        {
-            "query": "What does our company policy say about remote work?",
-            "rationale": "Explicit internal policy reference",
-        },
-        {
-            "query": "tìm thông tin về dự án X",
-            "rationale": "Internal project search - default to RAG",
+            "query": "Giải thích cách hoạt động của transformer",
+            "rationale": "Conceptual question - use RAG",
         },
     ],
     executor="rag_search",
     entry_state_type=SimpleSearchState,
-    tags=["vector", "semantic", "documents", "internal", "default"],
+    tags=["vector", "semantic", "documents", "unstructured", "primary", "default"],
 )
 
 RAG_SEARCH_PROFILE.secondary_behaviors.append(
@@ -434,79 +379,68 @@ RAG_SEARCH_PROFILE.secondary_behaviors.append(
 
 WEB_SEARCH_PROFILE = SubgraphProfile(
     name="web_search",
-    display_name="Internet Web Search (External Information)",
+    display_name="Internet Web Search",
     primary_behavior=SubgraphBehavior(
         condition=RoutingCondition(
             trigger=(
-                "User EXPLICITLY asks to search the INTERNET, or asks about "
-                "General World Knowledge, Public Companies (Google, Microsoft), "
-                "Real-time events (News, Weather), or Programming Syntax."
+                "Query needs current/live external data, general world knowledge, "
+                "or information clearly outside the organization's domain."
             ),
             signals=[
-                "google",
-                "internet",
-                "online",
-                "web",
-                "news",
-                "thời sự",
-                "tin tức",
-                "weather",
+                "hôm nay",
+                "today",
+                "hiện tại",
+                "current",
+                "mới nhất",
+                "latest",
                 "thời tiết",
-                "competitor",
-                "đối thủ",
-                "public info",
-                "syntax",
-                "how to use library",
+                "weather",
+                "giá",
+                "price",
+                "tỷ giá",
+                "exchange rate",
             ],
             exclude_when=[
-                "Query contains specific internal acronyms (e.g., 'nxkms', 'cms', 'erp')",
-                "Query mentions specific people names without famous context",
-                "Query asks for specific reports, logs, or internal tickets",
-                "HISTORY INDICATOR: If 'web_search' was just used and failed/returned nothing.",
+                "Query about internal work, projects, or organizational content",
+                "Query mentions specific internal entities (project names, internal IDs, colleague names)",
+                "Historical/past information that wouldn't change",
             ],
         ),
         action=RoutingAction(
             capability=(
-                "Searches the PUBLIC INTERNET using web search engines. "
-                "Returns results from websites, news articles, blogs, and other "
-                "publicly available online content."
+                "Searches public internet for up-to-date external information. "
+                "Best for current events, general knowledge, and real-time data."
             ),
             router_instruction=(
-                "Use this tool when:\n"
-                "• User wants to find information from the INTERNET\n"
-                "• Looking for public/external information not stored internally\n"
-                "• Needs news, current events, or real-time web content\n"
-                "• Searching for general knowledge available online\n"
-                "• Wants to look up external companies, products, or public figures\n"
+                "Use when query needs:\n"
+                "• Real-time data: weather, stock prices, exchange rates, live scores\n"
+                "• Current events: today's news, recent announcements\n"
+                "• General world knowledge: famous people, countries, public facts\n"
+                "• External companies/products: competitors, public organizations\n"
+                "• Programming syntax, libraries, public documentation\n"
+                "\n"
+                "Skip for internal/organizational content."
             ),
-            expected_outcome="Web search results with URLs and snippets from internet sources",
+            expected_outcome="Web search results from internet sources",
         ),
     ),
     canonical_examples=[
         {
-            "query": "Search online for Python best practices",
-            "rationale": "Explicit request to search the internet",
+            "query": "thời tiết Hà Nội hôm nay",
+            "rationale": "Real-time weather data",
         },
         {
-            "query": "What are the latest news about AI?",
-            "rationale": "News from external web sources",
+            "query": "What are the latest AI developments?",
+            "rationale": "Current events and trends",
         },
         {
-            "query": "Look up information about Tesla company",
-            "rationale": "External company information from the web",
-        },
-        {
-            "query": "Find tutorials about React on the internet",
-            "rationale": "Public web content search",
-        },
-        {
-            "query": "What is the current weather in Hanoi?",
-            "rationale": "Real-time information from web",
+            "query": "How to use React hooks?",
+            "rationale": "Public programming knowledge",
         },
     ],
     executor="web_search",
     entry_state_type=SimpleSearchState,
-    tags=["internet", "web", "external", "public"],
+    tags=["internet", "web", "external", "realtime"],
 )
 
 WEB_SEARCH_PROFILE.secondary_behaviors.append(

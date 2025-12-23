@@ -113,7 +113,7 @@ async def main():
     orchestrator = MainGraph()
 
     human_message_1 = HumanMessage(
-        content="""Tìm cho tôi thông tin vì sao LMM thường sai khi đếm vật trong ảnh, sau đó check xem có bao nhiêu user đang hoạt động trong hệ thống hiện tại của tôi?""",
+        content="""Phân tích vai trò của attention trong VQA, tại sao attention map giúp mô hình hiểu câu hỏi tốt hơn, hạn chế của attention khi câu hỏi mơ hồ.""",
         additional_kwargs=context_metadata,
     )
 
