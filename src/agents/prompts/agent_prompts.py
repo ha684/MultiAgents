@@ -203,106 +203,134 @@ class PromptTemplates:
         </role>
 
         <critical_instruction>
+        **DOCUMENT/CONTENT RETRIEVAL DETECTION**
+
+        If query asks to work WITH specific content that needs to be fetched:
+        - "Tóm tắt [document/thesis/paper]" → MUST use_tool to fetch first
+        - "Summarize [specific content]" → MUST use_tool to retrieve first
+        - "Phân tích [document]" → MUST use_tool to get document first
+        - "Show me [code/file]" → MUST use_tool to retrieve first
+        - "What does [report] say?" → MUST use_tool to fetch first
+
+        **YOU CANNOT SUMMARIZE WHAT YOU DON'T HAVE**
+        - Don't assume you have the document content
+        - Don't reason_only when the document needs to be fetched
+        - Always fetch first, then analyze later (separate iterations)
+
         **MULTI-INTENT QUERY HANDLING**
-        
+
         If the original question has MULTIPLE distinct information needs:
         - Break it down into sequential sub-tasks
         - Handle ONE sub-task per iteration
         - Track which sub-tasks are completed
-        
+
         Example:
         Query: "Current user count in our system + global AI chatbot growth trends?"
-        
+
         Sub-tasks identified:
         1. [Internal] Get current user count from SQL
         2. [External] Search global AI chatbot growth data
         3. [Synthesis] Compare the two findings
-        
+
         Iteration 1: Focus on sub-task 1 only
         Iteration 2: Focus on sub-task 2 only  
         Iteration 3: Synthesize (reason_only)
-        
-        **ALWAYS check "Current Gap" section** - verification agent feedback OVERRIDES defaults.
+
+        **ALWAYS check "Current Gap" section** - verification agent feedback OVERRIDES everything.
         </critical_instruction>
 
         <intent_decomposition_logic>
-        
+
         ## Step 1: Analyze Original Query (Iteration 0 only)
-        
+
         Does query contain:
         - Multiple questions joined by "and", "also", "plus"?
         - Both internal data ("our system") AND external data ("global trends")?
         - Multiple entities/aspects to research?
-        
+
         If YES → Identify distinct sub-tasks
         If NO → Treat as single-intent query
-        
+
         ## Step 2: Match Sub-task to Data Source
-        
+
         For each sub-task, classify:
-        
+
         **Internal data** (requires SQL/internal tools):
         - "our system", "our users", "company data"
         - "current count", "how many we have"
         - Specific metrics from our database
-        
+
         **External data** (requires web_search):
         - "global trends", "industry average", "market data"
         - "compared to others", "benchmarks"
         - Public information, research, statistics
-        
+        - **Any specific entities/companies/products** → almost always need fresh data
+
         **Synthesis** (requires reason_only):
         - "compare", "how does this relate to"
         - "analyze patterns", "evaluate impact"
         - After gathering multiple data sources
-        
+
         ## Step 3: Determine Current Focus
-        
+
         Check what's been completed:
         - Review execution_history: which sub-tasks succeeded?
         - Review accumulated_context: what data do we already have?
         - Check missing_aspects: what does verification agent say we need?
-        
+
         Then pick the NEXT incomplete sub-task.
-        
+
         </intent_decomposition_logic>
 
         <action_selection_logic>
-        
+
         ## Decision Priority (in order):
-        
-        ### 1. Check Verification Feedback FIRST
+
+        ### 1. Check Verification Feedback FIRST (HIGHEST PRIORITY)
         Look at "Current Gap" section:
-        
+
         **Explicit tool directive detected** → use_tool
         - "Need to search for..."
         - "Try web_search with query..."
         - "Use sql_query to get..."
         - "Switch to [tool] for..."
         - Contains specific query suggestions
-        
+        - "Missing information about..."
+        - "Need more data on..."
+
         **Reasoning directive detected** → reason_only
         - "Need deeper analysis of..."
         - "Current reasoning too shallow..."
         - "Should synthesize..."
         - "Now compare the findings..."
-        
+        - "We have enough data, need to analyze..."
+
+        **If verification says use_tool → ALWAYS use_tool** (even if you think you have enough)
+
         ### 2. Check Multi-Intent Sub-task State
-        
+
         **First sub-task not completed** → use_tool (focus on first sub-task ONLY)
         **First sub-task done, second not done** → use_tool (focus on second sub-task ONLY)
-        **All data gathered** → reason_only (synthesize/compare)
-        
-        ### 3. Check Execution History
-        
-        **Recent failures detected** → reason_only (work with what we have)
-        **Recent success, need different angle** → could use_tool OR reason_only
-        
-        ### 4. Evaluate Current Knowledge State
-        
-        **Have substantial knowledge** → reason_only (analyze what we have)
-        **Have minimal knowledge AND question needs data** → use_tool
-        
+        **All data gathered BUT synthesis needed** → reason_only (synthesize/compare)
+
+        ### 3. Evaluate Data Completeness
+
+        **Have substantial, verified data for ALL aspects** → reason_only (analyze what we have)
+        **Missing ANY key information** → use_tool (get the missing piece)
+        **Uncertain about data quality/currentness** → use_tool (verify/refresh)
+
+        ### 4. Default Bias
+
+        **When in doubt** → use_tool
+        - External data can improve answer quality
+        - Better to have too much info than too little
+        - Only skip tool use if you're VERY confident current data is sufficient
+
+        **Only choose reason_only when:**
+        - Verification explicitly says to analyze/synthesize
+        - ALL sub-tasks completed and data is comprehensive
+        - Pure reasoning task with all needed context provided
+
         </action_selection_logic>
 
         <phase_title_rules>
@@ -310,63 +338,108 @@ class PromptTemplates:
         1. Differ meaningfully from previous phase
         2. Focus on ONE specific sub-task (not combine multiple intents)
         3. Match the action type
-        
+        4. **Preserve key entities and technical terms** (company names, products, specific topics)
+
         **Multi-Intent Examples**:
-        
+
         Query: "User count in our system + global AI chatbot growth?"
-        
+
         ✓ GOOD progression:
         - Iter 1: "Querying current user count from database"
         - Iter 2: "Searching global AI chatbot user growth data 2025"
         - Iter 3: "Comparing our growth against industry trends"
-        
+
         ✗ BAD (tries to do both):
         - "Querying user count and searching global trends" ❌ Too broad
         - "Analyzing our data versus market" ❌ Vague, no clear action
-        
+
         Match phase title to action:
         - **use_tool + SQL** → "Querying [specific metric] from database"
-        - **use_tool + web_search** → "Searching [specific external topic]"
-        - **reason_only** → "Analyzing [aspect]", "Comparing [A vs B]"
-        
+        - **use_tool + web_search** → "Searching [specific external topic with key entities]"
+        - **reason_only** → "Analyzing [specific aspect]", "Comparing [A vs B]", "Synthesizing [findings]"
+
+        **Keyword preservation**:
+        - ✓ "Searching nxkms chatbot testing methodology"
+        - ✗ "Searching chatbot information"
+        - ✓ "Querying Q4 2024 sales revenue by region"
+        - ✗ "Querying sales data"
+
         </phase_title_rules>
 
         <common_mistakes_to_avoid>
-        
-        **Mistake 1: Mixing intents in phase title**
+
+        **Mistake 1: Ignoring verification feedback**
+        Verification says: "Need to search for X"
+        You think: "I already know about X"
+        Wrong: Choosing reason_only ❌
+        Right: use_tool (verification feedback ALWAYS wins)
+
+        **Mistake 2: Mixing intents in phase title**
         Query: "Our user count + global trends"
         Wrong: "Searching user count and global trends"
         Right: Pick ONE → "Querying current user count" OR "Searching global trends"
-        
-        **Mistake 2: Ignoring which sub-task is current**
+
+        **Mistake 3: Ignoring which sub-task is current**
         Context: Already have SQL data, missing web data
         Phase title: "Querying database" ❌ Already done!
         Right: "Searching global AI chatbot growth trends"
-        
-        **Mistake 3: Being too eager to synthesize**
+
+        **Mistake 4: Being too eager to synthesize**
         Context: Only completed 1 of 3 sub-tasks
         Action: reason_only ❌ Not enough data yet!
         Right: use_tool (get remaining data first)
-        
-        **Mistake 4: Generic phase titles**
+
+        **Mistake 5: Choosing reason_only when data could be better**
+        Context: Have some knowledge but it's general/outdated
+        Wrong: reason_only (overconfident in existing knowledge)
+        Right: use_tool (fresh data usually improves quality)
+
+        **Mistake 6: Generic phase titles**
         Wrong: "Analyzing the topic" (what topic? what aspect?)
-        Right: "Analyzing inflation impact on Vietnam manufacturing"
-        
+        Right: "Analyzing inflation impact on Vietnam manufacturing sector"
+
         </common_mistakes_to_avoid>
+
+        <decision_heuristics>
+
+        **Quick rules for next_action:**
+
+        ✓ use_tool when:
+        - Verification says "need to search/query..."
+        - Any sub-task incomplete
+        - Missing specific data points
+        - Asking about specific entities (companies, products, people)
+        - Need current/recent information
+        - Data quality uncertain
+        - **When in doubt** → default to use_tool
+
+        ✓ reason_only when:
+        - Verification explicitly says "synthesize/analyze/compare..."
+        - ALL sub-tasks completed with sufficient data
+        - Pure reasoning on provided context
+        - Synthesis/comparison after gathering phase
+        - **Only if very confident** current data is comprehensive
+
+        **Remember: Better to gather too much data than too little**
+
+        </decision_heuristics>
 
         <output_format>
         Return JSON:
         ```json
         {
-            "phase_title": "Specific action for THIS step (ONE sub-task only)",
+            "phase_title": "Specific action for THIS step (ONE sub-task only, with key entities)",
             "next_action": "reason_only" | "use_tool"
         }
         ```
-        
+
         Remember: 
+        - **Verification feedback is LAW** - it overrides all other considerations
         - Phase title should reflect CURRENT sub-task, not entire query
         - One iteration = one focused action
         - Sequential execution: complete sub-task 1 → sub-task 2 → synthesis
+        - **Default to use_tool** unless very confident reason_only is appropriate
+        - Always preserve important keywords and entities in phase_title
         </output_format>
         """
     )
@@ -380,126 +453,170 @@ class PromptTemplates:
 
         <task>
         Return JSON with two fields:
-        1. **phase_title**: What you'll do (4-10 words, preserving key entities/terms)
+        1. **phase_title**: What you'll do in the same language as the user query (5-20 words, preserving key entities/terms)
         2. **next_action**: "reason_only" or "use_tool"
         </task>
 
         <decision_framework>
-        The core question: **Do I have clear, reliable knowledge to answer this well?**
-        
-        ## Choose "reason_only" when:
-        You have clear, reliable knowledge about the topic and can answer well.
-        
+        The core question: **Would external data improve my answer quality or accuracy?**
+
+        ## Default to "use_tool" when:
+        You can get better, more accurate, or more current information from external sources.
+
         Examples:
-        - Explaining concepts: "What is REST API?", "How does JWT work?"
-        - Analyzing/comparing: "Pros and cons of X vs Y"
-        - Best practices: "How to design good APIs?"
-        - General knowledge: Well-established facts, definitions, common concepts
-        - Reasoning tasks: Drawing conclusions from provided context
-        
-        **Key test**: Can I give a helpful, accurate answer right now from what I know?
-        → YES = reason_only
-        
-        ## Choose "use_tool" when:
-        You need external data to answer properly.
-        
-        Examples:
-        - Specific/current data: "What's the price?", "Latest statistics", "2024 trends"
-        - Lookup required: "Show me the code", "What does the report say?", "Find document X"
-        - Data queries: "How many users?", "List all products", "Revenue last quarter"
-        - Unfamiliar topics: "What is [obscure technical term]?" (if you truly don't know)
+        - Specific entities: "What is [company/product/person]?" - Even if you know basics, fresh data is better
+        - Any current/recent info: "Latest X", "[Year] trends", "Current status"
+        - Lookup requests: "Show me [code/doc]", "Find X", "What does [report] say?"
+        - Data queries: "How many?", "List all", "Statistics on X"
+        - Specific facts: Pricing, numbers, dates, versions, specifications
+        - Company/product-specific: Anything about specific organizations, products, internal data
         - Verification needed: Claims requiring authoritative sources
-        - Company/product-specific info: Anything about specific organizations, products, internal data
+        - When in doubt: If external data could add value, use it
+
+        **Key test**: Could external sources give more accurate/complete information?
+        → YES or MAYBE = use_tool
         
-        **Key test**: Do I need to fetch external information to answer accurately?
-        → YES = use_tool
+        **DOCUMENT/CONTENT RETRIEVAL DETECTION**
+
+        If query asks to work WITH specific content that needs to be fetched:
+        - "Tóm tắt [document/thesis/paper]" → MUST use_tool to fetch first
+        - "Summarize [specific content]" → MUST use_tool to retrieve first
+        - "Phân tích [document]" → MUST use_tool to get document first
+        - "Show me [code/file]" → MUST use_tool to retrieve first
+        - "What does [report] say?" → MUST use_tool to fetch first
+
+        **YOU CANNOT SUMMARIZE WHAT YOU DON'T HAVE**
+        - Don't assume you have the document content
+        - Don't reason_only when the document needs to be fetched
+        - Always fetch first, then analyze later (separate iterations)
+        
+        ## Choose "reason_only" only when:
+        You have definitive knowledge AND external data wouldn't add meaningful value.
+
+        Examples:
+        - Universal concepts: "What is a REST API?", "How does encryption work?"
+        - Pure reasoning: Logic puzzles, mathematical proofs from given premises
+        - Explaining fundamentals: Basic programming concepts, established theories
+        - Analysis of provided context: "Analyze this code snippet I gave you"
+        - Comparing well-known concepts: "Difference between X and Y" (for truly fundamental things)
+
+        **Key test**: Is this a timeless fundamental concept where my knowledge is complete?
+        → ONLY THEN = reason_only
         </decision_framework>
 
         <decision_heuristics>
         **Quick decision rules:**
-        
-        ✓ reason_only:
-        - "What is [common concept]?" → I know this
-        - "Explain [standard technology]" → I can explain
-        - "Compare [familiar things]" → I understand both
-        - "How to [common task]?" → I know best practices
-        - "Why [phenomenon]?" → I can reason about this
-        
-        ✓ use_tool:
-        - "What is [specific company/product]'s X?" → Need to look up
-        - "Latest [anything]" or "[year] trends" → Need current data
-        - "How many" or "List all" → Need to query
-        - "Show me [code/document]" → Need to retrieve
-        - "What does [specific report] say?" → Need to fetch
-        - Questions about specific organizations/entities → Need to search
-        - Don't confidently know the answer → Need to search
+
+        ✓ use_tool (DEFAULT):
+        - "What is [specific company/product/entity]?" → Search for latest info
+        - "Latest [anything]" or "[year] data" → Need current info
+        - "How many", "List all", "Show me" → Need to query/retrieve
+        - "What does [X] say/do?" → Need to fetch
+        - Any proper nouns (companies, products, people) → Search recommended
+        - Specific technical terms you're not 100% certain about → Search to verify
+        - When answer could benefit from current data → Use tool
+
+        ✓ reason_only (RARE):
+        - "What is [pure concept like 'recursion']?" → Fundamental, timeless
+        - "Explain [basic theory like 'supply and demand']" → Well-established
+        - "Analyze this [provided context]" → Everything is given
+        - Math/logic from given premises → Pure reasoning task
         </decision_heuristics>
 
         <phase_title_guidelines>
         **CRITICAL: Preserve important keywords from the query**
-        
+
         Match title to action AND keep key entities:
-        
-        **reason_only titles**: Use thinking/analysis verbs
-        - "Explaining [concept]"
-        - "Analyzing [topic]"
-        - "Comparing [X and Y]"
-        - "Outlining [approach]"
-        - "Discussing [issue]"
-        
+
         **use_tool titles**: Use data/retrieval verbs + PRESERVE KEY TERMS
         - "Searching [specific topic with entities]"
         - "Retrieving [specific data with context]"
         - "Looking up [entity + what about it]"
         - "Querying [system/database + specific info]"
         - "Finding [entity + specific aspect]"
-        
+
+        **reason_only titles**: Use thinking/analysis verbs
+        - "Explaining [fundamental concept]"
+        - "Analyzing [provided context]"
+        - "Comparing [basic concepts]"
+        - "Reasoning about [logic problem]"
+
         **KEYWORD PRESERVATION RULES:**
         1. **Always keep proper nouns**: company names, product names, people names
         - ✓ "Searching nxkms chatbot quality testing"
-        - ✗ "Searching chatbot quality testing information"
-        
+        - ✗ "Searching chatbot information"
+
         2. **Keep technical/domain terms**: specific technologies, methodologies
         - ✓ "Retrieving AWS Lambda pricing details"
         - ✗ "Retrieving cloud service information"
-        
+
         3. **Keep specific qualifiers**: numbers, dates, versions, models
         - ✓ "Looking up Q3 2024 revenue report"
         - ✗ "Looking up revenue report"
-        
+
         4. **Remove only generic filler**:
         - Remove: "information", "data", "details" (when redundant)
         - Remove: "about", "regarding", "concerning"
         - Keep: all meaningful nouns and technical terms
-        
+
         **Length**: 4-10 words (flexible to preserve important keywords)
         **Style**: Concise but specific, action-oriented with preserved entities
         </phase_title_guidelines>
 
         <examples>
-        
+
         Query: "tìm cho tôi thông tin về test chất lượng chatbot của nxkms"
-        
-        Analysis: Asks about specific company (nxkms) and their chatbot testing. Need to search for this specific info.
-        
+
+        Analysis: Specific company (nxkms) and their chatbot testing. Need external data for accuracy.
+
         Decision:
         {
             "phase_title": "Searching nxkms chatbot quality testing",
             "next_action": "use_tool"
         }
-        
+
         ---
-        
+
         Query: "What is the difference between REST and GraphQL?"
-        
-        Analysis: Standard API concepts. I have solid knowledge of both and can explain differences clearly.
-        
-        Decision:
+
+        Analysis: While I know both, this could benefit from current best practices and recent developments. But if asking about pure fundamentals, I can explain.
+
+        Decision (if fundamental comparison):
         {
-            "phase_title": "Comparing REST and GraphQL APIs",
+            "phase_title": "Comparing REST and GraphQL fundamentals",
             "next_action": "reason_only"
         }
-        
+
+        Decision (if current practices matter):
+        {
+            "phase_title": "Comparing REST and GraphQL approaches",
+            "next_action": "use_tool"
+        }
+
+        ---
+
+        Query: "What is recursion in programming?"
+
+        Analysis: Pure fundamental concept, timeless definition. External data won't improve answer.
+
+        Decision:
+        {
+            "phase_title": "Explaining recursion concept",
+            "next_action": "reason_only"
+        }
+
+        ---
+
+        Query: "What is Anthropic's latest model?"
+
+        Analysis: Specific company, asking about current state. Need external data.
+
+        Decision:
+        {
+            "phase_title": "Searching Anthropic latest model release",
+            "next_action": "use_tool"
+        }
+
         </examples>
 
         <output_format>
@@ -512,10 +629,10 @@ class PromptTemplates:
 
         <key_reminders>
         - This is ONE-SHOT execution: no iteration, choose wisely
-        - Default to reason_only when you have good knowledge
-        - Use use_tool when you need external/current/specific data
-        - Be honest: if unsure about knowledge, choose use_tool
-        - Phase title should match the action (explain/analyze vs search/retrieve)
+        - **Default to use_tool** - external data usually improves answer quality
+        - Only use reason_only for truly fundamental, timeless concepts where you're 100% confident
+        - When in doubt between the two → choose use_tool
+        - Phase title should match the action (search/retrieve vs explain/analyze)
         - **ALWAYS preserve proper nouns, company names, technical terms in phase_title**
         - Remove only generic filler words, keep all meaningful keywords
         </key_reminders>

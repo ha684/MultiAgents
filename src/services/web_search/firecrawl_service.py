@@ -30,30 +30,25 @@ class FireCrawlService(BaseSearchService):
             )
             search_endpoint = f"{self.api_base_url}/v1/search"
 
-            # --- CẤU HÌNH QUAN TRỌNG ---
-            # Mặc định yêu cầu Firecrawl vào trang lấy nội dung Markdown
             default_scrape_options = {
                 "formats": ["markdown"],
             }
 
-            # Merge scrapeOptions từ kwargs nếu người dùng có truyền thêm (ví dụ: excludeTags)
             user_scrape_options = kwargs.get("scrapeOptions", {})
             final_scrape_options = {**default_scrape_options, **user_scrape_options}
 
             payload = {
                 "query": query,
                 "limit": max_results,
-                "scrapeOptions": final_scrape_options,  # Thêm dòng này
+                "scrapeOptions": final_scrape_options,
             }
 
-            # Các tham số khác (location, lang...)
             valid_params = {
                 "location",
                 "country",
                 "language",
                 "tbs",
                 "filter",
-                # "scrapeOptions", # Đã xử lý ở trên
             }
             payload.update({k: v for k, v in kwargs.items() if k in valid_params})
 
@@ -62,7 +57,6 @@ class FireCrawlService(BaseSearchService):
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
 
-            # Tăng timeout vì crawl nội dung tốn thời gian hơn search metadata
             timeout = kwargs.get("timeout", 60)
 
             async with httpx.AsyncClient() as client:
