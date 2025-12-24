@@ -1,4 +1,4 @@
-# src/services/web_search/firecrawl.py
+# src/services/web_search/firecrawl_service.py
 
 from typing import Any
 
@@ -20,7 +20,7 @@ class FireCrawlService(BaseSearchService):
     async def search(
         self, api_key: str | None, query: str, max_results: int = 5, **kwargs: Any
     ) -> list[Document] | None:
-        """Searches using Firecrawl API with an optional provided key."""
+        """Searches using Firecrawl API and scrapes full content."""
         if not self.api_base_url:
             raise ValueError("FIRECRAWL_API_URL not found in environment variables")
 
@@ -29,20 +29,31 @@ class FireCrawlService(BaseSearchService):
                 f"Searching Firecrawl for: '{query}' with max_results={max_results}"
             )
             search_endpoint = f"{self.api_base_url}/v1/search"
+
+            # --- CẤU HÌNH QUAN TRỌNG ---
+            # Mặc định yêu cầu Firecrawl vào trang lấy nội dung Markdown
+            default_scrape_options = {
+                "formats": ["markdown"],
+            }
+
+            # Merge scrapeOptions từ kwargs nếu người dùng có truyền thêm (ví dụ: excludeTags)
+            user_scrape_options = kwargs.get("scrapeOptions", {})
+            final_scrape_options = {**default_scrape_options, **user_scrape_options}
+
             payload = {
                 "query": query,
                 "limit": max_results,
+                "scrapeOptions": final_scrape_options,  # Thêm dòng này
             }
+
+            # Các tham số khác (location, lang...)
             valid_params = {
                 "location",
                 "country",
                 "language",
                 "tbs",
                 "filter",
-                "scrapeOptions",
-                "formats",
-                "includeTags",
-                "excludeTags",
+                # "scrapeOptions", # Đã xử lý ở trên
             }
             payload.update({k: v for k, v in kwargs.items() if k in valid_params})
 
@@ -51,12 +62,15 @@ class FireCrawlService(BaseSearchService):
             if api_key:
                 headers["Authorization"] = f"Bearer {api_key}"
 
+            # Tăng timeout vì crawl nội dung tốn thời gian hơn search metadata
+            timeout = kwargs.get("timeout", 60)
+
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     search_endpoint,
                     json=payload,
                     headers=headers,
-                    timeout=kwargs.get("timeout", 30),
+                    timeout=timeout,
                 )
                 response.raise_for_status()
                 raw_results = response.json()
@@ -73,11 +87,19 @@ class FireCrawlService(BaseSearchService):
 
             standardized_results = []
             for item in results_data:
+                # --- LẤY NỘI DUNG MARKDOWN ---
+                # Ưu tiên lấy markdown, nếu không có mới lấy description
+                content = item.get("markdown")
+                if not content:
+                    content = item.get("description", "No Content")
+
                 standardized_results.append(
                     {
                         "title": item.get("title", "No Title"),
-                        "content": item.get("description", "No Content"),
+                        "content": content,  # Content giờ là full markdown
                         "url": item.get("url"),
+                        # Có thể lưu thêm metadata nếu cần
+                        "metadata": item.get("metadata", {}),
                     }
                 )
 

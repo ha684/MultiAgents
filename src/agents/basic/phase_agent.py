@@ -146,7 +146,7 @@ class PhaseAgent(BaseAgent):
         return phase_result
 
 
-def parse_phase_result(content: str) -> dict[str, Any] | str:
+def parse_phase_result(content: str | dict) -> dict[str, Any] | str:
     """Parse phase result from content"""
     if isinstance(content, dict):
         return content

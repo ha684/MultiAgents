@@ -1197,6 +1197,24 @@ wheels = [
 ]
 
 [[package]]
+name = "firecrawl"
+version = "4.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "httpx" },
+    { name = "nest-asyncio" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7f/ba/6acfbde765695bf68f6d416203a3a89e492ae1a426d56dbda58fc2280536/firecrawl-4.12.0.tar.gz", hash = "sha256:ea2121fdd4ae490b4318b184a21085e4aee7a846264d1fb6fc4307cf5d1b0f5f", size = 160639, upload-time = "2025-12-19T05:39:28.678Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/34/1ddaa0174ddde3ebda1da1b1ad6599fdebd140eee42212b377c1eb7d0159/firecrawl-4.12.0-py3-none-any.whl", hash = "sha256:035267dda1c34ba9e5128adf8c4551648a1db9634f22ebb0b2cd30166f621453", size = 201480, upload-time = "2025-12-19T05:39:27.422Z" },
+]
+
+[[package]]
 name = "flatbuffers"
 version = "25.2.10"
 source = { registry = "https://pypi.org/simple" }
@@ -2349,6 +2367,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "fastembed" },
     { name = "fastmcp" },
+    { name = "firecrawl" },
     { name = "google-adk" },
     { name = "grandalf" },
     { name = "graphiti-core" },
@@ -2458,6 +2477,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115.12" },
     { name = "fastembed", specifier = ">=0.7.0" },
     { name = "fastmcp", specifier = ">=2.12.4" },
+    { name = "firecrawl", specifier = ">=4.12.0" },
     { name = "freezegun", marker = "extra == 'test'", specifier = ">=1.4.0" },
     { name = "google-adk", specifier = ">=1.10.0" },
     { name = "grandalf", specifier = ">=0.8" },

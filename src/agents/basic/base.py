@@ -96,7 +96,7 @@ class BaseAgent(ABC):
         llm_with_tools: BaseChatModel,
         available_tools: dict[str, Tool],
         max_iterations: int,
-        parse_fn: Callable[[str], dict[str, Any] | None],
+        parse_fn: Callable[[str | dict], dict[str, Any] | None],
         retry_prompt: str,
         error_context: str = "Agent",
     ) -> dict[str, Any] | None:

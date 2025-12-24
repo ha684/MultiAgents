@@ -35,9 +35,13 @@ def extract_between(text: str, start: str, end: str) -> list[str]:
     return re.findall(pattern, text, flags=re.DOTALL)
 
 
-def parse_response(content: str) -> dict | None:
+def parse_response(content: str | dict) -> dict | None:
     """Attempts to parse the LLM response as CitationIndexes."""
     try:
+        # If already a dict (structured output), return it directly
+        if isinstance(content, dict):
+            return content
+
         content = content.strip()
         if content.startswith("```"):
             content = content.split("```")[1]
@@ -49,6 +53,9 @@ def parse_response(content: str) -> dict | None:
         return parsed
     except (json.JSONDecodeError, ValueError, KeyError) as e:
         logger.debug(f"Failed to parse citation response: {e}")
+    except AttributeError as e:
+        # Handle case where content is not a string and doesn't have .strip()
+        logger.debug(f"Content is not a string: {type(content)}, error: {e}")
     return None
 
 
